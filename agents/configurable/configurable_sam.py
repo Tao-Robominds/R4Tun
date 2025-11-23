@@ -23,20 +23,23 @@ if len(sys.argv) != 2:
 tunnel_id = sys.argv[1]
 
 def load_parameters(tunnel_id):
-    """Load parameters from data directory where analyst saves parameters"""
+    """Load parameters from agents/configurable directory where analyst saves parameters"""
     
-    data_param_file = os.path.join('data', tunnel_id, 'parameters', 'parameters_sam.json')
-    if os.path.exists(data_param_file):
+    # Determine script directory to handle both project root and agents/configurable execution
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    param_file = os.path.join(script_dir, tunnel_id, 'parameters_sam.json')
+    
+    if os.path.exists(param_file):
         try:
-            with open(data_param_file, 'r') as f:
+            with open(param_file, 'r') as f:
                 params = json.load(f)
-            print(f"✅ Loaded parameters from data/{tunnel_id}/parameters/parameters_sam.json")
+            print(f"✅ Loaded parameters from agents/configurable/{tunnel_id}/parameters_sam.json")
             return params
         except Exception as e:
             print(f"❌ Error loading parameters: {e}")
             sys.exit(1)
     else:
-        print(f"❌ Error: Parameter file not found at data/{tunnel_id}/parameters/parameters_sam.json")
+        print(f"❌ Error: Parameter file not found at agents/configurable/{tunnel_id}/parameters_sam.json")
         print("Please run the analyst to generate parameters first.")
         sys.exit(1)
 
@@ -90,7 +93,7 @@ if "sam_checkpoint" in config:
     device = config["device"]
 else:
     # Use default paths
-    sam_checkpoint = "mes/segment-anything/sam_vit_h_4b8939.pth"
+    sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
     model_type = "vit_h"
     device = "cuda"
 
