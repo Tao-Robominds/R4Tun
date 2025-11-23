@@ -50,7 +50,7 @@ class EnhancingAnalyser:
                 code_content = f.read()
         
         # Load current enhancing parameters
-        enhancing_params_path = Path("agents/configurable/parameters_enhancing.json")
+        enhancing_params_path = Path("configurable/parameters_enhancing.json")
         enhancing_parameters = "No enhancing parameters available"
         if enhancing_params_path.exists():
             with open(enhancing_params_path, 'r') as f:

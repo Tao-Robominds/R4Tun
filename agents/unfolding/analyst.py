@@ -50,7 +50,7 @@ class UnfoldingAnalyser:
                 code_content = f.read()
         
         # Load current unfolding parameters
-        unfolding_params_path = Path("agents/configurable/parameters_unfolding.json")
+        unfolding_params_path = Path("configurable/parameters_unfolding.json")
         unfolding_parameters = "No unfolding parameters available"
         if unfolding_params_path.exists():
             with open(unfolding_params_path, 'r') as f:

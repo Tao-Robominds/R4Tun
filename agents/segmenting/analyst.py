@@ -50,7 +50,7 @@ class SegmentingAnalyser:
                 code_content = f.read()
         
         # Load current SAM parameters (default)
-        sam_params_path = Path("agents/configurable/parameters_sam.json")
+        sam_params_path = Path("configurable/parameters_sam.json")
         sam_parameters = "No SAM parameters available"
         if sam_params_path.exists():
             with open(sam_params_path, 'r') as f:

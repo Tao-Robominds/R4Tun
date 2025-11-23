@@ -50,7 +50,7 @@ class DenoisingAnalyser:
                 code_content = f.read()
         
         # Load current denoising parameters
-        denoising_params_path = Path("agents/configurable/parameters_denoising.json")
+        denoising_params_path = Path("configurable/parameters_denoising.json")
         denoising_parameters = "No denoising parameters available"
         if denoising_params_path.exists():
             with open(denoising_params_path, 'r') as f:
