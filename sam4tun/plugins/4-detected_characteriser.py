@@ -192,6 +192,7 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
     if len(valid_detection) == 0 or len(target_points) == 0:
         return {
             'prompt_to_target_ratio': 0.0,
+            'diameter_estimation': {},
             'sam_coverage_analysis': {},
             'segmentation_effectiveness': {},
             'workflow_assessment': {}
@@ -238,8 +239,22 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
         'r_range': [target_points['r'].min(), target_points['r'].max()] if 'r' in target_points.columns else [0, 0]
     }
     
+    # Diameter estimation from enhanced point cloud (target for SAM segmentation)
+    diameter_estimation = {}
+    if len(target_points) > 0 and 'r' in target_points.columns:
+        r_values = target_points['r']
+        diameter_estimation = {
+            'inner_diameter': float(2 * r_values.min()),
+            'outer_diameter': float(2 * r_values.max()),
+            'average_diameter': float(2 * r_values.mean()),
+            'median_diameter': float(2 * r_values.median()),
+            'ring_thickness': float(r_values.max() - r_values.min()),
+            'description': 'Estimated tunnel/ring diameters based on radial distances from enhanced point cloud (SAM segmentation target)'
+        }
+    
     effectiveness_stats = {
         'prompt_to_target_ratio': float(prompt_to_target_ratio),
+        'diameter_estimation': diameter_estimation,
         'sam_coverage_analysis': {
             'detection_bounds': detection_bounds,
             'enhanced_spatial_range': enhanced_spatial_range,

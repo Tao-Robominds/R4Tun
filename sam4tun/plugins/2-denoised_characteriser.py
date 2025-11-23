@@ -109,6 +109,17 @@ def analyze_spatial_distribution(df: pd.DataFrame) -> Dict:
     h_range = [float(valid_points['h'].min()), float(valid_points['h'].max())]
     theta_range = [float(valid_points['theta'].min()), float(valid_points['theta'].max())]
     r_range = [float(valid_points['r'].min()), float(valid_points['r'].max())]
+    r_values = valid_points['r']
+    
+    # Diameter estimation based on radial distances
+    diameter_estimation = {
+        'inner_diameter': float(2 * r_values.min()),
+        'outer_diameter': float(2 * r_values.max()),
+        'average_diameter': float(2 * r_values.mean()),
+        'median_diameter': float(2 * r_values.median()),
+        'ring_thickness': float(r_values.max() - r_values.min()),
+        'description': 'Estimated tunnel/ring diameters based on radial distances from denoised point cloud'
+    }
     
     # Coverage analysis - create 2D grid
     h_bins = np.linspace(h_range[0], h_range[1], 10)  # Use fixed 10 bins
@@ -137,6 +148,7 @@ def analyze_spatial_distribution(df: pd.DataFrame) -> Dict:
             'theta_range': theta_range, 
             'r_range': r_range
         },
+        'diameter_estimation': diameter_estimation,
         'coverage_analysis': {
             'total_coverage_percentage': float(coverage_percentage),
             'sparse_areas_percentage': float(sparse_percentage),
@@ -213,13 +225,17 @@ def analyze_geometry_characteristics(df: pd.DataFrame, spatial_stats: Dict) -> D
     surface_regularity = np.std(section_curvatures) if section_curvatures else 0.0
     
     # Tunnel geometry metrics
+    # Use diameter_estimation from spatial_stats if available
+    diameter_estimation = spatial_stats.get('diameter_estimation', {})
+    
     geometry_stats = {
         'average_curvature_estimate': float(avg_curvature),
         'surface_regularity': float(surface_regularity),
         'tunnel_length': float(h_range[1] - h_range[0]),
         'radius_variation': [float(r_range[0]), float(r_range[1])],
         'section_curvatures': [float(c) for c in section_curvatures],
-        'estimated_diameter': float(2 * np.mean(r_range))
+        'estimated_diameter': float(2 * np.mean(r_range)),
+        'diameter_estimation': diameter_estimation
     }
     
     return geometry_stats

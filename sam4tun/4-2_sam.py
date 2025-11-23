@@ -26,7 +26,7 @@ ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
 print(f"Processing tunnel: {tunnel_id}")
 
-sam_checkpoint = "mes/segment-anything/sam_vit_h_4b8939.pth"
+sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
 model_type = "vit_h"
 device = "cuda"
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
@@ -279,7 +279,7 @@ def sam_prediction(cropped_image, points, labels, template_mask_logit):
     )
     return mask, score, logit[0]
 
-def process_row(df_row, image, resolution=0.005, segment_per_ring=7, segment_width=1200, 
+def process_row(df_row, image, resolution=0.005, segment_per_ring=6, segment_width=1200, 
                 K_height=1079.92, angle=7.52, AB_height=3239.77):
     initial_x, initial_y = df_row['X'], df_row['Y']
     block_labels = compute_block_label(segment_per_ring)
@@ -372,7 +372,7 @@ def process_row(df_row, image, resolution=0.005, segment_per_ring=7, segment_wid
              
     return results
 
-def sam_segment(df, image, resolution=0.005, segment_per_ring=7):
+def sam_segment(df, image, resolution=0.005, segment_per_ring=6):
     all_results = []
     for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
         result = process_row(row, image, resolution, segment_per_ring)
@@ -381,7 +381,7 @@ def sam_segment(df, image, resolution=0.005, segment_per_ring=7):
 
 results = sam_segment(initial_prompt_points, image)
 
-block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
+block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
 label_map = np.zeros(image.shape[:2], dtype=int)
