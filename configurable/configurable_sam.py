@@ -23,9 +23,9 @@ if len(sys.argv) != 2:
 tunnel_id = sys.argv[1]
 
 def load_parameters(tunnel_id):
-    """Load parameters from agents/configurable directory where analyst saves parameters"""
+    """Load parameters from configurable directory where analyst saves parameters"""
     
-    # Determine script directory to handle both project root and agents/configurable execution
+    # Determine script directory to handle both project root and configurable execution
     script_dir = os.path.dirname(os.path.abspath(__file__))
     param_file = os.path.join(script_dir, tunnel_id, 'parameters_sam.json')
     
@@ -33,13 +33,13 @@ def load_parameters(tunnel_id):
         try:
             with open(param_file, 'r') as f:
                 params = json.load(f)
-            print(f"✅ Loaded parameters from agents/configurable/{tunnel_id}/parameters_sam.json")
+            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_sam.json")
             return params
         except Exception as e:
             print(f"❌ Error loading parameters: {e}")
             sys.exit(1)
     else:
-        print(f"❌ Error: Parameter file not found at agents/configurable/{tunnel_id}/parameters_sam.json")
+        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_sam.json")
         print("Please run the analyst to generate parameters first.")
         sys.exit(1)
 

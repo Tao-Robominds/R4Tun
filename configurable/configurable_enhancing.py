@@ -25,9 +25,9 @@ tunnel_id = sys.argv[1]
 
 # Load parameters
 def load_parameters(tunnel_id):
-    """Load parameters from agents/configurable directory where analyst saves parameters"""
+    """Load parameters from configurable directory where analyst saves parameters"""
     
-    # Determine script directory to handle both project root and agents/configurable execution
+    # Determine script directory to handle both project root and configurable execution
     script_dir = os.path.dirname(os.path.abspath(__file__))
     param_file = os.path.join(script_dir, tunnel_id, 'parameters_enhancing.json')
     
@@ -35,13 +35,13 @@ def load_parameters(tunnel_id):
         try:
             with open(param_file, 'r') as f:
                 params = json.load(f)
-            print(f"✅ Loaded parameters from agents/configurable/{tunnel_id}/parameters_enhancing.json")
+            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_enhancing.json")
             return params
         except Exception as e:
             print(f"❌ Error loading parameters: {e}")
             sys.exit(1)
     else:
-        print(f"❌ Error: Parameter file not found at agents/configurable/{tunnel_id}/parameters_enhancing.json")
+        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_enhancing.json")
         print("Please run the analyst to generate parameters first.")
         sys.exit(1)
 
@@ -63,11 +63,11 @@ resolution = params["resolution"]
 window_size = params["window_size"]
 
 print(f"Using parameters: stage1_distance={upsampling_stage1_target_distance}, stage2_distance={upsampling_stage2_target_distance}, stage3_distance={upsampling_stage3_target_distance}")
-# Determine if we're running from project root or agents/configurable/
+# Determine if we're running from project root or configurable/
 if os.path.exists(f"data/{tunnel_id}/denoised.csv"):
     base_dir = f"data/{tunnel_id}/"  # Running from project root
 else:
-    base_dir = f"../../data/{tunnel_id}/"  # Running from agents/configurable/
+    base_dir = f"../data/{tunnel_id}/"  # Running from configurable/
 denoised_file = os.path.join(base_dir, "denoised.csv")
 df_point_cloud = pd.read_csv(denoised_file)
 
