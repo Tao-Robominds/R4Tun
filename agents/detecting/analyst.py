@@ -50,7 +50,7 @@ class DetectingAnalyser:
                 code_content = f.read()
         
         # Load current detecting parameters (default)
-        detecting_params_path = Path("agents/configurable/parameters_detecting.json")
+        detecting_params_path = Path("configurable/parameters_detecting.json")
         detecting_parameters = "No detecting parameters available"
         if detecting_params_path.exists():
             with open(detecting_params_path, 'r') as f:

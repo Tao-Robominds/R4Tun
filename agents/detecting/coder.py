@@ -13,7 +13,7 @@ class DetectingParameterExtractor:
         self.tunnel_id = tunnel_id
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
-        self.params_dir = self.data_dir / "parameters"  # Save under data/{tunnel_id}/parameters/
+        self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
         self.characteristics_dir = self.data_dir / "characteristics"  # For characteriser results
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
@@ -30,7 +30,7 @@ class DetectingParameterExtractor:
         """Load current parameters_detecting.json structure"""
         # Try tunnel-specific parameters first, then fall back to global
         params_path = self.params_dir / "parameters_detecting.json"
-        global_params_path = Path("agents/configurable/parameters_detecting.json")
+        global_params_path = Path("configurable/parameters_detecting.json")
         
         if params_path.exists():
             with open(params_path, 'r') as f:
@@ -212,7 +212,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
     
     def run_configurable_script(self):
         """Run the configurable detecting script"""
-        script_path = Path("agents/configurable/configurable_detecting.py")
+        script_path = Path("configurable/configurable_detecting.py")
         
         if not script_path.exists():
             print(f"❌ Configurable script not found at {script_path}")
@@ -269,7 +269,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
         print("="*60)
         print(f"✅ Parameters extracted via Dify API and saved")
-        print(f"📁 Parameters saved to: data/{self.tunnel_id}/parameters/")
+        print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
         print(f"✅ Configurable detecting completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/detected.csv")
         return True
