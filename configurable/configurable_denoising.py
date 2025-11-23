@@ -23,9 +23,9 @@ tunnel_id = sys.argv[1]
 
 # Load parameters
 def load_parameters(tunnel_id):
-    """Load parameters from agents/configurable directory where analyst saves parameters"""
+    """Load parameters from configurable directory where analyst saves parameters"""
     
-    # Determine script directory to handle both project root and agents/configurable execution
+    # Determine script directory to handle both project root and configurable execution
     script_dir = os.path.dirname(os.path.abspath(__file__))
     param_file = os.path.join(script_dir, tunnel_id, 'parameters_denoising.json')
     
@@ -33,13 +33,13 @@ def load_parameters(tunnel_id):
         try:
             with open(param_file, 'r') as f:
                 params = json.load(f)
-            print(f"✅ Loaded parameters from agents/configurable/{tunnel_id}/parameters_denoising.json")
+            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_denoising.json")
             return params
         except Exception as e:
             print(f"❌ Error loading parameters: {e}")
             sys.exit(1)
     else:
-        print(f"❌ Error: Parameter file not found at agents/configurable/{tunnel_id}/parameters_denoising.json")
+        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_denoising.json")
         print("Please run the analyst to generate parameters first.")
         sys.exit(1)
 
@@ -56,11 +56,11 @@ smoothing_offset = params["smoothing_offset"]
 default_cutoff_z = params["default_cutoff_z"]
 
 print(f"Using parameters: mask_r_low={mask_r_low}, mask_r_high={mask_r_high}, y_step={y_step}, z_step={z_step}, default_cutoff_z={default_cutoff_z}")
-# Determine if we're running from project root or agents/configurable/
+# Determine if we're running from project root or configurable/
 if os.path.exists(f"data/{tunnel_id}/unwrapped.csv"):
     base_dir = f"data/{tunnel_id}/"  # Running from project root
 else:
-    base_dir = f"../../data/{tunnel_id}/"  # Running from agents/configurable/
+    base_dir = f"../data/{tunnel_id}/"  # Running from configurable/
 unwrapped_file = os.path.join(base_dir, "unwrapped.csv")
 df_point_cloud = pd.read_csv(unwrapped_file)
 ring_count_file = os.path.join(base_dir, "ring_count.txt")

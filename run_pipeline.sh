@@ -42,25 +42,25 @@ check_status() {
 # Step 1: Unfolding
 echo ""
 echo "Step 1/7: Running unfolding..."
-python agents/configurable/configurable_unfolding.py "$TUNNEL_ID"
+python configurable/configurable_unfolding.py "$TUNNEL_ID"
 check_status "Unfolding"
 
 # Step 2: Denoising
 echo ""
 echo "Step 2/7: Running denoising..."
-python agents/configurable/configurable_denoising.py "$TUNNEL_ID"
+python configurable/configurable_denoising.py "$TUNNEL_ID"
 check_status "Denoising"
 
 # Step 3: Enhancing
 echo ""
 echo "Step 3/7: Running enhancing..."
-python agents/configurable/configurable_enhancing.py "$TUNNEL_ID"
+python configurable/configurable_enhancing.py "$TUNNEL_ID"
 check_status "Enhancing"
 
 # Step 4: Detecting
 echo ""
 echo "Step 4/7: Running detecting..."
-python agents/configurable/configurable_detecting.py "$TUNNEL_ID"
+python configurable/configurable_detecting.py "$TUNNEL_ID"
 check_status "Detecting"
 
 # Step 5: Kill GPU processes before SAM
@@ -91,13 +91,13 @@ python -c "import torch; torch.cuda.empty_cache()" 2>/dev/null || true
 # Step 6: SAM Segmentation
 echo ""
 echo "Step 6/7: Running SAM segmentation..."
-python agents/configurable/configurable_sam.py "$TUNNEL_ID"
+python configurable/configurable_sam.py "$TUNNEL_ID"
 check_status "SAM segmentation"
 
 # Step 7: Evaluation
 echo ""
 echo "Step 7/7: Running evaluation..."
-python agents/configurable/evaluation.py "$TUNNEL_ID"
+python configurable/evaluation.py "$TUNNEL_ID"
 check_status "Evaluation"
 
 echo ""
