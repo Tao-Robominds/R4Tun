@@ -66,6 +66,18 @@ def analyze_point_cloud(file_path, tunnel_id=None):
     width = min(edges)
     height = df['z'].max() - df['z'].min()
     
+    # Diameter estimation based on geometry analysis
+    diameter_estimation = {
+        "inner_diameter": float(width),
+        "outer_diameter": float(width),
+        "average_diameter": float(width),
+        "median_diameter": float(width),
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+    }
+    
     tunnel_geometry = {
         "dimensions": {
             "length_x_axis": float(length),
@@ -74,6 +86,7 @@ def analyze_point_cloud(file_path, tunnel_id=None):
             "units": "meters"
         },
         "estimated_diameter": float(width),
+        "diameter_estimation": diameter_estimation,
         "actual_tunnel_diameter": 5.5,
         "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
     }

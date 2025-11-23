@@ -113,12 +113,26 @@ def analyze_upsampling_quality(enhanced_df: pd.DataFrame, pre_enhanced_df: pd.Da
     valid_enhanced = enhanced_df[enhanced_df['pred'] != 0] if 'pred' in enhanced_df.columns else enhanced_df
     valid_pre_enhanced = pre_enhanced_df[pre_enhanced_df['pred'] != 0] if 'pred' in pre_enhanced_df.columns else pre_enhanced_df
     
+    # Diameter estimation from enhanced point cloud
+    diameter_estimation = {}
+    if len(valid_enhanced) > 0 and 'r' in valid_enhanced.columns:
+        r_values = valid_enhanced['r']
+        diameter_estimation = {
+            'inner_diameter': float(2 * r_values.min()),
+            'outer_diameter': float(2 * r_values.max()),
+            'average_diameter': float(2 * r_values.mean()),
+            'median_diameter': float(2 * r_values.median()),
+            'ring_thickness': float(r_values.max() - r_values.min()),
+            'description': 'Estimated tunnel/ring diameters based on radial distances from enhanced point cloud'
+        }
+    
     # Check if we have enough data
     if len(valid_enhanced) == 0:
         return {
             'coverage_uniformity': 0.0,
             'improvement_effectiveness': 0.0,
             'remaining_sparse_percentage': 100.0,
+            'diameter_estimation': diameter_estimation,
             'coverage_matrices': {
                 'enhanced': [],
                 'pre_enhanced': [],
@@ -177,6 +191,7 @@ def analyze_upsampling_quality(enhanced_df: pd.DataFrame, pre_enhanced_df: pd.Da
         'coverage_uniformity': float(coverage_uniformity),
         'improvement_effectiveness': float(improvement_effectiveness),
         'remaining_sparse_percentage': float(remaining_sparse_percentage),
+        'diameter_estimation': diameter_estimation,
         'coverage_matrices': {
             'enhanced': enhanced_coverage.tolist(),
             'pre_enhanced': pre_enhanced_coverage.tolist(),

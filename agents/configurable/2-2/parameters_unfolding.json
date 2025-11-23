@@ -1,0 +1,12 @@
+{
+  "delta": 0.005,
+  "slice_spacing_factor": 1.2,
+  "vertical_filter_window": 4.5,
+  "ransac_threshold": 1.0,
+  "ransac_probability": 0.9,
+  "ransac_inlier_ratio": 0.75,
+  "ransac_sample_size": 5,
+  "polynomial_degree": 3,
+  "num_samples_factor": 1210,
+  "diameter": 5.5
+}
