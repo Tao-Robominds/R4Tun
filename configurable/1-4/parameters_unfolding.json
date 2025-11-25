@@ -1,6 +1,6 @@
 {
   "delta": 0.007,
-  "slice_spacing_factor": 0.8,
+  "slice_spacing_factor": 1.2,
   "vertical_filter_window": 5.5,
   "ransac_threshold": 0.5,
   "ransac_probability": 0.9,
