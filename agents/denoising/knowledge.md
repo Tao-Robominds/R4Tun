@@ -61,3 +61,15 @@ The five tunnels span:
 - **T1/T2-type**: 5.5m diameter → segment_per_ring = 6
 - **T4/T5-type**: 7.5m diameter → segment_per_ring = 7
 - **Dataset naming**: "2-2" means tunnel type 2, dataset 2 (still 6 segments per ring)
+
+## Parameter Reference (Denoising Stage)
+
+Parameters in `configurable/*/parameters_denoising.json` control the cylindrical grid used to identify sparse/noisy points before Algorithm 2 produces `denoised.csv`. Keep the following intent and ranges in mind:
+
+- **mask_r_low / mask_r_high (m)** – radial gate applied before any histogramming. Set them to bracket the expected tunnel radius (≈ diameter / 2). Observed settings span **2.2–3.5** for 5.5 m tunnels and up to **4.0** for 7.5 m tunnels. Tighten the window to suppress stray scaffolding.
+- **y_step (m)** – azimuth bin size (along θ). Typical values **0.4–0.7** give 25–40 bins around the circumference; shrink it only if the dataset has very high angular density.
+- **z_step (m)** – radial bin size per histogram column. Use **0.001–0.0055** depending on how much vertical noise the scanner introduced; finer steps support sharper cutoffs but require more samples.
+- **grad_threshold** – gradient drop (ratio) that marks the point where occupied bins end. Stable values sit between **0.15–0.20**; raise it when the wall fades gradually due to heavy occlusion.
+- **smoothing_window_size** – number of bins in the moving average when flattening the cutoff curve. Typical choices are **3** for dense scans and **5** when more smoothing is needed.
+- **smoothing_offset (m)** – safety margin added after smoothing so we do not delete the actual wall. Keep it slightly negative (**‑0.003 to ‑0.002**) to bias toward retaining more points.
+- **default_cutoff_z (m)** – fallback radius used when a θ-bin has no reliable counts. Always keep it synchronized with the unfolding `diameter` (≈ diameter / 2). Current datasets use **2.7–3.75** depending on tunnel size; updating diameter requires updating this constant as well for the LLM agent.

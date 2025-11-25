@@ -61,3 +61,18 @@ The five tunnels span:
 - **T1/T2-type**: 5.5m diameter → segment_per_ring = 6
 - **T4/T5-type**: 7.5m diameter → segment_per_ring = 7
 - **Dataset naming**: "2-2" means tunnel type 2, dataset 2 (still 6 segments per ring)
+
+## Parameter Reference (Unfolding Stage)
+
+The configurable parameters in `configurable/*/parameters_unfolding.json` drive the geometry recovery in stage 1. Use the following definitions and empirically validated ranges when setting up a new tunnel:
+
+- **delta (m)** – half thickness of each slicing slab used to sample rings. Smaller deltas preserve detail but increase noise sensitivity. Typical range: **0.005–0.010** (5.5 m tunnels stay near 0.005–0.007; 7.5 m cases can tolerate up to 0.010).
+- **slice_spacing_factor (m)** – target spacing between consecutive slicing planes measured along the tunnel axis. Drives how many rings are generated. Use **0.8** for dense sampling (often 7.5 m tunnels) and **1.2** when 1.2 m rings are expected.
+- **vertical_filter_window (m)** – window applied when filtering ellipse points in the projected plane. Keeps only the top portion of each slice to avoid floor clutter. Values between **4.5–7.5** cover T1–T5 (wider windows for large-diameter scans).
+- **ransac_threshold (m)** – max distance from an ellipse fit before a point is treated as an outlier. Tight scans (T3) work with **0.5–1.0**; noisier or offset scans (T4/T5) need **1.0–1.5**.
+- **ransac_probability** – probability of finding a valid model during ellipse fitting. Held at **0.9** (tuning is rarely required).
+- **ransac_inlier_ratio** – expected inlier fraction for ellipse fits. Defaults to **0.75**; reduce only if slices are severely occluded.
+- **ransac_sample_size** – number of points sampled per RANSAC iteration. **5–6** points are sufficient for the observed tunnels (6 for wider rings).
+- **polynomial_degree** – degree of the polynomial used to fit the 3‑D centerline. Use **3** when the tunnel has noticeable curvature (T1/T2) and **2** for mostly straight runs (T3–T5).
+- **num_samples_factor** – oversampling factor for resampling along the centerline. Current datasets operate well around **1 200 ± 200**; increasing it adds computation without noticeable benefit.
+- **diameter (m)** – expected tunnel diameter used both for polar conversions and downstream sanity checks. Set **5.5** for T1–T3 data and **7.5** for T4/T5. Keep denoising `default_cutoff_z ≈ diameter / 2` in sync with this value.

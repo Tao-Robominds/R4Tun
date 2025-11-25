@@ -61,3 +61,16 @@ The five tunnels span:
 - **T1/T2-type**: 5.5m diameter → segment_per_ring = 6
 - **T4/T5-type**: 7.5m diameter → segment_per_ring = 7
 - **Dataset naming**: "2-2" means tunnel type 2, dataset 2 (still 6 segments per ring)
+
+## Parameter Reference (Detecting Stage)
+
+`configurable/*/parameters_detecting.json` controls the depth-map processing that locates joint lines before prompt generation. Key parameters:
+
+- **binary_threshold (0–255)** – grayscale cutoff for binarizing the depth map. Cleaner scans accept **115–130**; lower the value when the wall contrast is weak.
+- **morphological_kernel_size (px) & dilation_iterations** – shape and repetition of the structuring element used to thicken detected cracks. Kernels of **3×3 to 5×5** with **1–2** iterations cover all tunnels; increase only if Hough detection misses lines.
+- **hough_threshold_oblique / horizontal / vertical** – accumulator thresholds for `cv2.HoughLines(P)`; larger tunnels require more votes (vertical thresholds up to **700**). Start around **40–80** for oblique lines and tune per dataset.
+- **minLineLength_oblique / maxLineGap_oblique (px)** – minimum segment length and allowed gaps when fitting slanted joints. 5.5 m tunnels use **100–150 px / 40–50 px**; larger tunnels can push lengths to **300+ px**.
+- **angle_range_oblique_positive / negative (deg)** – allowable slope windows for slanted joints (±6–10 °). Tight ranges reduce false positives; widen them if the tunnel has noticeable skew.
+- **merge_distance (px)** – distance threshold when consolidating vertical lines. Small tunnels use **2–3 px**; noisy datasets may require up to **10 px**.
+- **ring_spacing_constant (m)** – expected spacing between ring centers in the unwrapped map. 1.2 m rings ≈ **1.2–1.3**; keep in sync with actual construction drawings.
+- **resolution (m/px)** – projection resolution used across stages (default **0.005**). Changing it requires regenerating all intermediate depth maps to keep the SAM templates aligned.
