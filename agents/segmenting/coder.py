@@ -27,22 +27,18 @@ class SegmentingParameterExtractor:
         return "No segmenting analysis recommendations available. Please run analyst.py first."
     
     def load_current_parameters(self):
-        """Load current parameters_segmenting.json structure"""
-        # Try tunnel-specific parameters first, then fall back to global
+        """Load tunnel-specific parameters_segmenting.json structure"""
         params_path = self.params_dir / "parameters_sam.json"
-        global_params_path = Path("configurable/parameters_sam.json")
         
-        if params_path.exists():
-            with open(params_path, 'r') as f:
-                return json.load(f)
-        elif global_params_path.exists():
-            with open(global_params_path, 'r') as f:
-                return json.load(f)
+        if not params_path.exists():
+            raise FileNotFoundError(
+                f"No parameter configuration found for tunnel {self.tunnel_id}.\n"
+                f"Expected file: {params_path}\n"
+                "Please ensure tunnel-specific parameters exist before running the coder."
+            )
         
-        else:
-            raise FileNotFoundError(f"No parameter configuration found. Expected either:\n"
-                                  f"- Tunnel-specific: {params_path}\n"
-                                  f"- Global config: {global_params_path}")
+        with open(params_path, 'r') as f:
+            return json.load(f)
     
     def extract_parameters_via_dify(self):
         """Use Dify API to extract parameter updates from analysis"""
@@ -145,22 +141,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             json_text = api_response[json_start:json_end]
             extracted_params = json.loads(json_text)
             
-            # Load default parameters to replace null values
-            try:
-                current_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Fallback defaults if no config files exist
-                current_params = {
-                    "segment_per_ring": 6,
-                    "segment_width": 1200,
-                    "K_height": 1079.92,
-                    "AB_height": 3239.77,
-                    "angle": 7.52,
-                    "resolution": 0.005,
-                    "sam_checkpoint": "mes/segment-anything/sam_vit_h_4b8939.pth",
-                    "model_type": "vit_h",
-                    "device": "cuda"
-                }
+            # Load current parameters to provide defaults when values are missing
+            current_params = self.load_current_parameters()
             
             # Start with complete default parameters
             final_params = current_params.copy()

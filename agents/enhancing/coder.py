@@ -6,7 +6,6 @@ import requests
 import os
 import subprocess
 from pathlib import Path
-import time
 
 class EnhancingParameterExtractor:
     def __init__(self, tunnel_id):
@@ -14,7 +13,6 @@ class EnhancingParameterExtractor:
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = self.data_dir / "characteristics"  # For characteriser results
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         
@@ -27,22 +25,18 @@ class EnhancingParameterExtractor:
         return "No enhancing analysis recommendations available. Please run analyst.py first."
     
     def load_current_parameters(self):
-        """Load current parameters_enhancing.json structure"""
-        # Try tunnel-specific parameters first, then fall back to global
+        """Load tunnel-specific parameters_enhancing.json structure"""
         params_path = self.params_dir / "parameters_enhancing.json"
-        global_params_path = Path("configurable/parameters_enhancing.json")
         
-        if params_path.exists():
-            with open(params_path, 'r') as f:
-                return json.load(f)
-        elif global_params_path.exists():
-            with open(global_params_path, 'r') as f:
-                return json.load(f)
+        if not params_path.exists():
+            raise FileNotFoundError(
+                f"No parameter configuration found for tunnel {self.tunnel_id}.\n"
+                f"Expected file: {params_path}\n"
+                "Please ensure tunnel-specific parameters exist before running the coder."
+            )
         
-        else:
-            raise FileNotFoundError(f"No parameter configuration found. Expected either:\n"
-                                  f"- Tunnel-specific: {params_path}\n"
-                                  f"- Global config: {global_params_path}")
+        with open(params_path, 'r') as f:
+            return json.load(f)
     
     def extract_parameters_via_dify(self):
         """Use Dify API to extract parameter updates from analysis"""
@@ -155,27 +149,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             json_text = api_response[json_start:json_end]
             extracted_params = json.loads(json_text)
             
-            # Load default parameters to replace null values
-            try:
-                current_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Fallback defaults if no config files exist
-                current_params = {
-                    "upsampling_stage1_target_distance": 0.08,
-                    "upsampling_stage2_target_distance": 0.04,
-                    "upsampling_stage3_target_distance": 0.02,
-                    "curvature_threshold": 0.0005,
-                    "depth_threshold_low": 0.003,
-                    "depth_threshold_high": 0.008,
-                    "inter_radius": 0.06,
-                    "duplicate_threshold": 0.02,
-                    "n_segment_start": 10,
-                    "n_segment_end": 21,
-                    "num_neighbors": 20,
-                    "num_interpolations": 2,
-                    "resolution": 0.005,
-                    "window_size": 9
-                }
+            # Load current parameters to provide defaults when values are missing
+            current_params = self.load_current_parameters()
             
             # Start with complete default parameters
             final_params = current_params.copy()
@@ -239,44 +214,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
                 print(f"Partial Output: {e.stdout}")
             return False, e.stderr
     
-    def run_enhanced_characteriser(self):
-        """Run the 3-enhanced_characteriser.py"""
-        enhanced_csv = self.data_dir / "enhanced.csv"
-        
-        if not enhanced_csv.exists():
-            print(f"⚠️  enhanced.csv not found at {enhanced_csv}")
-            return False, "enhanced.csv not found"
-        
-        file_age = time.time() - enhanced_csv.stat().st_mtime
-        if file_age > 300:
-            print(f"⚠️  enhanced.csv is older than 5 minutes, may not be from current run")
-        
-        print(f"🔍 Running 3-enhanced_characteriser.py on {enhanced_csv}")
-        
-        # Ensure characteristics directory exists
-        os.makedirs(self.characteristics_dir, exist_ok=True)
-        
-        try:
-            result = subprocess.run(['python', 'mes/plugins/3-enhanced_characteriser.py', self.tunnel_id], 
-                                  capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
-            
-            print(f"✅ Enhancing characteriser completed successfully")
-            if result.stdout: print(f"Characteriser Output:\n{result.stdout}")
-            
-            # Verify that the characteristics file was created
-            characteristics_file = self.characteristics_dir / "enhanced_characteristics.json"
-            if characteristics_file.exists():
-                print(f"📊 Characteristics saved to: {characteristics_file}")
-            else:
-                print(f"⚠️  Characteristics file not found at expected location: {characteristics_file}")
-            
-            return True, result.stdout
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Enhancing characteriser failed")
-            if e.stderr: print(f"Error: {e.stderr}")
-            return False, e.stderr
-    
     def process(self):
         """Main processing function"""
         print(f"🔄 Processing parameterized enhancing for tunnel {self.tunnel_id}")
@@ -304,24 +241,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
-        # Step 4: Run enhancing characteriser
-        print("🔍 Step 4: Running enhancing characteriser...")
-        char_success, char_output = self.run_enhanced_characteriser()
-        
-        if char_success:
-            print("\n" + "="*60)
-            print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
-            print("="*60)
-            print(f"✅ Parameters extracted via Dify API and saved")
-            print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
-            print(f"✅ Configurable enhancing completed for tunnel {self.tunnel_id}")
-            print(f"✅ Enhanced characteriser completed")
-            print(f"📁 Results saved to: data/{self.tunnel_id}/enhanced.csv")
-            print(f"📊 Characteristics saved to: data/{self.tunnel_id}/characteristics/")
-            return True
-        else:
-            print("⚠️  Enhancing completed but characteriser failed")
-            return False
+        print("\n" + "="*60)
+        print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
+        print("="*60)
+        print(f"✅ Parameters extracted via Dify API and saved")
+        print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
+        print(f"✅ Configurable enhancing completed for tunnel {self.tunnel_id}")
+        print(f"📁 Results saved to: data/{self.tunnel_id}/enhanced.csv")
+        return True
 
 def main():
     import sys
