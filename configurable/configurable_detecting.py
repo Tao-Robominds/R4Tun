@@ -50,6 +50,8 @@ hough_threshold_oblique = params["hough_threshold_oblique"]
 minLineLength_oblique = params["minLineLength_oblique"]
 maxLineGap_oblique = params["maxLineGap_oblique"]
 hough_threshold_horizontal = params["hough_threshold_horizontal"]
+minLineLength_horizontal = params["minLineLength_horizontal"]
+maxLineGap_horizontal = params["maxLineGap_horizontal"]
 hough_threshold_vertical = params["hough_threshold_vertical"]
 angle_range_oblique_positive = params["angle_range_oblique_positive"]
 angle_range_oblique_negative = params["angle_range_oblique_negative"]
@@ -94,7 +96,7 @@ L, W = binary_map.shape
 lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, hough_threshold_oblique, minLineLength=minLineLength_oblique, maxLineGap=maxLineGap_oblique)
 
 # Horizontal line detection parameters (0 degrees)
-lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, hough_threshold_horizontal, minLineLength=minLineLength_oblique, maxLineGap=10)
+lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, hough_threshold_horizontal, minLineLength=minLineLength_horizontal, maxLineGap=maxLineGap_horizontal)
 
 # Vertical line detection
 lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, hough_threshold_vertical)
