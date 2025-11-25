@@ -39,7 +39,7 @@ def load_parameters(tunnel_id):
             with open(param_file, 'r') as f:
                 params = json.load(f)
             print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_unfolding.json")
-            return params
+            return params, param_file
         except Exception as e:
             print(f"❌ Error loading parameters: {e}")
             sys.exit(1)
@@ -49,7 +49,7 @@ def load_parameters(tunnel_id):
         sys.exit(1)
 
 # Load configuration
-params = load_parameters(tunnel_id)
+params, param_file = load_parameters(tunnel_id)
 expected_keys = [
     "delta",
     "slice_spacing_factor",
