@@ -50,6 +50,24 @@ def load_parameters(tunnel_id):
 
 # Load configuration
 params = load_parameters(tunnel_id)
+expected_keys = [
+    "delta",
+    "slice_spacing_factor",
+    "vertical_filter_window",
+    "ransac_threshold",
+    "ransac_probability",
+    "ransac_inlier_ratio",
+    "ransac_sample_size",
+    "polynomial_degree",
+    "num_samples_factor",
+    "diameter",
+]
+
+for key in expected_keys:
+    if key not in params:
+        print(f"❌ Error: Missing required parameter '{key}' in {param_file}")
+        sys.exit(1)
+
 delta = params["delta"]
 slice_spacing_factor = params["slice_spacing_factor"]
 vertical_filter_window = params["vertical_filter_window"]

@@ -45,6 +45,22 @@ def load_parameters(tunnel_id):
 
 # Load configuration
 params = load_parameters(tunnel_id)
+expected_keys = [
+    "mask_r_low",
+    "mask_r_high",
+    "y_step",
+    "z_step",
+    "grad_threshold",
+    "smoothing_window_size",
+    "smoothing_offset",
+    "default_cutoff_z",
+]
+
+for key in expected_keys:
+    if key not in params:
+        print(f"❌ Error: Missing required parameter '{key}' in {param_file}")
+        sys.exit(1)
+
 mask_r_low = params["mask_r_low"]
 mask_r_high = params["mask_r_high"]
 y_step = params["y_step"]
@@ -52,7 +68,6 @@ z_step = params["z_step"]
 grad_threshold = params["grad_threshold"]
 smoothing_window_size = params["smoothing_window_size"]
 smoothing_offset = params["smoothing_offset"]
-# default_cutoff_z should be approximately half the tunnel diameter (diameter / 2)
 default_cutoff_z = params["default_cutoff_z"]
 
 print(f"Using parameters: mask_r_low={mask_r_low}, mask_r_high={mask_r_high}, y_step={y_step}, z_step={z_step}, default_cutoff_z={default_cutoff_z}")

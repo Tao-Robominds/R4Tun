@@ -5,8 +5,8 @@ import json
 import requests
 import os
 import subprocess
+import sys
 from pathlib import Path
-import time
 
 class UnfoldingParameterExtractor:
     def __init__(self, tunnel_id):
@@ -14,7 +14,6 @@ class UnfoldingParameterExtractor:
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = self.data_dir / "characteristics"
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         
@@ -27,21 +26,18 @@ class UnfoldingParameterExtractor:
         return "No unfolding analysis recommendations available. Please run analyst.py first."
     
     def load_current_parameters(self):
-        """Load current parameters_unfolding.json structure"""
-        # Try tunnel-specific parameters first, then fall back to global
+        """Load tunnel-specific parameters_unfolding.json structure"""
         params_path = self.params_dir / "parameters_unfolding.json"
-        global_params_path = Path("configurable/parameters_unfolding.json")
         
-        if params_path.exists():
-            with open(params_path, 'r') as f:
-                return json.load(f)
-        elif global_params_path.exists():
-            with open(global_params_path, 'r') as f:
-                return json.load(f)
-        else:
-            raise FileNotFoundError(f"No parameter configuration found. Expected either:\n"
-                                  f"- Tunnel-specific: {params_path}\n"
-                                  f"- Global config: {global_params_path}")
+        if not params_path.exists():
+            raise FileNotFoundError(
+                f"No parameter configuration found for tunnel {self.tunnel_id}.\n"
+                f"Expected file: {params_path}\n"
+                "Please ensure you have tunnel-specific parameters before running the coder."
+            )
+        
+        with open(params_path, 'r') as f:
+            return json.load(f)
     
     def extract_parameters_via_dify(self):
         """Use Dify API to extract parameter updates from analysis"""
@@ -76,6 +72,7 @@ You are a parameter extraction specialist. Extract specific parameter values fro
    - ransac_sample_size (sample size N, look for "from X → X points")
    - polynomial_degree (polynomial degree, look for "reduce to X")
    - num_samples_factor (samples factor, look for "ring_count×XXXX")
+   - diameter (tunnel diameter in meters, look for statements like "set diameter to X.X m")
 
 2. **Extract only the numerical values mentioned in the analysis**
 3. **If a parameter is not mentioned, keep the current value**
@@ -92,7 +89,8 @@ You are a parameter extraction specialist. Extract specific parameter values fro
   "ransac_inlier_ratio": <extracted_value_or_current>,
   "ransac_sample_size": <extracted_value_or_current>,
   "polynomial_degree": <extracted_value_or_current>,
-  "num_samples_factor": <extracted_value_or_current>
+  "num_samples_factor": <extracted_value_or_current>,
+  "diameter": <extracted_value_or_current>
 }}
 ```
 
@@ -144,22 +142,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             json_text = api_response[json_start:json_end]
             extracted_params = json.loads(json_text)
             
-            # Load default parameters to replace null values
-            try:
-                current_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Fallback defaults if no config files exist
-                current_params = {
-                    "delta": 0.005,
-                    "slice_spacing_factor": 1.2,
-                    "vertical_filter_window": 4.5,
-                    "ransac_threshold": 1.0,
-                    "ransac_probability": 0.9,
-                    "ransac_inlier_ratio": 0.75,
-                    "ransac_sample_size": 5,
-                    "polynomial_degree": 3,
-                    "num_samples_factor": 1210
-                }
+            # Load current parameters to provide defaults when values are missing
+            current_params = self.load_current_parameters()
             
             # Start with complete default parameters
             final_params = current_params.copy()
@@ -206,7 +190,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         
         try:
             result = subprocess.run([
-                'python', str(script_path), 
+                sys.executable, str(script_path), 
                 self.tunnel_id
             ], capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
             
@@ -221,44 +205,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
                 print(f"Error: {e.stderr}")
             if e.stdout:
                 print(f"Partial Output: {e.stdout}")
-            return False, e.stderr
-    
-    def run_unfolded_characteriser(self):
-        """Run the 1-unfolded_characteriser.py"""
-        unwrapped_csv = self.data_dir / "unwrapped.csv"
-        
-        if not unwrapped_csv.exists():
-            print(f"⚠️  unwrapped.csv not found at {unwrapped_csv}")
-            return False, "unwrapped.csv not found"
-        
-        file_age = time.time() - unwrapped_csv.stat().st_mtime
-        if file_age > 300:
-            print(f"⚠️  unwrapped.csv is older than 5 minutes, may not be from current run")
-        
-        print(f"🔍 Running 1-unfolded_characteriser.py on {unwrapped_csv}")
-        
-        # Ensure characteristics directory exists
-        os.makedirs(self.characteristics_dir, exist_ok=True)
-        
-        try:
-            result = subprocess.run(['python', 'mes/plugins/1-unfolded_characteriser.py', self.tunnel_id], 
-                                  capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
-            
-            print(f"✅ Unfolding characteriser completed successfully")
-            if result.stdout: print(f"Characteriser Output:\n{result.stdout}")
-            
-            # Verify that the characteristics file was created
-            characteristics_file = self.characteristics_dir / "unfolded_characteristics.json"
-            if characteristics_file.exists():
-                print(f"📊 Characteristics saved to: {characteristics_file}")
-            else:
-                print(f"⚠️  Characteristics file not found at expected location: {characteristics_file}")
-            
-            return True, result.stdout
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Unfolding characteriser failed")
-            if e.stderr: print(f"Error: {e.stderr}")
             return False, e.stderr
     
     def process(self):
@@ -288,24 +234,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
-        # Step 4: Run unfolding characteriser
-        print("🔍 Step 4: Running unfolding characteriser...")
-        char_success, char_output = self.run_unfolded_characteriser()
-        
-        if char_success:
-            print("\n" + "="*60)
-            print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
-            print("="*60)
-            print(f"✅ Parameters extracted via Dify API and saved")
-            print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
-            print(f"✅ Configurable unfolding completed for tunnel {self.tunnel_id}")
-            print(f"✅ Unfolded characteriser completed")
-            print(f"📁 Results saved to: data/{self.tunnel_id}/unwrapped.csv")
-            print(f"📊 Characteristics saved to: data/{self.tunnel_id}/characteristics/")
-            return True
-        else:
-            print("⚠️  Unfolding completed but characteriser failed")
-            return False
+        print("\n" + "="*60)
+        print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
+        print("="*60)
+        print(f"✅ Parameters extracted via Dify API and saved")
+        print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
+        print(f"✅ Configurable unfolding completed for tunnel {self.tunnel_id}")
+        print(f"📁 Results saved to: data/{self.tunnel_id}/unwrapped.csv")
+        return True
 
 def main():
     import sys

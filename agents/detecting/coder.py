@@ -27,22 +27,18 @@ class DetectingParameterExtractor:
         return "No detecting analysis recommendations available. Please run analyst.py first."
     
     def load_current_parameters(self):
-        """Load current parameters_detecting.json structure"""
-        # Try tunnel-specific parameters first, then fall back to global
+        """Load tunnel-specific parameters_detecting.json structure"""
         params_path = self.params_dir / "parameters_detecting.json"
-        global_params_path = Path("configurable/parameters_detecting.json")
         
-        if params_path.exists():
-            with open(params_path, 'r') as f:
-                return json.load(f)
-        elif global_params_path.exists():
-            with open(global_params_path, 'r') as f:
-                return json.load(f)
+        if not params_path.exists():
+            raise FileNotFoundError(
+                f"No parameter configuration found for tunnel {self.tunnel_id}.\n"
+                f"Expected file: {params_path}\n"
+                "Please ensure tunnel-specific parameters exist before running the coder."
+            )
         
-        else:
-            raise FileNotFoundError(f"No parameter configuration found. Expected either:\n"
-                                  f"- Tunnel-specific: {params_path}\n"
-                                  f"- Global config: {global_params_path}")
+        with open(params_path, 'r') as f:
+            return json.load(f)
     
     def extract_parameters_via_dify(self):
         """Use Dify API to extract parameter updates from analysis"""
@@ -153,26 +149,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             json_text = api_response[json_start:json_end]
             extracted_params = json.loads(json_text)
             
-            # Load default parameters to replace null values
-            try:
-                current_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Fallback defaults if no config files exist
-                current_params = {
-                    "binary_threshold": 127,
-                    "morphological_kernel_size": [3, 3],
-                    "dilation_iterations": 1,
-                    "hough_threshold_oblique": 50,
-                    "minLineLength_oblique": 100,
-                    "maxLineGap_oblique": 40,
-                    "hough_threshold_horizontal": 50,
-                    "hough_threshold_vertical": 500,
-                    "angle_range_oblique_positive": [6, 9],
-                    "angle_range_oblique_negative": [-9, -6],
-                    "merge_distance": 3,
-                    "ring_spacing_constant": 1.2,
-                    "resolution": 0.005
-                }
+            # Load current parameters to provide defaults when values are missing
+            current_params = self.load_current_parameters()
             
             # Start with complete default parameters
             final_params = current_params.copy()

@@ -6,7 +6,6 @@ import requests
 import os
 import subprocess
 from pathlib import Path
-import time
 
 class DenoisingParameterExtractor:
     def __init__(self, tunnel_id):
@@ -14,7 +13,6 @@ class DenoisingParameterExtractor:
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = self.data_dir / "characteristics"  # For characteriser results
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         
@@ -27,22 +25,18 @@ class DenoisingParameterExtractor:
         return "No denoising analysis recommendations available. Please run analyst.py first."
     
     def load_current_parameters(self):
-        """Load current parameters_denoising.json structure"""
-        # Try tunnel-specific parameters first, then fall back to global
+        """Load tunnel-specific parameters_denoising.json structure"""
         params_path = self.params_dir / "parameters_denoising.json"
-        global_params_path = Path("configurable/parameters_denoising.json")
         
-        if params_path.exists():
-            with open(params_path, 'r') as f:
-                return json.load(f)
-        elif global_params_path.exists():
-            with open(global_params_path, 'r') as f:
-                return json.load(f)
+        if not params_path.exists():
+            raise FileNotFoundError(
+                f"No parameter configuration found for tunnel {self.tunnel_id}.\n"
+                f"Expected file: {params_path}\n"
+                "Please ensure tunnel-specific parameters exist before running the coder."
+            )
         
-        else:
-            raise FileNotFoundError(f"No parameter configuration found. Expected either:\n"
-                                  f"- Tunnel-specific: {params_path}\n"
-                                  f"- Global config: {global_params_path}")
+        with open(params_path, 'r') as f:
+            return json.load(f)
     
     def extract_parameters_via_dify(self):
         """Use Dify API to extract parameter updates from analysis"""
@@ -75,6 +69,7 @@ You are a parameter extraction specialist. Extract specific parameter values fro
    - grad_threshold (gradient threshold for denoising)
    - smoothing_window_size (smoothing filter window size)
    - smoothing_offset (smoothing offset in meters)
+   - default_cutoff_z (z height cutoff to discard noisy data, in meters)
 
 2. **Extract only the numerical values mentioned in the analysis**
 3. **If a parameter is not mentioned, keep the current value**
@@ -89,7 +84,8 @@ You are a parameter extraction specialist. Extract specific parameter values fro
   "z_step": <extracted_value_or_current>,
   "grad_threshold": <extracted_value_or_current>,
   "smoothing_window_size": <extracted_value_or_current>,
-  "smoothing_offset": <extracted_value_or_current>
+  "smoothing_offset": <extracted_value_or_current>,
+  "default_cutoff_z": <extracted_value_or_current>
 }}
 ```
 
@@ -141,20 +137,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             json_text = api_response[json_start:json_end]
             extracted_params = json.loads(json_text)
             
-            # Load default parameters to replace null values
-            try:
-                current_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Fallback defaults if no config files exist
-                current_params = {
-                    "mask_r_low": 2.7,
-                    "mask_r_high": 2.8,
-                    "y_step": 0.5,
-                    "z_step": 0.001,
-                    "grad_threshold": 0.2,
-                    "smoothing_window_size": 3,
-                    "smoothing_offset": 0.003
-                }
+            # Load current parameters to provide defaults when values are missing
+            current_params = self.load_current_parameters()
             
             # Start with complete default parameters
             final_params = current_params.copy()
@@ -218,44 +202,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
                 print(f"Partial Output: {e.stdout}")
             return False, e.stderr
     
-    def run_denoised_characteriser(self):
-        """Run the 2-denoised_characteriser.py"""
-        denoised_csv = self.data_dir / "denoised.csv"
-        
-        if not denoised_csv.exists():
-            print(f"⚠️  denoised.csv not found at {denoised_csv}")
-            return False, "denoised.csv not found"
-        
-        file_age = time.time() - denoised_csv.stat().st_mtime
-        if file_age > 300:
-            print(f"⚠️  denoised.csv is older than 5 minutes, may not be from current run")
-        
-        print(f"🔍 Running 2-denoised_characteriser.py on {denoised_csv}")
-        
-        # Ensure characteristics directory exists
-        os.makedirs(self.characteristics_dir, exist_ok=True)
-        
-        try:
-            result = subprocess.run(['python', 'mes/plugins/2-denoised_characteriser.py', self.tunnel_id], 
-                                  capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
-            
-            print(f"✅ Denoising characteriser completed successfully")
-            if result.stdout: print(f"Characteriser Output:\n{result.stdout}")
-            
-            # Verify that the characteristics file was created
-            characteristics_file = self.characteristics_dir / "denoised_characteristics.json"
-            if characteristics_file.exists():
-                print(f"📊 Characteristics saved to: {characteristics_file}")
-            else:
-                print(f"⚠️  Characteristics file not found at expected location: {characteristics_file}")
-            
-            return True, result.stdout
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Denoising characteriser failed")
-            if e.stderr: print(f"Error: {e.stderr}")
-            return False, e.stderr
-    
     def process(self):
         """Main processing function"""
         print(f"🔄 Processing parameterized denoising for tunnel {self.tunnel_id}")
@@ -266,53 +212,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         api_response = self.extract_parameters_via_dify()
         
         if not api_response:
-            print("⚠️  Failed to get response from Dify API, using default parameters")
-            # Fall back to default parameters
-            try:
-                default_params = self.load_current_parameters()
-            except FileNotFoundError:
-                # Ultimate fallback defaults
-                default_params = {
-                    "mask_r_low": 2.7,
-                    "mask_r_high": 2.8,
-                    "y_step": 0.5,
-                    "z_step": 0.001,
-                    "grad_threshold": 0.2,
-                    "smoothing_window_size": 3,
-                    "smoothing_offset": 0.003
-                }
-            
-            # Save default parameters
-            os.makedirs(self.params_dir, exist_ok=True)
-            param_file = self.params_dir / "parameters_denoising.json"
-            with open(param_file, 'w') as f:
-                json.dump(default_params, f, indent=2)
-            print(f"📁 Default parameters saved to: {param_file}")
-        else:
-            # Step 2: Parse and save parameters
-            print("💾 Step 2: Parsing and saving parameters...")
-            if not self.parse_and_save_parameters(api_response):
-                print("⚠️  Failed to parse parameters, using defaults")
-                # Fall back to default parameters
-                try:
-                    default_params = self.load_current_parameters()
-                except FileNotFoundError:
-                    default_params = {
-                        "mask_r_low": 2.7,
-                        "mask_r_high": 2.8,
-                        "y_step": 0.5,
-                        "z_step": 0.001,
-                        "grad_threshold": 0.2,
-                        "smoothing_window_size": 3,
-                        "smoothing_offset": 0.003
-                    }
-                
-                # Save default parameters
-                os.makedirs(self.params_dir, exist_ok=True)
-                param_file = self.params_dir / "parameters_denoising.json"
-                with open(param_file, 'w') as f:
-                    json.dump(default_params, f, indent=2)
-                print(f"📁 Default parameters saved to: {param_file}")
+            print("❌ Failed to get response from Dify API")
+            return False
+        
+        # Step 2: Parse and save parameters
+        print("💾 Step 2: Parsing and saving parameters...")
+        if not self.parse_and_save_parameters(api_response):
+            print("❌ Failed to parse and save parameters")
+            return False
         
         # Step 3: Run configurable script
         print("🚀 Step 3: Running configurable denoising script...")
@@ -322,24 +229,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
-        # Step 4: Run denoising characteriser
-        print("🔍 Step 4: Running denoising characteriser...")
-        char_success, char_output = self.run_denoised_characteriser()
-        
-        if char_success:
-            print("\n" + "="*60)
-            print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
-            print("="*60)
-            print(f"✅ Parameters extracted via Dify API and saved")
-            print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
-            print(f"✅ Configurable denoising completed for tunnel {self.tunnel_id}")
-            print(f"✅ Denoised characteriser completed")
-            print(f"📁 Results saved to: data/{self.tunnel_id}/denoised.csv")
-            print(f"📊 Characteristics saved to: data/{self.tunnel_id}/characteristics/")
-            return True
-        else:
-            print("⚠️  Denoising completed but characteriser failed")
-            return False
+        print("\n" + "="*60)
+        print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
+        print("="*60)
+        print(f"✅ Parameters extracted via Dify API and saved")
+        print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
+        print(f"✅ Configurable denoising completed for tunnel {self.tunnel_id}")
+        print(f"📁 Results saved to: data/{self.tunnel_id}/denoised.csv")
+        return True
 
 def main():
     import sys

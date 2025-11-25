@@ -13,48 +13,48 @@ class SegmentingAnalyser:
         self.api_key = "app-2YyQbd7yv14XBQCf2DL3bifh"
         self.base_url = "https://api.dify.ai/v1"
         
+    def _read_required_text(self, path: Path, description: str) -> str:
+        if not path.exists():
+            raise FileNotFoundError(f"{description} not found at {path}")
+        content = path.read_text()
+        if not content.strip():
+            raise ValueError(f"{description} at {path} is empty")
+        return content
+    
+    def _read_required_json(self, path: Path, description: str) -> str:
+        if not path.exists():
+            raise FileNotFoundError(f"{description} not found at {path}")
+        with open(path, 'r') as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"{description} at {path} contains invalid JSON: {exc}") from exc
+        return json.dumps(data, indent=2)
+    
     def load_analysis_data(self):
         # Load role definition
-        role_path = Path("ablation/segmenting/role.md")
-        role_content = ""
-        if role_path.exists():
-            with open(role_path, 'r') as f:
-                role_content = f.read()
+        role_path = Path("agents/segmenting/role.md")
+        role_content = self._read_required_text(role_path, "Role definition")
         
         # Load instructions
-        instructions_path = Path("ablation/segmenting/cot.md")
-        instructions_content = ""
-        if instructions_path.exists():
-            with open(instructions_path, 'r') as f:
-                instructions_content = f.read()
+        instructions_path = Path("agents/segmenting/cot.md")
+        instructions_content = self._read_required_text(instructions_path, "Chain-of-thought instructions")
         
         # Load original sample characteristics (reference)
-        sample_characteristics_path = Path("data/sample/characteristics/sample_characteristics.json")
-        sample_characteristics = "No sample characteristics available"
-        if sample_characteristics_path.exists():
-            with open(sample_characteristics_path, 'r') as f:
-                sample_characteristics = json.dumps(json.load(f), indent=2)
+        sample_characteristics_path = Path("data/sample/characteristics/raw_characteristics.json")
+        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample characteristics")
         
         # Load new tunnel characteristics
         new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/raw_characteristics.json")
-        new_characteristics = "No new tunnel characteristics available"
-        if new_characteristics_path.exists():
-            with open(new_characteristics_path, 'r') as f:
-                new_characteristics = json.dumps(json.load(f), indent=2)
+        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel characteristics")
         
         # Load original code with parameters
-        code_path = Path("mes/4-2_sam.py")
-        code_content = ""
-        if code_path.exists():
-            with open(code_path, 'r') as f:
-                code_content = f.read()
+        code_path = Path("sam4tun/4-2_sam.py")
+        code_content = self._read_required_text(code_path, "Sample SAM segmenting code")
         
         # Load current SAM parameters (default)
-        sam_params_path = Path("configurable/parameters_sam.json")
-        sam_parameters = "No SAM parameters available"
-        if sam_params_path.exists():
-            with open(sam_params_path, 'r') as f:
-                sam_parameters = json.dumps(json.load(f), indent=2)
+        sam_params_path = Path("configurable/sample/parameters_sam.json")
+        sam_parameters = self._read_required_json(sam_params_path, "Sample SAM parameters")
         
         return {
             "role": role_content,
