@@ -9,6 +9,8 @@
   "minLineLength_oblique": 130,
   "maxLineGap_oblique": 50,
   "hough_threshold_horizontal": 40,
+  "minLineLength_horizontal": 100,
+  "maxLineGap_horizontal": 10,
   "hough_threshold_vertical": 300,
   "angle_range_oblique_positive": [
     6,

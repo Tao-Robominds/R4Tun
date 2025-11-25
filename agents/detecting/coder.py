@@ -71,6 +71,8 @@ You are a parameter extraction specialist. Extract specific parameter values fro
    - minLineLength_oblique (minimum length for oblique lines)
    - maxLineGap_oblique (maximum gap for oblique lines)
    - hough_threshold_horizontal (Hough threshold for horizontal lines)
+   - minLineLength_horizontal (minimum length for horizontal lines)
+   - maxLineGap_horizontal (maximum gap for horizontal lines)
    - hough_threshold_vertical (Hough threshold for vertical lines)
    - angle_range_oblique_positive (angle range for positive oblique lines as [min, max])
    - angle_range_oblique_negative (angle range for negative oblique lines as [min, max])
@@ -92,6 +94,8 @@ You are a parameter extraction specialist. Extract specific parameter values fro
   "minLineLength_oblique": <extracted_value_or_current>,
   "maxLineGap_oblique": <extracted_value_or_current>,
   "hough_threshold_horizontal": <extracted_value_or_current>,
+  "minLineLength_horizontal": <extracted_value_or_current>,
+  "maxLineGap_horizontal": <extracted_value_or_current>,
   "hough_threshold_vertical": <extracted_value_or_current>,
   "angle_range_oblique_positive": <extracted_value_or_current>,
   "angle_range_oblique_negative": <extracted_value_or_current>,
