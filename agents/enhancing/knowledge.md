@@ -61,3 +61,18 @@ The five tunnels span:
 - **T1/T2-type**: 5.5m diameter → segment_per_ring = 6
 - **T4/T5-type**: 7.5m diameter → segment_per_ring = 7
 - **Dataset naming**: "2-2" means tunnel type 2, dataset 2 (still 6 segments per ring)
+
+## Parameter Reference (Enhancing Stage)
+
+The upsampling / interpolation stage (Algorithm 3) uses `configurable/*/parameters_enhancing.json`. Each field has a direct effect on point synthesis quality:
+
+- **upsampling_stage{1,2,3}_target_distance (m)** – desired spacing between neighbors after each pass. Start near **0.08 / 0.04 / 0.02** for 5.5 m tunnels and reduce by ~25% for clean data; larger diameters can increase stage 1 to **0.10** to limit runtime.
+- **curvature_threshold** – max acceptable curvature difference between neighbors when deciding to interpolate. Tight tunnels use **3e‑4–5e‑4**; rougher scans (T3/T4) can go up to **5e‑3**.
+- **depth_threshold_low / depth_threshold_high (m)** – intensity of radial deviation required to mark “meaningful” outliers in low- vs high-density sections. Empirical ranges: **0.003–0.006** (low) and **0.008–0.015** (high).
+- **inter_radius (m)** – search radius when picking outlier pairs for joint enhancement. Values between **0.03–0.08** cover all tunnels (shorter for dense stations, longer for sparse large-diameter scans).
+- **duplicate_threshold (m)** – minimum spacing between newly generated points (default **0.02**). Increase slightly if you observe overlapping interpolations in T4/T5.
+- **n_segment_start / n_segment_end** – defines the high-density window (in ring indices) around the scanner to apply stricter thresholds. Use **0–5** when the scanner sits near the first ring, up to **10–21** when the scanner is embedded deeper (T4/T5).
+- **num_neighbors** – number of neighbors queried in KDTree lookups, typically **20**. Raising it increases smoothing but costs time.
+- **num_interpolations** – number of points inserted per qualifying pair (usually **2**).
+- **resolution (m)** – target grid resolution when projecting to depth maps; the pipeline assumes **0.005** and downstream SAM processing expects the same.
+- **window_size (px)** – sliding window for filling missing pixels during projection. Choose **5** for dense data and **9** when large gaps exist (e.g., 7.5 m tunnels).
