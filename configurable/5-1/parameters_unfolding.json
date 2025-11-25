@@ -8,5 +8,5 @@
   "ransac_sample_size": 5,
   "polynomial_degree": 2,
   "num_samples_factor": 1210,
-  "diameter": 5.5
+  "diameter": 7.5
 }
