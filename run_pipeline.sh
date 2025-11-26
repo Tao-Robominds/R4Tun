@@ -39,23 +39,23 @@ check_status() {
     fi
 }
 
-# Step 1: Unfolding
-echo ""
-echo "Step 1/7: Running unfolding..."
-python configurable/configurable_unfolding.py "$TUNNEL_ID"
-check_status "Unfolding"
+# # Step 1: Unfolding
+# echo ""
+# echo "Step 1/7: Running unfolding..."
+# python configurable/configurable_unfolding.py "$TUNNEL_ID"
+# check_status "Unfolding"
 
-# Step 2: Denoising
-echo ""
-echo "Step 2/7: Running denoising..."
-python configurable/configurable_denoising.py "$TUNNEL_ID"
-check_status "Denoising"
+# # Step 2: Denoising
+# echo ""
+# echo "Step 2/7: Running denoising..."
+# python configurable/configurable_denoising.py "$TUNNEL_ID"
+# check_status "Denoising"
 
-# Step 3: Enhancing
-echo ""
-echo "Step 3/7: Running enhancing..."
-python configurable/configurable_enhancing.py "$TUNNEL_ID"
-check_status "Enhancing"
+# # Step 3: Enhancing
+# echo ""
+# echo "Step 3/7: Running enhancing..."
+# python configurable/configurable_enhancing.py "$TUNNEL_ID"
+# check_status "Enhancing"
 
 # Step 4: Detecting
 echo ""
