@@ -11,17 +11,31 @@ from datetime import datetime
 import sys
 
 # Add the current directory to Python path for imports
-current_dir = Path(__file__).parent
+current_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(current_dir))
+
+
+def _find_project_root(start_dir: Path) -> Path:
+    """Find the project root (directory containing data/ and agents/)."""
+    for candidate in [start_dir] + list(start_dir.parents):
+        if (candidate / "data").exists() and (candidate / "agents").exists():
+            return candidate
+    # Fallback to current working directory as a last resort
+    return Path.cwd()
+
+
+PROJECT_ROOT = _find_project_root(current_dir)
 
 from deepseek_json_parser import DeepSeekJSONParser
 
 class SAMEvolver:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
-        self.data_dir = Path(f"data/{tunnel_id}")
+        self.project_root = PROJECT_ROOT
+        self.reflecting_dir = current_dir
+        self.data_dir = self.project_root / "data" / tunnel_id
         self.analysis_dir = self.data_dir / "analysis"
-        self.api_key = "app-bKyUjJtUZhrkbsEkh5AvZpzE"
+        self.api_key = os.getenv("DIFY_API_KEY", "app-bKyUjJtUZhrkbsEkh5AvZpzE")
         self.base_url = "https://api.dify.ai/v1"
         self.json_parser = DeepSeekJSONParser(debug=True)
         
@@ -104,10 +118,12 @@ class SAMEvolver:
             return None
     
     def load_sam_parameters(self):
-        """Load current SAM parameters"""
-        sam_params_path = self.data_dir / "sam_parameters.json"
-        if sam_params_path.exists():
-            with open(sam_params_path, 'r') as f:
+        """Load current SAM parameters from the new configurable path"""
+        configurable_path = (
+            self.project_root / "configurable" / self.tunnel_id / "parameters_sam.json"
+        )
+        if configurable_path.exists():
+            with open(configurable_path, "r") as f:
                 return json.load(f)
         return None
     
@@ -162,6 +178,7 @@ class SAMEvolver:
         sam_params = self.load_sam_parameters()
         if not sam_params:
             sam_params_data = "No SAM parameters found - please run SAM analyser first"
+            sam_params = {}
         else:
             sam_params_data = json.dumps(sam_params, indent=2)
         
@@ -293,16 +310,26 @@ Provide your analysis first, then ALWAYS conclude with the complete JSON configu
             if missing_fields:
                 raise ValueError(f"Missing required fields: {missing_fields}")
             
-            # Backup current parameters
-            sam_params_path = self.data_dir / "sam_parameters.json"
+            # Backup current parameters (in configurable directory)
+            sam_params_path = (
+                self.project_root
+                / "configurable"
+                / self.tunnel_id
+                / "parameters_sam.json"
+            )
             backup_path = None
             if sam_params_path.exists():
-                backup_path = self.data_dir / f"sam_parameters_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                backup_path = (
+                    self.project_root
+                    / "configurable"
+                    / self.tunnel_id
+                    / f"parameters_sam_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                )
                 sam_params_path.rename(backup_path)
                 print(f"📋 Backed up previous parameters to: {backup_path}")
             
             # Save evolved parameters
-            os.makedirs(self.data_dir, exist_ok=True)
+            os.makedirs(sam_params_path.parent, exist_ok=True)
             with open(sam_params_path, 'w') as f:
                 json.dump(config_data, f, indent=4)
             
@@ -478,24 +505,29 @@ def main():
         sys.exit(1)
         
     tunnel_id = sys.argv[1]
+    evolver = SAMEvolver(tunnel_id)
+    reflecting_rel_path = os.path.relpath(evolver.reflecting_dir, evolver.project_root)
     
     # Verify final.csv exists (needed for point coverage analysis)
-    final_csv_path = Path(f"data/{tunnel_id}/final.csv")
+    final_csv_path = evolver.data_dir / "final.csv"
     if not final_csv_path.exists():
         print(f"❌ final.csv not found: {final_csv_path}")
         print("Please run SAM segmentation first:")
-        print(f"  python ablation/5.self_reflecting/sam.py {tunnel_id}")
+        print(f"  python {reflecting_rel_path}/sam.py {tunnel_id}")
         sys.exit(1)
     
-    # Verify sam_parameters.json exists
-    sam_params_path = Path(f"data/{tunnel_id}/sam_parameters.json")
-    if not sam_params_path.exists():
-        print(f"❌ sam_parameters.json not found: {sam_params_path}")
-        print("Please run SAM analyser first:")
-        print(f"  python ablation/5.self_reflecting/sam_analyser.py {tunnel_id}")
+    # Ensure SAM parameters are available in the new configurable location
+    params = evolver.load_sam_parameters()
+    if not params:
+        config_path = (
+            evolver.project_root
+            / "configurable"
+            / tunnel_id
+            / "parameters_sam.json"
+        )
+        print(f"❌ SAM parameters not found at {config_path}")
+        print("Please generate SAM parameters first via the configurable pipeline.")
         sys.exit(1)
-    
-    evolver = SAMEvolver(tunnel_id)
     
     print("🔍 SAM parameter evolution starting...")
     
@@ -521,9 +553,9 @@ def main():
         print("✅ AI Analysis Complete: Parameter optimization applied")
         print("🎯 Focus on improving point coverage distribution")
         print("📋 Next steps:")
-        print(f"   1. Test evolved parameters: python ablation/5.self_reflecting/sam.py {tunnel_id}")
-        print(f"   2. Analyze results: python ablation/5.self_reflecting/sam_evolver.py {tunnel_id}")
-        print(f"   3. Evaluate performance: python ablation/5.self_reflecting/evaluation.py {tunnel_id}")
+        print(f"   1. Test evolved parameters: python {reflecting_rel_path}/sam.py {tunnel_id}")
+        print(f"   2. Analyze results: python {reflecting_rel_path}/sam_evolver.py {tunnel_id}")
+        print(f"   3. Evaluate performance: python {reflecting_rel_path}/evaluation.py {tunnel_id}")
         print("\n💡 Evolution Philosophy:")
         print("   - Data-driven optimization based on point coverage analysis")
         print("   - Focus on improving weakest performing segments")
