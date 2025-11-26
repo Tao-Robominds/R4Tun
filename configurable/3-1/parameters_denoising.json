@@ -6,5 +6,5 @@
   "grad_threshold": 0.15,
   "smoothing_window_size": 5,
   "smoothing_offset": -0.002,
-  "default_cutoff_z": 2.7
+  "default_cutoff_z": 2.8
 }
