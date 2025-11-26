@@ -40,13 +40,13 @@ class DetectingAnalyser:
         instructions_path = Path("agents/detecting/cot.md")
         instructions_content = self._read_required_text(instructions_path, "Chain-of-thought instructions")
         
-        # Load original sample characteristics (reference)
-        sample_characteristics_path = Path("data/sample/characteristics/raw_characteristics.json")
-        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample characteristics")
+        # Load original sample enhanced characteristics (reference)
+        sample_characteristics_path = Path("data/sample/characteristics/enhanced_characteristics.json")
+        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample enhanced characteristics")
         
-        # Load new tunnel characteristics
-        new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/raw_characteristics.json")
-        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel characteristics")
+        # Load new tunnel enhanced characteristics
+        new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/enhanced_characteristics.json")
+        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel enhanced characteristics")
         
         # Load original code with parameters
         code_path = Path("sam4tun/4-1_detection.py")
@@ -74,15 +74,15 @@ class DetectingAnalyser:
 # ROLE
 {context_data['role']}
 
-# ORIGINAL SAMPLE TUNNEL CHARACTERISTICS (Reference)
-The following are the characteristics of the original sample tunnel that the current parameters were tuned for:
+# ORIGINAL SAMPLE TUNNEL ENHANCED CHARACTERISTICS (Reference)
+The following are the enhanced characteristics of the original sample tunnel that the current parameters were tuned for:
 
 ```json
 {context_data['sample_characteristics']}
 ```
 
-# NEW TUNNEL CHARACTERISTICS (Target for Adaptation)
-The following are the characteristics of the new tunnel (ID: {self.tunnel_id}) that needs parameter adaptation:
+# NEW TUNNEL ENHANCED CHARACTERISTICS (Target for Adaptation)
+The following are the enhanced characteristics of the new tunnel (ID: {self.tunnel_id}) that needs parameter adaptation:
 
 ```json
 {context_data['new_characteristics']}

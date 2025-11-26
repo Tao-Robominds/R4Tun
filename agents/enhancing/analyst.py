@@ -40,13 +40,13 @@ class EnhancingAnalyser:
         instructions_path = Path("agents/enhancing/cot.md")
         instructions_content = self._read_required_text(instructions_path, "Chain-of-thought instructions")
         
-        # Load original sample characteristics (reference)
-        sample_characteristics_path = Path("data/sample/characteristics/raw_characteristics.json")
-        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample characteristics")
+        # Load original sample denoised characteristics (reference)
+        sample_characteristics_path = Path("data/sample/characteristics/denoised_characteristics.json")
+        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample denoised characteristics")
         
-        # Load new tunnel characteristics
-        new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/raw_characteristics.json")
-        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel characteristics")
+        # Load new tunnel denoised characteristics
+        new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/denoised_characteristics.json")
+        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel denoised characteristics")
         
         # Load original code with parameters
         code_path = Path("sam4tun/3_enhancing.py")
