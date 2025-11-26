@@ -207,6 +207,39 @@ Return ONLY the JSON object, no explanations or markdown formatting.
                 print(f"Partial Output: {e.stdout}")
             return False, e.stderr
     
+    def run_characteriser_plugin(self):
+        """Run the unfolded characteriser plugin to generate characteristics for next stage"""
+        plugin_path = Path("sam4tun/plugins/1-unfolded_characteriser.py")
+        
+        if not plugin_path.exists():
+            print(f"⚠️  Characteriser plugin not found at {plugin_path}")
+            return False, "Plugin not found"
+        
+        # Check if unwrapped.csv exists
+        unwrapped_file = self.data_dir / "unwrapped.csv"
+        if not unwrapped_file.exists():
+            print(f"⚠️  Unwrapped data not found at {unwrapped_file}")
+            return False, "Unwrapped data not found"
+        
+        try:
+            result = subprocess.run([
+                sys.executable, str(plugin_path), 
+                self.tunnel_id
+            ], capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
+            
+            print(f"✅ Unfolded characteriser completed successfully")
+            if result.stdout: 
+                print(f"Output: {result.stdout}")
+            return True, result.stdout
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Unfolded characteriser failed")
+            if e.stderr: 
+                print(f"Error: {e.stderr}")
+            if e.stdout:
+                print(f"Partial Output: {e.stdout}")
+            return False, e.stderr
+    
     def process(self):
         """Main processing function"""
         print(f"🔄 Processing parameterized unfolding for tunnel {self.tunnel_id}")
@@ -234,6 +267,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
+        # Step 4: Run characteriser plugin to generate characteristics for next stage
+        print("📊 Step 4: Running unfolded characteriser plugin...")
+        char_success, char_output = self.run_characteriser_plugin()
+        
+        if not char_success:
+            print("⚠️  Characteriser plugin failed (non-critical)")
+            print("   Next stage analysis may not have required characteristics")
+        
         print("\n" + "="*60)
         print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
         print("="*60)
@@ -241,6 +282,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
         print(f"✅ Configurable unfolding completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/unwrapped.csv")
+        if char_success:
+            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/unfolded_characteristics.json")
         return True
 
 def main():

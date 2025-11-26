@@ -5,6 +5,7 @@ import json
 import requests
 import os
 import subprocess
+import sys
 from pathlib import Path
 import time
 
@@ -202,7 +203,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         
         try:
             result = subprocess.run([
-                'python', str(script_path), 
+                sys.executable, str(script_path), 
                 self.tunnel_id
             ], capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
             
@@ -213,6 +214,39 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             
         except subprocess.CalledProcessError as e:
             print(f"❌ Configurable detecting failed")
+            if e.stderr: 
+                print(f"Error: {e.stderr}")
+            if e.stdout:
+                print(f"Partial Output: {e.stdout}")
+            return False, e.stderr
+    
+    def run_characteriser_plugin(self):
+        """Run the detected characteriser plugin to generate characteristics for next stage"""
+        plugin_path = Path("sam4tun/plugins/4-detected_characteriser.py")
+        
+        if not plugin_path.exists():
+            print(f"⚠️  Characteriser plugin not found at {plugin_path}")
+            return False, "Plugin not found"
+        
+        # Check if detected.csv exists
+        detected_file = self.data_dir / "detected.csv"
+        if not detected_file.exists():
+            print(f"⚠️  Detected data not found at {detected_file}")
+            return False, "Detected data not found"
+        
+        try:
+            result = subprocess.run([
+                sys.executable, str(plugin_path), 
+                self.tunnel_id
+            ], capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
+            
+            print(f"✅ Detected characteriser completed successfully")
+            if result.stdout: 
+                print(f"Output: {result.stdout}")
+            return True, result.stdout
+            
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Detected characteriser failed")
             if e.stderr: 
                 print(f"Error: {e.stderr}")
             if e.stdout:
@@ -247,6 +281,14 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
+        # Step 4: Run characteriser plugin to generate characteristics for next stage
+        print("📊 Step 4: Running detected characteriser plugin...")
+        char_success, char_output = self.run_characteriser_plugin()
+        
+        if not char_success:
+            print("⚠️  Characteriser plugin failed (non-critical)")
+            print("   Next stage analysis may not have required characteristics")
+        
         print("\n" + "="*60)
         print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
         print("="*60)
@@ -254,6 +296,8 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
         print(f"✅ Configurable detecting completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/detected.csv")
+        if char_success:
+            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/detected_characteristics.json")
         return True
 
 def main():
