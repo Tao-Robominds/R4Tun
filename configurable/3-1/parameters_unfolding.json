@@ -6,7 +6,13 @@
   "ransac_probability": 0.9,
   "ransac_inlier_ratio": 0.75,
   "ransac_sample_size": 6,
+  "ransac_initial_iterations": 999,
+  "ransac_inlier_threshold_multiplier": 0.8,
   "polynomial_degree": 2,
   "num_samples_factor": 1210,
-  "diameter": 5.5
+  "t_extrapolation_start": -20,
+  "t_extrapolation_end": 20,
+  "diameter": 5.5,
+  "batch_size": 1000000,
+  "n_jobs": 12
 }

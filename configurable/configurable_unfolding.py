@@ -58,9 +58,15 @@ expected_keys = [
     "ransac_probability",
     "ransac_inlier_ratio",
     "ransac_sample_size",
+    "ransac_initial_iterations",
+    "ransac_inlier_threshold_multiplier",
     "polynomial_degree",
     "num_samples_factor",
+    "t_extrapolation_start",
+    "t_extrapolation_end",
     "diameter",
+    "batch_size",
+    "n_jobs",
 ]
 
 for key in expected_keys:
@@ -75,9 +81,15 @@ ransac_threshold = params["ransac_threshold"]
 ransac_probability = params["ransac_probability"]
 ransac_inlier_ratio = params["ransac_inlier_ratio"]
 ransac_sample_size = params["ransac_sample_size"]
+ransac_initial_iterations = params["ransac_initial_iterations"]
+ransac_inlier_threshold_multiplier = params["ransac_inlier_threshold_multiplier"]
 polynomial_degree = params["polynomial_degree"]
 num_samples_factor = params["num_samples_factor"]
+t_extrapolation_start = params["t_extrapolation_start"]
+t_extrapolation_end = params["t_extrapolation_end"]
 diameter = params["diameter"]
+batch_size = params["batch_size"]
+n_jobs = params["n_jobs"]
 
 print(f"Using parameters: delta={delta}, slice_spacing_factor={slice_spacing_factor}, vertical_filter_window={vertical_filter_window}, diameter={diameter}")
 # Determine if we're running from project root or configurable/
@@ -264,14 +276,15 @@ for points in point2ds:
     filtered_point2ds.append(filtered_points)
 
 class RANSAC:
-    def __init__(self, data, threshold, P, S, N):
+    def __init__(self, data, threshold, P, S, N, initial_iterations=999, inlier_threshold_multiplier=0.8):
         self.point_data = data  # Ellipse contour points
         self.error_threshold = threshold  # Error tolerance threshold
         self.N = N  # Number of points to sample
         self.S = S  # Inlier ratio
         self.P = P  # Probability of finding a correct model
         self.max_inliers = len(data) * S  # Maximum number of inliers
-        self.items = 999  # Number of iterations
+        self.items = initial_iterations  # Number of iterations
+        self.inlier_threshold_multiplier = inlier_threshold_multiplier
         self.count = 0  # Number of inliers
         self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
 
@@ -329,7 +342,7 @@ class RANSAC:
         # Identify inliers
         Z = np.abs(2 * LAxis - all_distance)
         delta = np.sqrt(np.mean((Z - np.mean(Z))**2))
-        inliers = np.where(Z < 0.8 * delta)[0]
+        inliers = np.where(Z < self.inlier_threshold_multiplier * delta)[0]
         inlier_points = self.point_data[inliers]
 
         return len(inlier_points), inlier_points
@@ -375,12 +388,12 @@ for i in range(len(slicing_cloud)):
     points_data = np.reshape(filtered_point2ds[i], (-1, 2))  # Ellipse edge points
 
     # First RANSAC fit to find initial inliers
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size)
+    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
     _, inliers_set = ransac.execute_ransac()
 
     # Refine fit using inliers from the first RANSAC
     points_data = np.reshape(inliers_set, (-1, 2))
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size)
+    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
     ellipse_params, _ = ransac.execute_ransac()
 
     # Extract center coordinates
@@ -565,7 +578,7 @@ def compute_C_points_and_arc_length(B_points, T_vectors, arc_lengths):
 
 # Precompute the curve points, derivatives, C_points, and arc lengths based on B_points
 num_samples = ring_count * num_samples_factor # around 1mm accuracy
-t_samples = np.linspace(-20, ring_count + 20, num_samples)
+t_samples = np.linspace(t_extrapolation_start, ring_count + t_extrapolation_end, num_samples)
 B_points = curve_func(t_samples, x_params, y_params, z_params)
 T_vectors = curve_deriv(t_samples, x_params, y_params, z_params)
 arc_lengths = np.zeros(num_samples, dtype=np.float32)
@@ -577,7 +590,7 @@ index = faiss.IndexFlatL2(3)
 index.add(B_points)
 
 # Define batch size for Faiss search to improve performance
-batch_size = 1000000  # Adjust batch size based on memory constraints
+# batch_size is loaded from parameters
 
 def process_batch(points_batch):
     ''' Process a batch of points to find nearest neighbors, angles, and distances '''
@@ -600,7 +613,7 @@ num_batches = (len(points_xyz) + batch_size - 1) // batch_size
 points_batches = np.array_split(points_xyz, num_batches)
 
 # Using Joblib for parallel batch processing
-cylindrical_coords_batches = Parallel(n_jobs=12)(
+cylindrical_coords_batches = Parallel(n_jobs=n_jobs)(
     delayed(process_batch)(batch) for batch in tqdm(points_batches, desc="Calculating cylindrical coordinates", total=len(points_batches))
 )
 
