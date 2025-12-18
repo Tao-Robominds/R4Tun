@@ -1,17 +1,18 @@
 {
   "binary_threshold": 127,
   "morphological_kernel_size": [3, 3],
-  "dilation_iterations": 1,
-  "hough_threshold_oblique": 50,
-  "minLineLength_oblique": 100,
-  "maxLineGap_oblique": 40,
+  "dilation_iterations": 2,
+  "hough_threshold_oblique": 35,
+  "minLineLength_oblique": 70,
+  "maxLineGap_oblique": 60,
   "hough_threshold_horizontal": 50,
   "minLineLength_horizontal": 100,
   "maxLineGap_horizontal": 10,
   "hough_threshold_vertical": 500,
-  "angle_range_oblique_positive": [6, 9],
-  "angle_range_oblique_negative": [-9, -6],
+  "angle_range_oblique_positive": [5.0, 11.0],
+  "angle_range_oblique_negative": [-11.0, -5.0],
   "merge_distance": 3,
   "ring_spacing_constant": 1.2,
-  "resolution": 0.005
+  "resolution": 0.005,
+  "thinking": "The detection bias toward the right side is likely caused by stricter thresholds that only well-defined, dense features (common on the right) can satisfy. The 'sparser' left side likely contains fragmented or shorter segments that fail the original 100-pixel minLineLength_oblique and the 50-vote hough_threshold_oblique. By lowering these to 70 and 35 respectively, and increasing maxLineGap_oblique to 60, we allow the detector to capture and bridge weaker features. Increasing dilation_iterations to 2 further supports this by thickening sparse points to improve connectivity before the Hough transform. Finally, widening the angle ranges to [5, 11] and [-11, -5] accounts for potential geometric perspective shifts on the tunnel periphery that might push the left-side segments slightly out of the original narrow 3-degree windows."
 }
