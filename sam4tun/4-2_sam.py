@@ -28,9 +28,7 @@ print(f"Processing tunnel: {tunnel_id}")
 
 sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
 model_type = "vit_h"
-# Default to GPU; allow explicit override via SAM_DEVICE env (e.g., SAM_DEVICE=cpu).
-device = os.environ.get("SAM_DEVICE", "cuda")
-print(f"Using SAM device: {device}")
+device = "cuda"
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
 sam.to(device=device)
 predictor = SamPredictor(sam)
