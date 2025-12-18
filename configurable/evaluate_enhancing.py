@@ -270,8 +270,12 @@ def normalize_metric(value, lower_bound, upper_bound, invert=False):
     return normalized
 
 # Score components
+# Use a logarithmic scale for enhancement_ratio since values can be very high (3x, 5x, etc.)
+# Normalize log(ratio) between log(1.0) and log(6.0) to better handle high ratios
+enhancement_ratio_score = normalize_metric(np.log(enhancement_ratio), np.log(1.0), np.log(6.0)) if enhancement_ratio > 0 else 0.0
+
 scores = {
-    'enhancement_ratio': normalize_metric(enhancement_ratio, 1.0, 2.5),  # 1.0-2.5x is good
+    'enhancement_ratio': enhancement_ratio_score,  # Using log scale: 1.0x=0.0, 6.0x=1.0
     'density_improvement': normalize_metric(density_improvement['density_increase'], 0.0, 0.5),  # 0-50% improvement
     'coverage_improvement': normalize_metric(coverage_improvement_ratio, 1.0, 1.2),  # 1.0-1.2x improvement
     'uniformity_improvement': normalize_metric(uniformity_improvement, -0.1, 0.3),  # Should be positive
@@ -348,8 +352,13 @@ with open(markdown_path, 'w') as f:
     
     f.write("### Component Scores\n\n")
     for component, score in scores.items():
-        f.write(f"- **{component.replace('_', ' ').title()}**: {score:.3f}\n")
+        weight = weights[component]
+        contribution = score * weight
+        f.write(f"- **{component.replace('_', ' ').title()}**: {score:.3f} (weight: {weight:.2f}, contribution: {contribution:.3f})\n")
     f.write("\n")
+    f.write(f"**Note**: The composite score is a weighted average of all component scores. ")
+    f.write(f"A high enhancement ratio ({enhancement_ratio:.2f}x) indicates many points were added, ")
+    f.write(f"but the overall quality rating also considers density improvement, coverage, uniformity, and efficiency.\n\n")
     
     f.write("## Detailed Metrics\n\n")
     
