@@ -1,9 +1,9 @@
 {
   "binary_threshold": 120,
-  "morphological_kernel_size": [3, 3],
+  "morphological_kernel_size": [5, 5],
   "dilation_iterations": 2,
-  "hough_threshold_oblique": 45,
-  "minLineLength_oblique": 300,
+  "hough_threshold_oblique": 40,
+  "minLineLength_oblique": 350,
   "maxLineGap_oblique": 60,
   "hough_threshold_horizontal": 50,
   "minLineLength_horizontal": 100,

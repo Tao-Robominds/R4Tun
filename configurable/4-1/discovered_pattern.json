@@ -1,0 +1,428 @@
+{
+  "tunnel_id": "4-1",
+  "image_dimensions": {
+    "width": 3257,
+    "height": 4711
+  },
+  "domain_knowledge": {
+    "K_height_mm": 1079.92,
+    "AB_height_mm": 3239.77,
+    "segment_width_mm": 1200,
+    "oblique_angle_degrees": 7.52,
+    "segments_per_ring": 7,
+    "segment_order": [
+      "K",
+      "B1",
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "B2"
+    ],
+    "resolution_mm_per_pixel": 5.0
+  },
+  "ring_analysis": {
+    "vertical_line_positions": [
+      320,
+      652,
+      1078,
+      1800,
+      2155,
+      2550,
+      2909,
+      3242
+    ],
+    "ring_count_estimate": 9,
+    "average_ring_spacing_pixels": 417.42857142857144,
+    "ring_width_mm": 2087.1428571428573
+  },
+  "k_block_distribution": {
+    "y_min": 1152.89200968523,
+    "y_max": 3824.966277561608,
+    "y_range_pixels": 2672.074267876378,
+    "coverage_percent": 56.71989530622751,
+    "wrap_around_detected": true,
+    "estimated_rotation_positions": [
+      2,
+      6,
+      3,
+      3,
+      5,
+      6,
+      2
+    ],
+    "segment_pixel_size": 673.0
+  },
+  "oblique_line_analysis": {
+    "top_oblique_lines": 4,
+    "bottom_oblique_lines": 3,
+    "top_angles": [
+      -4.537772507906652,
+      -3.0127875041833403,
+      -11.976132444203355,
+      -6.34019174590991
+    ],
+    "bottom_angles": [
+      3.4336303624505224,
+      4.316027519865624,
+      3.3664606634298013
+    ],
+    "wrap_around_evidence": false,
+    "average_angle": -2.107252236636758
+  },
+  "wrap_around": {
+    "detected": true,
+    "confidence": 0.9453315884371251,
+    "requires_individual_segment_processing": true
+  },
+  "recommendations": [
+    "Use individual segment processing (all_segments.csv) instead of row-based processing",
+    "Infer segment positions from K-block + domain knowledge"
+  ],
+  "inferred_segments": [
+    {
+      "Ring": 2,
+      "Block": "K",
+      "X": 529.4169529639578,
+      "Y": 1173.747767857143,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "B1",
+      "X": 529.4169529639578,
+      "Y": 1389.7317678571428,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "A1",
+      "X": 529.4169529639578,
+      "Y": 2037.6857678571428,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "A2",
+      "X": 529.4169529639578,
+      "Y": 2685.639767857143,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "A3",
+      "X": 529.4169529639578,
+      "Y": 3333.5937678571427,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "A4",
+      "X": 529.4169529639578,
+      "Y": 3981.5477678571424,
+      "inferred": true
+    },
+    {
+      "Ring": 2,
+      "Block": "B2",
+      "X": 529.4169529639578,
+      "Y": 4629.501767857142,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "K",
+      "X": 919.8114198760916,
+      "Y": 3822.223316912972,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "B1",
+      "X": 919.8114198760916,
+      "Y": 4038.207316912972,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "A1",
+      "X": 919.8114198760916,
+      "Y": 4686.161316912972,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "A2",
+      "X": 919.8114198760916,
+      "Y": 623.115316912972,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "A3",
+      "X": 919.8114198760916,
+      "Y": 1271.0693169129718,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "A4",
+      "X": 919.8114198760916,
+      "Y": 1919.0233169129715,
+      "inferred": true
+    },
+    {
+      "Ring": 3,
+      "Block": "B2",
+      "X": 919.8114198760916,
+      "Y": 2566.977316912971,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "K",
+      "X": 1281.9266871490624,
+      "Y": 1850.0775800711745,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "B1",
+      "X": 1281.9266871490624,
+      "Y": 2066.0615800711744,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "A1",
+      "X": 1281.9266871490624,
+      "Y": 2714.0155800711746,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "A2",
+      "X": 1281.9266871490624,
+      "Y": 3361.9695800711743,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "A3",
+      "X": 1281.9266871490624,
+      "Y": 4009.923580071174,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "A4",
+      "X": 1281.9266871490624,
+      "Y": 4657.877580071174,
+      "inferred": true
+    },
+    {
+      "Ring": 4,
+      "Block": "B2",
+      "X": 1281.9266871490624,
+      "Y": 594.8315800711734,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "K",
+      "X": 1642.342753595974,
+      "Y": 1375.8058950395398,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "B1",
+      "X": 1642.342753595974,
+      "Y": 1591.7898950395397,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "A1",
+      "X": 1642.342753595974,
+      "Y": 2239.74389503954,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "A2",
+      "X": 1642.342753595974,
+      "Y": 2887.6978950395396,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "A3",
+      "X": 1642.342753595974,
+      "Y": 3535.6518950395393,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "A4",
+      "X": 1642.342753595974,
+      "Y": 4183.605895039539,
+      "inferred": true
+    },
+    {
+      "Ring": 5,
+      "Block": "B2",
+      "X": 1642.342753595974,
+      "Y": 120.55989503953879,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "K",
+      "X": 1999.68092904868,
+      "Y": 3337.652450090744,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "B1",
+      "X": 1999.68092904868,
+      "Y": 3553.636450090744,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "A1",
+      "X": 1999.68092904868,
+      "Y": 4201.590450090744,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "A2",
+      "X": 1999.68092904868,
+      "Y": 138.54445009074334,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "A3",
+      "X": 1999.68092904868,
+      "Y": 786.4984500907431,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "A4",
+      "X": 1999.68092904868,
+      "Y": 1434.4524500907428,
+      "inferred": true
+    },
+    {
+      "Ring": 6,
+      "Block": "B2",
+      "X": 1999.68092904868,
+      "Y": 2082.4064500907425,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "K",
+      "X": 2365.569577209355,
+      "Y": 3824.966277561608,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "B1",
+      "X": 2365.569577209355,
+      "Y": 4040.950277561608,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "A1",
+      "X": 2365.569577209355,
+      "Y": 4688.904277561608,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "A2",
+      "X": 2365.569577209355,
+      "Y": 625.8582775616078,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "A3",
+      "X": 2365.569577209355,
+      "Y": 1273.8122775616075,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "A4",
+      "X": 2365.569577209355,
+      "Y": 1921.7662775616072,
+      "inferred": true
+    },
+    {
+      "Ring": 7,
+      "Block": "B2",
+      "X": 2365.569577209355,
+      "Y": 2569.720277561607,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "K",
+      "X": 2727.838611226823,
+      "Y": 1152.89200968523,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "B1",
+      "X": 2727.838611226823,
+      "Y": 1368.87600968523,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "A1",
+      "X": 2727.838611226823,
+      "Y": 2016.83000968523,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "A2",
+      "X": 2727.838611226823,
+      "Y": 2664.7840096852296,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "A3",
+      "X": 2727.838611226823,
+      "Y": 3312.7380096852294,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "A4",
+      "X": 2727.838611226823,
+      "Y": 3960.692009685229,
+      "inferred": true
+    },
+    {
+      "Ring": 8,
+      "Block": "B2",
+      "X": 2727.838611226823,
+      "Y": 4608.646009685229,
+      "inferred": true
+    }
+  ],
+  "inferred_segment_count": 49
+}

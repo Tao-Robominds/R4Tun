@@ -60,6 +60,28 @@ ring_spacing_constant = params["ring_spacing_constant"]
 resolution = params["resolution"]
 
 print(f"Using parameters: binary_threshold={binary_threshold}, hough_threshold_oblique={hough_threshold_oblique}, resolution={resolution}")
+
+# Load design pattern if available (for fallback K-block positions)
+def load_design_pattern(tunnel_id):
+    """Load design pattern for K-block position fallback"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    pattern_file = os.path.join(script_dir, tunnel_id, 'design_pattern.json')
+    
+    if os.path.exists(pattern_file):
+        try:
+            with open(pattern_file, 'r') as f:
+                pattern = json.load(f)
+            print(f"✅ Loaded design pattern from configurable/{tunnel_id}/design_pattern.json")
+            return pattern
+        except Exception as e:
+            print(f"⚠️ Could not load design pattern: {e}")
+            return None
+    else:
+        print(f"ℹ️ No design pattern found at configurable/{tunnel_id}/design_pattern.json (will use detection only)")
+        return None
+
+design_pattern = load_design_pattern(tunnel_id)
+
 # Determine if we're running from project root or configurable/
 if os.path.exists(f"data/{tunnel_id}/depth_map_outlier.npy"):
     base_dir = f"data/{tunnel_id}"  # Running from project root
@@ -438,6 +460,83 @@ for vertical_x, _ in vertical_lines:
                 adjusted_points.append(('default', (vertical_x, default_y)))
                 print(f"Warning: Using default y-coordinate ({default_y}) for vertical line at x = {vertical_x}")
 
+# Post-processing: Fix default y-coordinates using design pattern or nearest detected points
+# Set ENABLE_POSTPROCESSING to False to disable and use original default y=L/2
+ENABLE_POSTPROCESSING = False
+
+default_indices = [i for i, p in enumerate(adjusted_points) if p[0] == 'default']
+
+if ENABLE_POSTPROCESSING and default_indices:
+    print(f"\nPost-processing: Fixing {len(default_indices)} default points...")
+    
+    # Try to use design pattern first (most accurate)
+    if design_pattern is not None:
+        print("  Using design pattern for K-block positions...")
+        
+        # Get precise K-block y-coordinates (most accurate) or fall back to band positions
+        precise_y = design_pattern.get('precise_k_block_y', {}).get('by_ring_id', {})
+        positions = design_pattern.get('k_block_positions', {}).get('positions', [])
+        known_rings = design_pattern.get('ring_sequence', {}).get('known_rings', {})
+        ring_mapping = design_pattern.get('ring_mapping', {})
+        
+        # Create a lookup from position ID to y-coordinate (fallback)
+        pos_to_y = {p['id']: p['y_center'] for p in positions}
+        
+        # Map our indices to ring IDs
+        first_ring_id = ring_mapping.get('first_ring_id', min(int(k) for k in known_rings.keys()) if known_rings else 0)
+        
+        if precise_y or known_rings:
+            
+            for default_idx in default_indices:
+                # Calculate which ring this index corresponds to
+                ring_id = first_ring_id + default_idx
+                ring_id_str = str(ring_id)
+                default_x = adjusted_points[default_idx][1][0]
+                old_y = adjusted_points[default_idx][1][1]
+                
+                # Try precise y-coordinate first (most accurate)
+                if ring_id_str in precise_y:
+                    new_y = precise_y[ring_id_str]
+                    adjusted_points[default_idx] = ('pattern', (default_x, float(new_y)))
+                    print(f"  Ring {ring_id} at x={default_x:.1f}: y = {new_y} (from precise ground truth)")
+                # Fall back to band center
+                elif ring_id_str in known_rings:
+                    position_id = known_rings[ring_id_str]
+                    if position_id in pos_to_y:
+                        new_y = pos_to_y[position_id]
+                        adjusted_points[default_idx] = ('pattern', (default_x, new_y))
+                        print(f"  Ring {ring_id} at x={default_x:.1f}: y = {new_y:.1f} (from band center, position {position_id})")
+                    else:
+                        print(f"  Ring {ring_id}: position {position_id} not found in pattern")
+                else:
+                    print(f"  Ring {ring_id}: not found in design pattern")
+    
+    # Fallback: use nearest detected points for any remaining defaults
+    remaining_defaults = [i for i, p in enumerate(adjusted_points) if p[0] == 'default']
+    if remaining_defaults:
+        detected_y_values = [(i, p[1][0], p[1][1]) for i, p in enumerate(adjusted_points) 
+                            if p[0] not in ('default', 'interpolated')]
+        
+        if detected_y_values:
+            print("  Using nearest detected points for remaining defaults...")
+            sorted_detected = sorted(detected_y_values, key=lambda x: x[1])
+            
+            for default_idx in remaining_defaults:
+                default_x = adjusted_points[default_idx][1][0]
+                
+                nearest_y = None
+                min_dist = float('inf')
+                for _, det_x, det_y in sorted_detected:
+                    dist = abs(det_x - default_x)
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_y = det_y
+                
+                if nearest_y is not None:
+                    old_y = adjusted_points[default_idx][1][1]
+                    adjusted_points[default_idx] = ('interpolated', (default_x, nearest_y))
+                    print(f"  Ring at x={default_x:.1f}: y changed from {old_y:.1f} to {nearest_y:.1f} (from nearest detected)")
+
 # recording initial point coordinate
 df_loc = pd.DataFrame(adjusted_points, columns=['Type', 'Coordinates'])
 df_loc['X'] = df_loc['Coordinates'].apply(lambda coord: coord[0])
@@ -455,8 +554,8 @@ print(df_loc)
 plt.figure(figsize=(16, 16))
 ax = plt.gca()
 
-colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g', 'default': 'orange'}
-markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d', 'default': 'x'}
+colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g', 'default': 'orange', 'interpolated': 'yellow', 'pattern': 'lime'}
+markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d', 'default': 'x', 'interpolated': 'p', 'pattern': 'H'}
 
 for label, (x, y) in adjusted_points:
     ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)

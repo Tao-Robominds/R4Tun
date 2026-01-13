@@ -17,6 +17,11 @@ import os
 import math
 import sys
 
+# Set random seed for reproducibility (RANSAC uses random sampling)
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
     print("Usage: python 1_upfolding.py <tunnel_id>")
@@ -401,9 +406,9 @@ y_poly = t_poly
 z_poly = t_poly
 
 # Initialize RANSAC Regressor for x, y, z
-ransac_x = RANSACRegressor()
-ransac_y = RANSACRegressor()
-ransac_z = RANSACRegressor()
+ransac_x = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_y = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_z = RANSACRegressor(random_state=RANDOM_SEED)
 
 # Fit the RANSAC model to x, y, z coordinates
 ransac_x.fit(x_poly, cps_arr[:, 0])
