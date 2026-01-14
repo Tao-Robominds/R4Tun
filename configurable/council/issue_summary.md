@@ -152,3 +152,4 @@ Line 362-439: Compute intersections → Nested loops become O(n²) or worse
 
 
 
+

@@ -34,15 +34,18 @@ import matplotlib.pyplot as plt
 # Parameter Loading
 # =============================================================================
 
-def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, Any]:
+def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict[str, Any], bool]:
     """
     Load parameters from JSON file with fallback to defaults.
     
     Priority:
-        1. Centralized: sam4tun/parameters/<tunnel_id>/parameters_detection.json
+        1. Centralized: p4tun/parameters/<tunnel_id>/parameters_detection.json
         2. Tunnel-specific: data/<tunnel_id>/parameters_detection.json
-        3. Default: sam4tun/parameters_detection.json (if exists)
+        3. Default: p4tun/parameters_detection.json (if exists)
         4. Hardcoded defaults (if no file found)
+    
+    Returns:
+        Tuple of (params_dict, was_loaded_from_file)
     """
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_detection.json"
@@ -52,32 +55,46 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, 
         if os.path.exists(params_path):
             print(f"Loading parameters from {params_path}")
             with open(params_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
         
         tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
         if os.path.exists(tunnel_path):
             print(f"Loading parameters from {tunnel_path}")
             with open(tunnel_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
     
     default_path = os.path.join(script_dir, param_file)
     if os.path.exists(default_path):
         print(f"Loading default parameters from {default_path}")
         with open(default_path, 'r') as f:
-            return json.load(f)
+            return json.load(f), True
     
     print("Warning: No parameter file found, using hardcoded defaults")
-    return {}
+    return {}, False
 
 
-def get_param(params: Dict, *keys, default=None):
-    """Get nested parameter value with default fallback."""
+def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
+    """
+    Get nested parameter value with optional default fallback.
+    
+    Args:
+        params: Parameter dictionary
+        keys: Nested keys to traverse
+        default: Default value if key not found
+        allow_default: If False, raise KeyError instead of using default
+    
+    Returns:
+        Parameter value or default (if allow_default=True)
+    """
     value = params
     for key in keys:
         if isinstance(value, dict) and key in value:
             value = value[key]
         else:
-            return default
+            if allow_default:
+                return default
+            else:
+                raise KeyError(f"Parameter not found: {' -> '.join(keys)}")
     return value
 
 
@@ -422,7 +439,8 @@ def compute_prompt_points(
     negative_lines: List,
     horizontal_lines: List,
     resolution: float,
-    height: int
+    height: int,
+    intersection_merge_threshold: float = DEFAULT_INTERSECTION_MERGE_THRESHOLD
 ) -> List[Tuple[str, Tuple[float, float]]]:
     """
     Compute K-block prompt points from line intersections.
@@ -456,9 +474,9 @@ def compute_prompt_points(
                 horizontal_intersections.append(pt)
         
         # Merge close points
-        positive_intersections = merge_close_points(positive_intersections, INTERSECTION_MERGE_THRESHOLD)
-        negative_intersections = merge_close_points(negative_intersections, INTERSECTION_MERGE_THRESHOLD)
-        horizontal_intersections = merge_close_points(horizontal_intersections, INTERSECTION_MERGE_THRESHOLD)
+        positive_intersections = merge_close_points(positive_intersections, intersection_merge_threshold)
+        negative_intersections = merge_close_points(negative_intersections, intersection_merge_threshold)
+        horizontal_intersections = merge_close_points(horizontal_intersections, intersection_merge_threshold)
         
         # Determine K-block center
         k_center = None
@@ -709,44 +727,45 @@ def detect_and_infer_patterns(
     print(f"Tunnel: {tunnel_id}")
     
     # Load parameters
-    params = load_parameters(tunnel_id, base_dir)
+    params, params_loaded = load_parameters(tunnel_id, base_dir)
     
-    # Extract parameters with defaults
+    # Extract parameters - use defaults ONLY if no file was loaded
+    allow_defaults = not params_loaded
     if resolution is None:
-        resolution = get_param(params, 'physical_constants', 'resolution', default=DEFAULT_RESOLUTION)
-    k_height_mm = get_param(params, 'physical_constants', 'k_height_mm', default=DEFAULT_K_HEIGHT_MM)
-    ab_height_mm = get_param(params, 'physical_constants', 'ab_height_mm', default=DEFAULT_AB_HEIGHT_MM)
+        resolution = get_param(params, 'physical_constants', 'resolution', default=DEFAULT_RESOLUTION, allow_default=allow_defaults)
+    k_height_mm = get_param(params, 'physical_constants', 'k_height_mm', default=DEFAULT_K_HEIGHT_MM, allow_default=allow_defaults)
+    ab_height_mm = get_param(params, 'physical_constants', 'ab_height_mm', default=DEFAULT_AB_HEIGHT_MM, allow_default=allow_defaults)
     
     # Preprocessing
-    binary_threshold = get_param(params, 'preprocessing', 'binary_threshold', default=DEFAULT_BINARY_THRESHOLD)
-    dilation_kernel_size = get_param(params, 'preprocessing', 'dilation_kernel_size', default=DEFAULT_DILATION_KERNEL_SIZE)
-    dilation_iterations = get_param(params, 'preprocessing', 'dilation_iterations', default=DEFAULT_DILATION_ITERATIONS)
+    binary_threshold = get_param(params, 'preprocessing', 'binary_threshold', default=DEFAULT_BINARY_THRESHOLD, allow_default=allow_defaults)
+    dilation_kernel_size = get_param(params, 'preprocessing', 'dilation_kernel_size', default=DEFAULT_DILATION_KERNEL_SIZE, allow_default=allow_defaults)
+    dilation_iterations = get_param(params, 'preprocessing', 'dilation_iterations', default=DEFAULT_DILATION_ITERATIONS, allow_default=allow_defaults)
     
     # Hough oblique
-    oblique_rho = get_param(params, 'hough_oblique', 'rho', default=DEFAULT_OBLIQUE_RHO)
-    oblique_theta_deg = get_param(params, 'hough_oblique', 'theta_deg', default=DEFAULT_OBLIQUE_THETA_DEG)
-    oblique_threshold = get_param(params, 'hough_oblique', 'threshold', default=DEFAULT_OBLIQUE_THRESHOLD)
-    oblique_min_length = get_param(params, 'hough_oblique', 'min_length', default=DEFAULT_OBLIQUE_MIN_LENGTH)
-    oblique_max_gap = get_param(params, 'hough_oblique', 'max_gap', default=DEFAULT_OBLIQUE_MAX_GAP)
-    oblique_angle_pos_min = get_param(params, 'hough_oblique', 'angle_positive_min', default=DEFAULT_OBLIQUE_ANGLE_POSITIVE_MIN)
-    oblique_angle_pos_max = get_param(params, 'hough_oblique', 'angle_positive_max', default=DEFAULT_OBLIQUE_ANGLE_POSITIVE_MAX)
-    oblique_angle_neg_min = get_param(params, 'hough_oblique', 'angle_negative_min', default=DEFAULT_OBLIQUE_ANGLE_NEGATIVE_MIN)
-    oblique_angle_neg_max = get_param(params, 'hough_oblique', 'angle_negative_max', default=DEFAULT_OBLIQUE_ANGLE_NEGATIVE_MAX)
+    oblique_rho = get_param(params, 'hough_oblique', 'rho', default=DEFAULT_OBLIQUE_RHO, allow_default=allow_defaults)
+    oblique_theta_deg = get_param(params, 'hough_oblique', 'theta_deg', default=DEFAULT_OBLIQUE_THETA_DEG, allow_default=allow_defaults)
+    oblique_threshold = get_param(params, 'hough_oblique', 'threshold', default=DEFAULT_OBLIQUE_THRESHOLD, allow_default=allow_defaults)
+    oblique_min_length = get_param(params, 'hough_oblique', 'min_length', default=DEFAULT_OBLIQUE_MIN_LENGTH, allow_default=allow_defaults)
+    oblique_max_gap = get_param(params, 'hough_oblique', 'max_gap', default=DEFAULT_OBLIQUE_MAX_GAP, allow_default=allow_defaults)
+    oblique_angle_pos_min = get_param(params, 'hough_oblique', 'angle_positive_min', default=DEFAULT_OBLIQUE_ANGLE_POSITIVE_MIN, allow_default=allow_defaults)
+    oblique_angle_pos_max = get_param(params, 'hough_oblique', 'angle_positive_max', default=DEFAULT_OBLIQUE_ANGLE_POSITIVE_MAX, allow_default=allow_defaults)
+    oblique_angle_neg_min = get_param(params, 'hough_oblique', 'angle_negative_min', default=DEFAULT_OBLIQUE_ANGLE_NEGATIVE_MIN, allow_default=allow_defaults)
+    oblique_angle_neg_max = get_param(params, 'hough_oblique', 'angle_negative_max', default=DEFAULT_OBLIQUE_ANGLE_NEGATIVE_MAX, allow_default=allow_defaults)
     
     # Hough horizontal
-    horizontal_threshold = get_param(params, 'hough_horizontal', 'threshold', default=DEFAULT_HORIZONTAL_THRESHOLD)
-    horizontal_min_length = get_param(params, 'hough_horizontal', 'min_length', default=DEFAULT_HORIZONTAL_MIN_LENGTH)
-    horizontal_max_gap = get_param(params, 'hough_horizontal', 'max_gap', default=DEFAULT_HORIZONTAL_MAX_GAP)
-    horizontal_angle_tol = get_param(params, 'hough_horizontal', 'angle_tolerance', default=DEFAULT_HORIZONTAL_ANGLE_TOLERANCE)
+    horizontal_threshold = get_param(params, 'hough_horizontal', 'threshold', default=DEFAULT_HORIZONTAL_THRESHOLD, allow_default=allow_defaults)
+    horizontal_min_length = get_param(params, 'hough_horizontal', 'min_length', default=DEFAULT_HORIZONTAL_MIN_LENGTH, allow_default=allow_defaults)
+    horizontal_max_gap = get_param(params, 'hough_horizontal', 'max_gap', default=DEFAULT_HORIZONTAL_MAX_GAP, allow_default=allow_defaults)
+    horizontal_angle_tol = get_param(params, 'hough_horizontal', 'angle_tolerance', default=DEFAULT_HORIZONTAL_ANGLE_TOLERANCE, allow_default=allow_defaults)
     
     # Hough vertical
-    vertical_threshold = get_param(params, 'hough_vertical', 'threshold', default=DEFAULT_VERTICAL_THRESHOLD)
-    vertical_angle_tol = get_param(params, 'hough_vertical', 'angle_tolerance', default=DEFAULT_VERTICAL_ANGLE_TOLERANCE)
-    vertical_filter_rings = get_param(params, 'hough_vertical', 'filter_rings', default=DEFAULT_VERTICAL_FILTER_RINGS)
+    vertical_threshold = get_param(params, 'hough_vertical', 'threshold', default=DEFAULT_VERTICAL_THRESHOLD, allow_default=allow_defaults)
+    vertical_angle_tol = get_param(params, 'hough_vertical', 'angle_tolerance', default=DEFAULT_VERTICAL_ANGLE_TOLERANCE, allow_default=allow_defaults)
+    vertical_filter_rings = get_param(params, 'hough_vertical', 'filter_rings', default=DEFAULT_VERTICAL_FILTER_RINGS, allow_default=allow_defaults)
     
     # Line processing
-    merge_dist_threshold = get_param(params, 'line_processing', 'merge_distance_threshold', default=DEFAULT_MERGE_DISTANCE_THRESHOLD)
-    intersection_merge = get_param(params, 'line_processing', 'intersection_merge_threshold', default=DEFAULT_INTERSECTION_MERGE_THRESHOLD)
+    merge_dist_threshold = get_param(params, 'line_processing', 'merge_distance_threshold', default=DEFAULT_MERGE_DISTANCE_THRESHOLD, allow_default=allow_defaults)
+    intersection_merge = get_param(params, 'line_processing', 'intersection_merge_threshold', default=DEFAULT_INTERSECTION_MERGE_THRESHOLD, allow_default=allow_defaults)
     
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
@@ -819,7 +838,7 @@ def detect_and_infer_patterns(
     print("Computing K-block positions...")
     k_positions = compute_prompt_points(
         center_lines, positive_lines, negative_lines, horizontal_lines,
-        resolution, height
+        resolution, height, intersection_merge
     )
     print(f"  K-blocks: {len(k_positions)}")
     

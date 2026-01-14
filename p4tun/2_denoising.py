@@ -27,15 +27,18 @@ from scipy.ndimage import uniform_filter1d
 # Parameter Loading
 # =============================================================================
 
-def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, Any]:
+def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict[str, Any], bool]:
     """
     Load parameters from JSON file with fallback to defaults.
     
     Priority:
-        1. Centralized: sam4tun/parameters/<tunnel_id>/parameters_denoising.json
+        1. Centralized: p4tun/parameters/<tunnel_id>/parameters_denoising.json
         2. Tunnel-specific: data/<tunnel_id>/parameters_denoising.json
-        3. Default: sam4tun/parameters_denoising.json (if exists)
+        3. Default: p4tun/parameters_denoising.json (if exists)
         4. Hardcoded defaults (if no file found)
+    
+    Returns:
+        Tuple of (params_dict, was_loaded_from_file)
     """
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_denoising.json"
@@ -45,32 +48,46 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, 
         if os.path.exists(params_path):
             print(f"Loading parameters from {params_path}")
             with open(params_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
         
         tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
         if os.path.exists(tunnel_path):
             print(f"Loading parameters from {tunnel_path}")
             with open(tunnel_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
     
     default_path = os.path.join(script_dir, param_file)
     if os.path.exists(default_path):
         print(f"Loading default parameters from {default_path}")
         with open(default_path, 'r') as f:
-            return json.load(f)
+            return json.load(f), True
     
     print("Warning: No parameter file found, using hardcoded defaults")
-    return {}
+    return {}, False
 
 
-def get_param(params: Dict, *keys, default=None):
-    """Get nested parameter value with default fallback."""
+def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
+    """
+    Get nested parameter value with optional default fallback.
+    
+    Args:
+        params: Parameter dictionary
+        keys: Nested keys to traverse
+        default: Default value if key not found
+        allow_default: If False, raise KeyError instead of using default
+    
+    Returns:
+        Parameter value or default (if allow_default=True)
+    """
     value = params
     for key in keys:
         if isinstance(value, dict) and key in value:
             value = value[key]
         else:
-            return default
+            if allow_default:
+                return default
+            else:
+                raise KeyError(f"Parameter not found: {' -> '.join(keys)}")
     return value
 
 
@@ -335,17 +352,18 @@ def main(tunnel_id: str, base_dir: str = "data") -> None:
     print(f"Processing tunnel: {tunnel_id}")
     
     # Load parameters
-    params = load_parameters(tunnel_id, base_dir)
+    params, params_loaded = load_parameters(tunnel_id, base_dir)
     
-    # Extract parameters with defaults
-    radius_min = get_param(params, 'radius_filtering', 'radius_min', default=DEFAULT_RADIUS_MIN)
-    radius_max = get_param(params, 'radius_filtering', 'radius_max', default=DEFAULT_RADIUS_MAX)
-    theta_step = get_param(params, 'grid_resolution', 'theta_step', default=DEFAULT_THETA_STEP)
-    radial_step = get_param(params, 'grid_resolution', 'radial_step', default=DEFAULT_RADIAL_STEP)
-    gradient_threshold = get_param(params, 'gradient_detection', 'gradient_threshold', default=DEFAULT_GRADIENT_THRESHOLD)
-    gradient_epsilon = get_param(params, 'gradient_detection', 'gradient_epsilon', default=DEFAULT_GRADIENT_EPSILON)
-    smoothing_window = get_param(params, 'cutoff_smoothing', 'smoothing_window', default=DEFAULT_SMOOTHING_WINDOW)
-    smoothing_offset = get_param(params, 'cutoff_smoothing', 'smoothing_offset', default=DEFAULT_SMOOTHING_OFFSET)
+    # Extract parameters - use defaults ONLY if no file was loaded
+    allow_defaults = not params_loaded
+    radius_min = get_param(params, 'radius_filtering', 'radius_min', default=DEFAULT_RADIUS_MIN, allow_default=allow_defaults)
+    radius_max = get_param(params, 'radius_filtering', 'radius_max', default=DEFAULT_RADIUS_MAX, allow_default=allow_defaults)
+    theta_step = get_param(params, 'grid_resolution', 'theta_step', default=DEFAULT_THETA_STEP, allow_default=allow_defaults)
+    radial_step = get_param(params, 'grid_resolution', 'radial_step', default=DEFAULT_RADIAL_STEP, allow_default=allow_defaults)
+    gradient_threshold = get_param(params, 'gradient_detection', 'gradient_threshold', default=DEFAULT_GRADIENT_THRESHOLD, allow_default=allow_defaults)
+    gradient_epsilon = get_param(params, 'gradient_detection', 'gradient_epsilon', default=DEFAULT_GRADIENT_EPSILON, allow_default=allow_defaults)
+    smoothing_window = get_param(params, 'cutoff_smoothing', 'smoothing_window', default=DEFAULT_SMOOTHING_WINDOW, allow_default=allow_defaults)
+    smoothing_offset = get_param(params, 'cutoff_smoothing', 'smoothing_offset', default=DEFAULT_SMOOTHING_OFFSET, allow_default=allow_defaults)
     
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)

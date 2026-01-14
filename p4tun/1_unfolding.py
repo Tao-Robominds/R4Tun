@@ -40,15 +40,18 @@ np.random.seed(RANDOM_SEED)
 # Parameter Loading
 # =============================================================================
 
-def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, Any]:
+def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict[str, Any], bool]:
     """
     Load parameters from JSON file with fallback to defaults.
     
     Priority:
-        1. Centralized: sam4tun/parameters/<tunnel_id>/parameters_unfolding.json
+        1. Centralized: p4tun/parameters/<tunnel_id>/parameters_unfolding.json
         2. Tunnel-specific: data/<tunnel_id>/parameters_unfolding.json
-        3. Default: sam4tun/parameters_unfolding.json (if exists)
+        3. Default: p4tun/parameters_unfolding.json (if exists)
         4. Hardcoded defaults (if no file found)
+    
+    Returns:
+        Tuple of (params_dict, was_loaded_from_file)
     """
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_unfolding.json"
@@ -59,34 +62,48 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, 
         if os.path.exists(params_path):
             print(f"Loading parameters from {params_path}")
             with open(params_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
         
         # Try data folder
         tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
         if os.path.exists(tunnel_path):
             print(f"Loading parameters from {tunnel_path}")
             with open(tunnel_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
     
     # Fall back to default (if exists)
     default_path = os.path.join(script_dir, param_file)
     if os.path.exists(default_path):
         print(f"Loading default parameters from {default_path}")
         with open(default_path, 'r') as f:
-            return json.load(f)
+            return json.load(f), True
     
     print("Warning: No parameter file found, using hardcoded defaults")
-    return {}
+    return {}, False
 
 
-def get_param(params: Dict, *keys, default=None):
-    """Get nested parameter value with default fallback."""
+def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
+    """
+    Get nested parameter value with optional default fallback.
+    
+    Args:
+        params: Parameter dictionary
+        keys: Nested keys to traverse
+        default: Default value if key not found
+        allow_default: If False, raise KeyError instead of using default
+    
+    Returns:
+        Parameter value or default (if allow_default=True)
+    """
     value = params
     for key in keys:
         if isinstance(value, dict) and key in value:
             value = value[key]
         else:
-            return default
+            if allow_default:
+                return default
+            else:
+                raise KeyError(f"Parameter not found: {' -> '.join(keys)}")
     return value
 
 
@@ -846,21 +863,22 @@ def unfold_tunnel(tunnel_id: str, base_dir: str = "data/") -> None:
     print(f"Processing tunnel: {tunnel_id}")
     
     # Load parameters
-    params = load_parameters(tunnel_id, base_dir)
+    params, params_loaded = load_parameters(tunnel_id, base_dir)
     
-    # Extract parameters with defaults
-    ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING)
-    tunnel_diameter = get_param(params, 'physical_constants', 'tunnel_diameter', default=DEFAULT_TUNNEL_DIAMETER)
-    slice_half_thickness = get_param(params, 'slicing', 'slice_half_thickness', default=DEFAULT_SLICE_HALF_THICKNESS)
-    max_distance_from_top = get_param(params, 'slicing', 'max_distance_from_top', default=DEFAULT_MAX_DISTANCE_FROM_TOP)
-    polynomial_degree = get_param(params, 'curve_fitting', 'polynomial_degree', default=DEFAULT_POLYNOMIAL_DEGREE)
-    ransac_inlier_ratio = get_param(params, 'ransac_ellipse', 'inlier_ratio', default=DEFAULT_RANSAC_INLIER_RATIO)
-    ransac_confidence = get_param(params, 'ransac_ellipse', 'confidence', default=DEFAULT_RANSAC_CONFIDENCE)
-    ransac_min_samples = get_param(params, 'ransac_ellipse', 'min_samples', default=DEFAULT_RANSAC_MIN_SAMPLES)
-    ransac_inlier_threshold = get_param(params, 'ransac_ellipse', 'inlier_threshold', default=DEFAULT_RANSAC_INLIER_THRESHOLD)
-    samples_per_ring = get_param(params, 'arc_length', 'samples_per_ring', default=DEFAULT_SAMPLES_PER_RING)
-    batch_size = get_param(params, 'performance', 'batch_size', default=DEFAULT_BATCH_SIZE)
-    num_jobs = get_param(params, 'performance', 'num_jobs', default=DEFAULT_NUM_JOBS)
+    # Extract parameters - use defaults ONLY if no file was loaded
+    allow_defaults = not params_loaded
+    ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING, allow_default=allow_defaults)
+    tunnel_diameter = get_param(params, 'physical_constants', 'tunnel_diameter', default=DEFAULT_TUNNEL_DIAMETER, allow_default=allow_defaults)
+    slice_half_thickness = get_param(params, 'slicing', 'slice_half_thickness', default=DEFAULT_SLICE_HALF_THICKNESS, allow_default=allow_defaults)
+    max_distance_from_top = get_param(params, 'slicing', 'max_distance_from_top', default=DEFAULT_MAX_DISTANCE_FROM_TOP, allow_default=allow_defaults)
+    polynomial_degree = get_param(params, 'curve_fitting', 'polynomial_degree', default=DEFAULT_POLYNOMIAL_DEGREE, allow_default=allow_defaults)
+    ransac_inlier_ratio = get_param(params, 'ransac_ellipse', 'inlier_ratio', default=DEFAULT_RANSAC_INLIER_RATIO, allow_default=allow_defaults)
+    ransac_confidence = get_param(params, 'ransac_ellipse', 'confidence', default=DEFAULT_RANSAC_CONFIDENCE, allow_default=allow_defaults)
+    ransac_min_samples = get_param(params, 'ransac_ellipse', 'min_samples', default=DEFAULT_RANSAC_MIN_SAMPLES, allow_default=allow_defaults)
+    ransac_inlier_threshold = get_param(params, 'ransac_ellipse', 'inlier_threshold', default=DEFAULT_RANSAC_INLIER_THRESHOLD, allow_default=allow_defaults)
+    samples_per_ring = get_param(params, 'arc_length', 'samples_per_ring', default=DEFAULT_SAMPLES_PER_RING, allow_default=allow_defaults)
+    batch_size = get_param(params, 'performance', 'batch_size', default=DEFAULT_BATCH_SIZE, allow_default=allow_defaults)
+    num_jobs = get_param(params, 'performance', 'num_jobs', default=DEFAULT_NUM_JOBS, allow_default=allow_defaults)
     
     # Load point cloud
     filepath = os.path.join(base_dir, f"{tunnel_id}.txt")

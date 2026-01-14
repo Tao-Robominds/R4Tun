@@ -34,15 +34,18 @@ from tqdm.notebook import tqdm
 # Parameter Loading
 # =============================================================================
 
-def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, Any]:
+def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict[str, Any], bool]:
     """
     Load parameters from JSON file with fallback to defaults.
     
     Priority:
-        1. Centralized: sam4tun/parameters/<tunnel_id>/parameters_enhancing.json
+        1. Centralized: p4tun/parameters/<tunnel_id>/parameters_enhancing.json
         2. Tunnel-specific: data/<tunnel_id>/parameters_enhancing.json
-        3. Default: sam4tun/parameters_enhancing.json (if exists)
+        3. Default: p4tun/parameters_enhancing.json (if exists)
         4. Hardcoded defaults (if no file found)
+    
+    Returns:
+        Tuple of (params_dict, was_loaded_from_file)
     """
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_enhancing.json"
@@ -52,32 +55,46 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Dict[str, 
         if os.path.exists(params_path):
             print(f"Loading parameters from {params_path}")
             with open(params_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
         
         tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
         if os.path.exists(tunnel_path):
             print(f"Loading parameters from {tunnel_path}")
             with open(tunnel_path, 'r') as f:
-                return json.load(f)
+                return json.load(f), True
     
     default_path = os.path.join(script_dir, param_file)
     if os.path.exists(default_path):
         print(f"Loading default parameters from {default_path}")
         with open(default_path, 'r') as f:
-            return json.load(f)
+            return json.load(f), True
     
     print("Warning: No parameter file found, using hardcoded defaults")
-    return {}
+    return {}, False
 
 
-def get_param(params: Dict, *keys, default=None):
-    """Get nested parameter value with default fallback."""
+def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
+    """
+    Get nested parameter value with optional default fallback.
+    
+    Args:
+        params: Parameter dictionary
+        keys: Nested keys to traverse
+        default: Default value if key not found
+        allow_default: If False, raise KeyError instead of using default
+    
+    Returns:
+        Parameter value or default (if allow_default=True)
+    """
     value = params
     for key in keys:
         if isinstance(value, dict) and key in value:
             value = value[key]
         else:
-            return default
+            if allow_default:
+                return default
+            else:
+                raise KeyError(f"Parameter not found: {' -> '.join(keys)}")
     return value
 
 
@@ -392,7 +409,8 @@ def detect_outlier_points(
     depth_threshold_high: float,
     h_min: float,
     high_density_start: float,
-    high_density_end: float
+    high_density_end: float,
+    ring_spacing: float
 ) -> np.ndarray:
     """
     Detect outlier points with significant local depth variation.
@@ -406,6 +424,7 @@ def detect_outlier_points(
         h_min: Minimum h coordinate.
         high_density_start: Start of high-density region (ring units).
         high_density_end: End of high-density region (ring units).
+        ring_spacing: Nominal ring spacing.
         
     Returns:
         Boolean mask of outlier points.
@@ -424,8 +443,8 @@ def detect_outlier_points(
         
         # Determine threshold based on region
         h_coord = points[i, 0]
-        in_high_density = (h_min + RING_SPACING * high_density_start <= h_coord <= 
-                          h_min + RING_SPACING * high_density_end)
+        in_high_density = (h_min + ring_spacing * high_density_start <= h_coord <= 
+                          h_min + ring_spacing * high_density_end)
         
         threshold = depth_threshold_high if in_high_density else depth_threshold_low
         
@@ -550,7 +569,8 @@ def enhance_outlier_boundaries(
     outlier_mask = detect_outlier_points(
         points[:, :3], points[:, 2], indices,
         depth_threshold_low, depth_threshold_high,
-        h_min, high_density_range[0], high_density_range[1]
+        h_min, high_density_range[0], high_density_range[1],
+        ring_spacing
     )
     
     outlier_indices = np.where(outlier_mask)[0]
@@ -737,27 +757,28 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
     # Load parameters
-    params = load_parameters(tunnel_id, base_dir)
+    params, params_loaded = load_parameters(tunnel_id, base_dir)
     
-    # Extract parameters with defaults
-    ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING)
-    curvature_neighbors = get_param(params, 'curvature', 'curvature_neighbors', default=DEFAULT_CURVATURE_NEIGHBORS)
-    target_distances = get_param(params, 'upsampling', 'target_distances', default=DEFAULT_UPSAMPLING_TARGET_DISTANCES)
-    curvature_threshold = get_param(params, 'upsampling', 'curvature_threshold', default=DEFAULT_CURVATURE_THRESHOLD)
-    upsampling_neighbors = get_param(params, 'upsampling', 'upsampling_neighbors', default=DEFAULT_UPSAMPLING_NEIGHBORS)
-    min_new_point_distance_factor = get_param(params, 'upsampling', 'min_new_point_distance_factor', default=DEFAULT_MIN_NEW_POINT_DISTANCE_FACTOR)
-    radius_filter_factor = get_param(params, 'upsampling', 'radius_filter_factor', default=DEFAULT_RADIUS_FILTER_FACTOR)
-    depth_threshold_low = get_param(params, 'outlier_detection', 'depth_threshold_low', default=DEFAULT_DEPTH_THRESHOLD_LOW)
-    depth_threshold_high = get_param(params, 'outlier_detection', 'depth_threshold_high', default=DEFAULT_DEPTH_THRESHOLD_HIGH)
-    high_density_start = get_param(params, 'outlier_detection', 'high_density_ring_start', default=DEFAULT_HIGH_DENSITY_RING_START)
-    high_density_end = get_param(params, 'outlier_detection', 'high_density_ring_end', default=DEFAULT_HIGH_DENSITY_RING_END)
-    outlier_neighbors = get_param(params, 'outlier_detection', 'outlier_neighbors', default=DEFAULT_OUTLIER_NEIGHBORS)
-    interpolation_radius = get_param(params, 'outlier_interpolation', 'interpolation_radius', default=DEFAULT_INTERPOLATION_RADIUS)
-    num_interpolations = get_param(params, 'outlier_interpolation', 'num_interpolations', default=DEFAULT_NUM_INTERPOLATIONS)
-    duplicate_threshold = get_param(params, 'outlier_interpolation', 'duplicate_threshold', default=DEFAULT_DUPLICATE_THRESHOLD)
-    max_outlier_points = get_param(params, 'outlier_interpolation', 'max_outlier_points', default=DEFAULT_MAX_OUTLIER_POINTS)
-    depth_map_resolution = get_param(params, 'depth_map', 'resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION)
-    interpolation_window = get_param(params, 'depth_map', 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW)
+    # Extract parameters - use defaults ONLY if no file was loaded
+    allow_defaults = not params_loaded
+    ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING, allow_default=allow_defaults)
+    curvature_neighbors = get_param(params, 'curvature', 'curvature_neighbors', default=DEFAULT_CURVATURE_NEIGHBORS, allow_default=allow_defaults)
+    target_distances = get_param(params, 'upsampling', 'target_distances', default=DEFAULT_UPSAMPLING_TARGET_DISTANCES, allow_default=allow_defaults)
+    curvature_threshold = get_param(params, 'upsampling', 'curvature_threshold', default=DEFAULT_CURVATURE_THRESHOLD, allow_default=allow_defaults)
+    upsampling_neighbors = get_param(params, 'upsampling', 'upsampling_neighbors', default=DEFAULT_UPSAMPLING_NEIGHBORS, allow_default=allow_defaults)
+    min_new_point_distance_factor = get_param(params, 'upsampling', 'min_new_point_distance_factor', default=DEFAULT_MIN_NEW_POINT_DISTANCE_FACTOR, allow_default=allow_defaults)
+    radius_filter_factor = get_param(params, 'upsampling', 'radius_filter_factor', default=DEFAULT_RADIUS_FILTER_FACTOR, allow_default=allow_defaults)
+    depth_threshold_low = get_param(params, 'outlier_detection', 'depth_threshold_low', default=DEFAULT_DEPTH_THRESHOLD_LOW, allow_default=allow_defaults)
+    depth_threshold_high = get_param(params, 'outlier_detection', 'depth_threshold_high', default=DEFAULT_DEPTH_THRESHOLD_HIGH, allow_default=allow_defaults)
+    high_density_start = get_param(params, 'outlier_detection', 'high_density_ring_start', default=DEFAULT_HIGH_DENSITY_RING_START, allow_default=allow_defaults)
+    high_density_end = get_param(params, 'outlier_detection', 'high_density_ring_end', default=DEFAULT_HIGH_DENSITY_RING_END, allow_default=allow_defaults)
+    outlier_neighbors = get_param(params, 'outlier_detection', 'outlier_neighbors', default=DEFAULT_OUTLIER_NEIGHBORS, allow_default=allow_defaults)
+    interpolation_radius = get_param(params, 'outlier_interpolation', 'interpolation_radius', default=DEFAULT_INTERPOLATION_RADIUS, allow_default=allow_defaults)
+    num_interpolations = get_param(params, 'outlier_interpolation', 'num_interpolations', default=DEFAULT_NUM_INTERPOLATIONS, allow_default=allow_defaults)
+    duplicate_threshold = get_param(params, 'outlier_interpolation', 'duplicate_threshold', default=DEFAULT_DUPLICATE_THRESHOLD, allow_default=allow_defaults)
+    max_outlier_points = get_param(params, 'outlier_interpolation', 'max_outlier_points', default=DEFAULT_MAX_OUTLIER_POINTS, allow_default=allow_defaults)
+    depth_map_resolution = get_param(params, 'depth_map', 'resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
+    interpolation_window = get_param(params, 'depth_map', 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=allow_defaults)
     
     # Load denoised data
     df = pd.read_csv(os.path.join(tunnel_dir, "denoised.csv"))

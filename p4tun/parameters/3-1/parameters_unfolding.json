@@ -1,0 +1,27 @@
+{
+    "description": "Tunnel centerline extraction and point cloud unfolding parameters",
+    "physical_constants": {
+        "ring_spacing": 0.8,
+        "tunnel_diameter": 5.5
+    },
+    "slicing": {
+        "slice_half_thickness": 0.007,
+        "max_distance_from_top": 5.5
+    },
+    "curve_fitting": {
+        "polynomial_degree": 2
+    },
+    "ransac_ellipse": {
+        "inlier_ratio": 0.75,
+        "confidence": 0.9,
+        "min_samples": 6,
+        "inlier_threshold": 0.4
+    },
+    "arc_length": {
+        "samples_per_ring": 1210
+    },
+    "performance": {
+        "batch_size": 1000000,
+        "num_jobs": 12
+    }
+}

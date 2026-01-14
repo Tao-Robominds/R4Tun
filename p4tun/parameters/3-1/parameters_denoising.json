@@ -1,0 +1,22 @@
+{
+    "description": "Local density-based point cloud denoising parameters",
+    "physical_constants": {
+        "tunnel_diameter": 5.5
+    },
+    "radius_filtering": {
+        "radius_min": 2.8,
+        "radius_max": 3.0
+    },
+    "grid_resolution": {
+        "theta_step": 0.4,
+        "radial_step": 0.0055
+    },
+    "gradient_detection": {
+        "gradient_threshold": 0.15,
+        "gradient_epsilon": 1e-06
+    },
+    "cutoff_smoothing": {
+        "smoothing_window": 5,
+        "smoothing_offset": -0.002
+    }
+}
