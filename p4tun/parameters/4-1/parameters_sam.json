@@ -10,6 +10,6 @@
         "resolution": 0.005
     },
     "processing": {
-        "mode": "auto"
+        "mode": "row"
     }
 }

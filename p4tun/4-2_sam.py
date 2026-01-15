@@ -7,9 +7,9 @@ individual blocks (K, B1, A1, A2, ..., B2).
 NO GROUND TRUTH REQUIRED.
 
 Modes:
-    - row: Walk from K-block center (best for non-wrap-around)
-    - pattern: Use inferred segment positions (best for wrap-around)
-    - auto: Auto-detect based on available files
+    - row: Walk from K-block center (recommended default)
+    - pattern: Use inferred segment positions (advanced / debugging)
+    - auto: Choose row if detected.csv exists else pattern if inferred_from_pattern.csv exists
 
 Input files:
     - detected.csv: K-block centers from Hough detection (for row mode)
@@ -853,7 +853,7 @@ def project_back_to_point_cloud(
 
 def main(
     tunnel_id: str,
-    mode: str = "auto",
+    mode: str = "row",
     segment_count: Optional[int] = None,
     base_dir: str = "data"
 ) -> None:
@@ -862,7 +862,7 @@ def main(
     
     Args:
         tunnel_id: Tunnel identifier.
-        mode: Processing mode ("row", "pattern", or "auto").
+        mode: Processing mode ("row", "pattern", or "auto"). Default: "row".
         segment_count: Number of segments per ring (auto-detected if None).
         base_dir: Base data directory.
     """
@@ -890,18 +890,7 @@ def main(
     angle = get_param(params, 'segment_geometry', 'angle_deg', default=DEFAULT_ANGLE, allow_default=allow_defaults)
     resolution = get_param(params, 'image', 'resolution', default=DEFAULT_RESOLUTION, allow_default=allow_defaults)
     
-    # Determine mode
-    if mode == "auto":
-        if os.path.exists(detected_file):
-            mode = "row"
-        elif os.path.exists(pattern_file):
-            mode = "pattern"
-        else:
-            raise FileNotFoundError(f"No input files found in {tunnel_dir}")
-    
-    print(f"Mode: {mode}")
-    
-    # Load common data
+    # Load common data first (needed for mode detection)
     pixel_to_point = pickle.load(open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb"))
     df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "enhanced.csv"))
     
@@ -920,6 +909,18 @@ def main(
         )
     print(f"Segments: {segment_count}")
     print(f"Rings: {ring_count}")
+
+    # Determine mode (simple, file-based)
+    # Default is row; auto selects row if detected.csv exists, otherwise pattern if inferred_from_pattern.csv exists.
+    if mode == "auto":
+        if os.path.exists(detected_file):
+            mode = "row"
+        elif os.path.exists(pattern_file):
+            mode = "pattern"
+        else:
+            raise FileNotFoundError(f"No input files found in {tunnel_dir}")
+    
+    print(f"Mode: {mode}")
     print("=" * 70)
     
     # Load SAM model
@@ -981,25 +982,25 @@ def main(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python 4-2_sam_clean.py <tunnel_id> [options]")
+        print("Usage: python 4-2_sam.py <tunnel_id> [options]")
         print()
         print("Options:")
-        print("  --mode <row|pattern|auto>  Processing mode (default: auto)")
+        print("  --mode <row|pattern|auto>  Processing mode (default: row)")
         print("  --segments <N>             Force segment count (default: auto-detect)")
         print()
         print("Modes:")
-        print("  row     - Walk from K-block centers (best for non-wrap-around)")
-        print("  pattern - Use inferred positions (best for wrap-around)")
-        print("  auto    - Auto-detect based on available files")
+        print("  row     - Walk from K-block centers (recommended default)")
+        print("  pattern - Use inferred positions (advanced / debugging)")
+        print("  auto    - Choose row if detected.csv exists else pattern if inferred_from_pattern.csv exists")
         print()
         print("Examples:")
-        print("  python 4-2_sam_clean.py sample              # Auto mode")
-        print("  python 4-2_sam_clean.py sample --mode row   # Force row mode")
-        print("  python 4-2_sam_clean.py 4-1 --mode pattern  # Force pattern mode")
+        print("  python 4-2_sam.py sample                    # Default row mode")
+        print("  python 4-2_sam.py sample --mode row         # Force row mode")
+        print("  python 4-2_sam.py 4-1 --mode pattern        # Force pattern mode")
         sys.exit(1)
     
     tunnel_id = sys.argv[1]
-    mode = "auto"
+    mode = "row"
     segment_count = None
     
     # Parse arguments

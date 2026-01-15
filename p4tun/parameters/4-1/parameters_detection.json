@@ -16,13 +16,13 @@
     "hough_oblique": {
         "rho": 1,
         "theta_deg": 1.0,
-        "threshold": 45,
-        "min_length": 300,
-        "max_gap": 60,
-        "angle_positive_min": 5,
-        "angle_positive_max": 10,
-        "angle_negative_min": -10,
-        "angle_negative_max": -5
+        "threshold": 40,
+        "min_length": 120,
+        "max_gap": 48,
+        "angle_positive_min": 6,
+        "angle_positive_max": 9,
+        "angle_negative_min": -9,
+        "angle_negative_max": -6
     },
     "hough_horizontal": {
         "threshold": 50,

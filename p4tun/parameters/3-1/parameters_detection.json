@@ -19,10 +19,10 @@
         "threshold": 80,
         "min_length": 150,
         "max_gap": 50,
-        "angle_positive_min": 5,
-        "angle_positive_max": 10,
-        "angle_negative_min": -10,
-        "angle_negative_max": -5
+        "angle_positive_min": 5.0,
+        "angle_positive_max": 10.0,
+        "angle_negative_min": -10.0,
+        "angle_negative_max": -5.0
     },
     "hough_horizontal": {
         "threshold": 80,
@@ -36,7 +36,7 @@
         "filter_rings": 5
     },
     "line_processing": {
-        "merge_distance_threshold": 2,
+        "merge_distance_threshold": 2.0,
         "intersection_merge_threshold": 6,
         "pattern_tolerance": 10,
         "horizontal_pattern_tolerance": 50

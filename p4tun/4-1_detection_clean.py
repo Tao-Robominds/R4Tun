@@ -422,7 +422,8 @@ def compute_prompt_points(
     negative_lines: List,
     horizontal_lines: List,
     resolution: float,
-    height: int
+    height: int,
+    intersection_merge_threshold: float = DEFAULT_INTERSECTION_MERGE_THRESHOLD
 ) -> List[Tuple[str, Tuple[float, float]]]:
     """
     Compute K-block prompt points from line intersections.
@@ -456,9 +457,9 @@ def compute_prompt_points(
                 horizontal_intersections.append(pt)
         
         # Merge close points
-        positive_intersections = merge_close_points(positive_intersections, INTERSECTION_MERGE_THRESHOLD)
-        negative_intersections = merge_close_points(negative_intersections, INTERSECTION_MERGE_THRESHOLD)
-        horizontal_intersections = merge_close_points(horizontal_intersections, INTERSECTION_MERGE_THRESHOLD)
+        positive_intersections = merge_close_points(positive_intersections, intersection_merge_threshold)
+        negative_intersections = merge_close_points(negative_intersections, intersection_merge_threshold)
+        horizontal_intersections = merge_close_points(horizontal_intersections, intersection_merge_threshold)
         
         # Determine K-block center
         k_center = None
@@ -819,7 +820,7 @@ def detect_and_infer_patterns(
     print("Computing K-block positions...")
     k_positions = compute_prompt_points(
         center_lines, positive_lines, negative_lines, horizontal_lines,
-        resolution, height
+        resolution, height, intersection_merge
     )
     print(f"  K-blocks: {len(k_positions)}")
     

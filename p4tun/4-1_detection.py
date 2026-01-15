@@ -139,7 +139,6 @@ DEFAULT_HORIZONTAL_ANGLE_TOLERANCE = 1
 # --- Hough Vertical ---
 DEFAULT_VERTICAL_THRESHOLD = 500
 DEFAULT_VERTICAL_ANGLE_TOLERANCE = 0.5
-DEFAULT_VERTICAL_FILTER_RINGS = 5
 
 # --- Line Processing ---
 DEFAULT_MERGE_DISTANCE_THRESHOLD = 3
@@ -294,15 +293,18 @@ def detect_vertical_lines(
     ring_count: int,
     threshold: int = DEFAULT_VERTICAL_THRESHOLD,
     angle_tolerance: float = DEFAULT_VERTICAL_ANGLE_TOLERANCE,
-    filter_rings: int = DEFAULT_VERTICAL_FILTER_RINGS
+    merge_distance: float = 10.0
 ) -> List:
-    """Detect vertical lines (ring boundaries)."""
+    """Detect vertical lines (ring boundaries) and merge close ones.
+    
+    The old method (OA 0.516 for 5-1) merged close vertical lines and 
+    used midpoints between them - NOT dense scanning.
+    """
     lines = cv2.HoughLines(edge_image, 1, np.pi / 180, threshold)
     
     vertical_lines = []
     if lines is not None:
         height, width = edge_image.shape
-        ring_width = width / ring_count
         
         for line in lines:
             rho, theta = line[0]
@@ -310,15 +312,24 @@ def detect_vertical_lines(
             
             if abs(angle) <= angle_tolerance:
                 x = int(rho / np.cos(theta - np.pi / 2)) if abs(np.cos(theta - np.pi / 2)) > 0.01 else int(rho)
-                
-                # Filter to keep only lines near ring boundaries
-                ring_position = x / ring_width
-                if ring_position <= filter_rings or ring_position >= (ring_count - filter_rings):
+                # Keep ALL vertical lines (no filter) 
+                if 0 < x < width:
                     vertical_lines.append(x)
     
-    # Remove duplicates
-    vertical_lines = sorted(set(vertical_lines))
-    return vertical_lines
+    # Merge close vertical lines (like old method did)
+    if not vertical_lines:
+        return []
+    
+    vertical_lines = sorted(vertical_lines)
+    merged = [vertical_lines[0]]
+    for x in vertical_lines[1:]:
+        if x - merged[-1] > merge_distance:
+            merged.append(x)
+        else:
+            # Merge by averaging
+            merged[-1] = (merged[-1] + x) / 2
+    
+    return merged
 
 
 def merge_close_lines(lines: List, threshold: float = DEFAULT_MERGE_DISTANCE_THRESHOLD) -> List:
@@ -430,8 +441,51 @@ def merge_close_points(points: List[Tuple], threshold: float) -> List[Tuple]:
 
 
 # =============================================================================
-# K-Block Prompt Point Detection
+# K-Block Prompt Point Detection (Combined Method)
 # =============================================================================
+
+def find_kblock_edge_pairs(
+    positive_ys: List[float],
+    negative_ys: List[float],
+    k_height_px: float,
+    ab_height_px: float,
+    tolerance_px: float = 50
+) -> List[Tuple[float, float, float, float, str]]:
+    """
+    Find valid K-block edge pairs using domain knowledge.
+    
+    K-block has two oblique edges. The distance between K-block's positive
+    and negative edges should be approximately K_height. But we may also
+    find B-block edges which are AB_height apart.
+    
+    Returns:
+        List of (pos_y, neg_y, mid_y, confidence, type) tuples
+    """
+    pairs = []
+    
+    for pos_y in positive_ys:
+        for neg_y in negative_ys:
+            distance = abs(pos_y - neg_y)
+            
+            # Check if distance matches K-block height
+            k_diff = abs(distance - k_height_px)
+            if k_diff <= tolerance_px:
+                confidence = 1.0 - k_diff / tolerance_px
+                mid_y = (pos_y + neg_y) / 2
+                pairs.append((pos_y, neg_y, mid_y, confidence, 'K'))
+            
+            # Check if distance matches half-K + half-AB (B1 to K edge)
+            b_to_k = (k_height_px + ab_height_px) / 2
+            b_diff = abs(distance - b_to_k)
+            if b_diff <= tolerance_px:
+                confidence = 1.0 - b_diff / tolerance_px
+                mid_y = (pos_y + neg_y) / 2
+                pairs.append((pos_y, neg_y, mid_y, confidence, 'B_to_K'))
+    
+    # Sort by confidence (highest first), prefer K matches
+    pairs.sort(key=lambda x: (-1 if x[4] == 'K' else 0, x[3]), reverse=True)
+    return pairs
+
 
 def compute_prompt_points(
     center_lines: List,
@@ -440,20 +494,29 @@ def compute_prompt_points(
     horizontal_lines: List,
     resolution: float,
     height: int,
-    intersection_merge_threshold: float = DEFAULT_INTERSECTION_MERGE_THRESHOLD
+    intersection_merge_threshold: float = DEFAULT_INTERSECTION_MERGE_THRESHOLD,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM
 ) -> List[Tuple[str, Tuple[float, float]]]:
     """
-    Compute K-block prompt points from line intersections.
+    Compute K-block prompt points using COMBINED method:
+    1. Detect all line intersections
+    2. Use domain knowledge to find valid edge pairs
+    3. Prefer midpoint between positive and negative slopes (proven to work)
     
     Returns list of (type, (x, y)) tuples.
     """
     prompt_points = []
     
+    # Convert heights to pixels
+    k_height_px = k_height_mm / (resolution * 1000)
+    ab_height_mm = 3239.77  # Standard AB height
+    ab_height_px = ab_height_mm / (resolution * 1000)
+    
     for cx in center_lines:
         # Vertical line through center
         center_line = (cx, 0, cx, height)
         
-        # Find intersections with oblique lines
+        # Find all intersections with oblique lines
         positive_intersections = []
         for line in positive_lines:
             pt = find_intersection(center_line, line)
@@ -466,51 +529,119 @@ def compute_prompt_points(
             if pt and 0 <= pt[1] <= height:
                 negative_intersections.append(pt)
         
-        # Find horizontal intersections
-        horizontal_intersections = []
-        for line in horizontal_lines:
-            pt = find_intersection(center_line, line)
-            if pt and 0 <= pt[1] <= height:
-                horizontal_intersections.append(pt)
-        
         # Merge close points
         positive_intersections = merge_close_points(positive_intersections, intersection_merge_threshold)
         negative_intersections = merge_close_points(negative_intersections, intersection_merge_threshold)
-        horizontal_intersections = merge_close_points(horizontal_intersections, intersection_merge_threshold)
         
-        # Determine K-block center
+        # Sort by Y (important for consistency)
+        pos_ys = sorted([p[1] for p in positive_intersections])
+        neg_ys = sorted([n[1] for n in negative_intersections])
+        
         k_center = None
+        method = None
         
-        # Method 1: Midpoint between positive and negative oblique lines
-        if positive_intersections and negative_intersections:
-            pos_y = positive_intersections[0][1]
-            neg_y = negative_intersections[0][1]
-            mid_y = (pos_y + neg_y) / 2
+        # PRIMARY METHOD: Use FIRST positive and FIRST negative slope intersections
+        # This is what the old method (OA 0.516) used - simple midpoint between first detections
+        # Different rings naturally get different Y positions based on actual line detections
+        if pos_ys and neg_ys:
+            # Use FIRST (lowest Y) from each - this is what the old "midpoint" method did
+            first_pos_y = pos_ys[0]
+            first_neg_y = neg_ys[0]
+            mid_y = (first_pos_y + first_neg_y) / 2
             k_center = (cx, mid_y)
-            prompt_points.append(('midpoint', k_center))
+            method = 'midpoint'
         
-        # Method 2: From horizontal lines
-        elif horizontal_intersections:
-            # Take the middle horizontal line
-            h_ys = sorted([h[1] for h in horizontal_intersections])
-            mid_idx = len(h_ys) // 2
-            k_center = (cx, h_ys[mid_idx])
-            prompt_points.append(('horizontal', k_center))
+        # Fallback methods
+        if k_center is None:
+            # Find horizontal intersections
+            horizontal_intersections = []
+            for line in horizontal_lines:
+                pt = find_intersection(center_line, line)
+                if pt and 0 <= pt[1] <= height:
+                    horizontal_intersections.append(pt)
+            horizontal_intersections = merge_close_points(horizontal_intersections, intersection_merge_threshold)
+            
+            if horizontal_intersections:
+                h_ys = sorted([h[1] for h in horizontal_intersections])
+                mid_idx = len(h_ys) // 2
+                k_center = (cx, h_ys[mid_idx])
+                method = 'horizontal'
+            elif pos_ys:
+                k_center = (cx, pos_ys[-1])  # Use last (highest Y)
+                method = 'positive_last'
+            elif neg_ys:
+                k_center = (cx, neg_ys[-1])  # Use last (highest Y)
+                method = 'negative_last'
+            else:
+                k_center = (cx, height * 0.7)  # K-block typically at ~70% of height
+                method = 'assume_70pct'
         
-        # Method 3: Single oblique line
-        elif positive_intersections:
-            k_center = (cx, positive_intersections[0][1])
-            prompt_points.append(('positive_slope', k_center))
-        elif negative_intersections:
-            k_center = (cx, negative_intersections[0][1])
-            prompt_points.append(('negative_slope', k_center))
-        
-        # Method 4: Fallback to center of image
-        else:
-            k_center = (cx, height / 2)
-            prompt_points.append(('assume', k_center))
+        prompt_points.append((method, k_center))
+    
+    # POST-PROCESSING: Ensure consistency across rings
+    # NOTE: Disabled for now - was too aggressive and forced all K-blocks to same Y
+    # This destroyed natural variation in K-block positions across rings (ring-to-ring variation / rotation)
+    # The old method (OA 0.628) had wide Y range (883-4154) which was correct
+    # prompt_points = enforce_kblock_consistency(prompt_points, height, k_height_px)
     
     return prompt_points
+
+
+def enforce_kblock_consistency(
+    prompt_points: List[Tuple[str, Tuple[float, float]]],
+    image_height: int,
+    k_height_px: float
+) -> List[Tuple[str, Tuple[float, float]]]:
+    """
+    Ensure K-block Y positions are consistent across rings.
+    """
+    if len(prompt_points) < 3:
+        return prompt_points
+    
+    # Extract Y values
+    y_values = [p[1][1] for p in prompt_points]
+    
+    # Use segment height for clustering
+    segment_height = k_height_px * 3  # ~648 px
+    
+    # Group Y values into bands
+    y_sorted = sorted(enumerate(y_values), key=lambda x: x[1])
+    
+    # Find clusters
+    clusters = []
+    current_cluster = [y_sorted[0]]
+    
+    for i in range(1, len(y_sorted)):
+        if y_sorted[i][1] - y_sorted[i-1][1] < segment_height:
+            current_cluster.append(y_sorted[i])
+        else:
+            if len(current_cluster) >= 2:
+                clusters.append(current_cluster)
+            current_cluster = [y_sorted[i]]
+    
+    if len(current_cluster) >= 2:
+        clusters.append(current_cluster)
+    
+    if not clusters:
+        return prompt_points
+    
+    # Find the largest cluster
+    largest_cluster = max(clusters, key=len)
+    cluster_y_mean = np.mean([y[1] for y in largest_cluster])
+    cluster_indices = {y[0] for y in largest_cluster}
+    
+    print(f"  K-block consistency: {len(largest_cluster)}/{len(prompt_points)} in main band (Y~{cluster_y_mean:.0f})")
+    
+    # Adjust outliers to the cluster mean
+    adjusted_points = []
+    for i, (method, (cx, cy)) in enumerate(prompt_points):
+        if i in cluster_indices:
+            adjusted_points.append((method, (cx, cy)))
+        else:
+            adjusted_points.append((f'{method}_adjusted', (cx, cluster_y_mean)))
+            print(f"    Ring {i+1}: Y adjusted {cy:.0f} → {cluster_y_mean:.0f}")
+    
+    return adjusted_points
 
 
 # =============================================================================
@@ -527,10 +658,6 @@ def infer_all_segment_positions(
 ) -> pd.DataFrame:
     """
     Infer ALL segment positions from K-block centers using domain knowledge.
-    
-    Automatically detects whether wrap-around is needed based on image coverage:
-    - Coverage >= 90%: Wrap-around (segments cross image boundary)
-    - Coverage < 90%: No wrap (skip segments outside image)
     
     Args:
         k_positions: List of (type, (x, y)) K-block centers.
@@ -551,19 +678,6 @@ def infer_all_segment_positions(
     k_height_px = k_height_mm / (resolution * 1000)
     ab_height_px = ab_height_mm / (resolution * 1000)
     
-    # Calculate theoretical circumference and coverage
-    circumference_px = k_height_px + (segments_per_ring - 1) * ab_height_px
-    coverage = image_height / circumference_px
-    
-    # Determine if wrap-around is needed
-    # Coverage >= 90% means image covers most/all of circumference
-    wrap_around = coverage >= 0.90
-    
-    print(f"  Image height: {image_height} px")
-    print(f"  Circumference: {circumference_px:.0f} px")
-    print(f"  Coverage: {coverage * 100:.1f}%")
-    print(f"  Wrap-around: {'YES' if wrap_around else 'NO'}")
-    
     def get_segment_offset_up(block: str, segment_order: List[str]) -> float:
         """Get Y offset going UP from K-block center.
         
@@ -574,9 +688,7 @@ def infer_all_segment_positions(
             B1
             K (center)
             B2
-            A3 (wrap-around)  ← going DOWN
-            A2
-            A1
+            (if those A-blocks are not visible above, we may see A-blocks below B2)
         """
         if block == 'K':
             return 0
@@ -592,7 +704,7 @@ def infer_all_segment_positions(
             return b1_offset - (block_idx + 1) * ab_height_px
     
     def get_segment_offset_down(block: str, segment_order: List[str]) -> float:
-        """Get Y offset going DOWN from B2 (for wrap-around handling)."""
+        """Get Y offset going DOWN from B2 (handles the bottom-visible A-block case)."""
         if block in ('K', 'B1', 'B2'):
             return None  # Only A blocks go down from B2
         
@@ -615,47 +727,37 @@ def infer_all_segment_positions(
         for block in segment_order:
             offset = get_segment_offset_up(block, segment_order)
             segment_y = k_y + offset
-            
-            if wrap_around:
-                segment_y = segment_y % image_height
+            if -margin <= segment_y <= image_height + margin:
+                segment_y = max(0, min(image_height - 1, segment_y))
                 segments.append({
                     'Ring': ring_id, 'Block': block, 'X': k_x,
                     'Y': segment_y, 'inferred': True
                 })
                 added_blocks.add(block)
             else:
-                if -margin <= segment_y <= image_height + margin:
-                    segment_y = max(0, min(image_height - 1, segment_y))
-                    segments.append({
-                        'Ring': ring_id, 'Block': block, 'X': k_x,
-                        'Y': segment_y, 'inferred': True
-                    })
-                    added_blocks.add(block)
-                else:
-                    skipped += 1
+                skipped += 1
         
-        # Pass 2: For non-wrap-around, also calculate A blocks going DOWN from B2
+        # Pass 2: Also calculate A blocks going DOWN from B2
         # This handles the "reverse walk" case where A blocks appear at the bottom
-        if not wrap_around:
-            a_blocks = [b for b in segment_order if b.startswith('A')]
-            for block in reversed(a_blocks):  # A3, A2, A1 order
-                if block in added_blocks:
-                    continue  # Already added from going UP
-                
-                offset = get_segment_offset_down(block, segment_order)
-                if offset is None:
-                    continue
-                segment_y = k_y + offset
-                
-                if -margin <= segment_y <= image_height + margin:
-                    segment_y = max(0, min(image_height - 1, segment_y))
-                    segments.append({
-                        'Ring': ring_id, 'Block': block, 'X': k_x,
-                        'Y': segment_y, 'inferred': True
-                    })
-                    added_blocks.add(block)
-                else:
-                    skipped += 1
+        a_blocks = [b for b in segment_order if b.startswith('A')]
+        for block in reversed(a_blocks):  # A3, A2, A1 order
+            if block in added_blocks:
+                continue  # Already added from going UP
+            
+            offset = get_segment_offset_down(block, segment_order)
+            if offset is None:
+                continue
+            segment_y = k_y + offset
+            
+            if -margin <= segment_y <= image_height + margin:
+                segment_y = max(0, min(image_height - 1, segment_y))
+                segments.append({
+                    'Ring': ring_id, 'Block': block, 'X': k_x,
+                    'Y': segment_y, 'inferred': True
+                })
+                added_blocks.add(block)
+            else:
+                skipped += 1
     
     if skipped > 0:
         print(f"  Skipped {skipped} out-of-bounds segments")
@@ -761,7 +863,6 @@ def detect_and_infer_patterns(
     # Hough vertical
     vertical_threshold = get_param(params, 'hough_vertical', 'threshold', default=DEFAULT_VERTICAL_THRESHOLD, allow_default=allow_defaults)
     vertical_angle_tol = get_param(params, 'hough_vertical', 'angle_tolerance', default=DEFAULT_VERTICAL_ANGLE_TOLERANCE, allow_default=allow_defaults)
-    vertical_filter_rings = get_param(params, 'hough_vertical', 'filter_rings', default=DEFAULT_VERTICAL_FILTER_RINGS, allow_default=allow_defaults)
     
     # Line processing
     merge_dist_threshold = get_param(params, 'line_processing', 'merge_distance_threshold', default=DEFAULT_MERGE_DISTANCE_THRESHOLD, allow_default=allow_defaults)
@@ -822,25 +923,46 @@ def detect_and_infer_patterns(
     
     vertical_lines = detect_vertical_lines(
         edge_image, resolution, ring_count,
-        vertical_threshold, vertical_angle_tol, vertical_filter_rings
+        vertical_threshold, vertical_angle_tol, merge_dist_threshold
     )
     print(f"  Vertical: {len(vertical_lines)}")
     
-    # Generate center lines
-    print("Generating ring centers...")
+    # Generate center lines from detected vertical lines
+    # The old method (OA 0.516) used detected vertical lines, NOT dense scanning
+    # Dense scanning causes all K-blocks to have similar Y because oblique lines are similar
+    print("Generating ring centers from detected vertical lines...")
     if vertical_lines:
-        center_lines = generate_center_lines(vertical_lines, width, height, ring_count)
+        # Use MIDPOINTS between detected vertical lines (ring boundaries)
+        vertical_lines = sorted(vertical_lines)
+        center_lines = []
+        for i in range(len(vertical_lines) - 1):
+            mid_x = (vertical_lines[i] + vertical_lines[i + 1]) / 2
+            center_lines.append(mid_x)
+        # Add first and last ring centers
+        if len(vertical_lines) >= 2:
+            ring_width = vertical_lines[1] - vertical_lines[0]
+            # First ring center (before first vertical line)
+            first_center = vertical_lines[0] - ring_width / 2
+            if first_center > 0:
+                center_lines.insert(0, first_center)
+            # Last ring center (after last vertical line)
+            last_center = vertical_lines[-1] + ring_width / 2
+            if last_center < width:
+                center_lines.append(last_center)
     else:
+        # Fallback to uniform distribution
         center_lines = generate_fallback_center_lines(width, ring_count)
-    print(f"  Centers: {len(center_lines)}")
+    print(f"  Ring centers: {len(center_lines)} (from {len(vertical_lines)} detected vertical lines)")
     
-    # Compute K-block prompt points
-    print("Computing K-block positions...")
+    # Compute K-block prompt points using combined method
+    # Scan all center lines to find K-blocks wherever they exist
+    print("Computing K-block positions (dense scanning)...")
+    print(f"  Scanning {len(center_lines)} positions across image width...")
     k_positions = compute_prompt_points(
         center_lines, positive_lines, negative_lines, horizontal_lines,
-        resolution, height, intersection_merge
+        resolution, height, intersection_merge, k_height_mm
     )
-    print(f"  K-blocks: {len(k_positions)}")
+    print(f"  K-blocks found: {len(k_positions)}")
     
     # Create legacy detected.csv
     detected_df = pd.DataFrame(k_positions, columns=['Type', 'Coordinates'])
