@@ -466,24 +466,29 @@ def evaluate(
 # =============================================================================
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python evaluation_clean.py <tunnel_id> [segment_count]")
-        print()
-        print("Arguments:")
-        print("  tunnel_id      Tunnel identifier (e.g., 1-4, 4-1)")
-        print("  segment_count  Number of segments per ring (auto-detected if omitted)")
-        print()
-        print("Examples:")
-        print("  python evaluation_clean.py 1-4      # Auto-detect segments")
-        print("  python evaluation_clean.py 4-1 7    # 7 segments")
-        print()
-        print("Input files (in order of preference):")
-        print("  - data/<tunnel_id>/final.csv (with 'segment' column for GT)")
-        print("  - data/<tunnel_id>/predictions.csv")
-        sys.exit(1)
+    import argparse
     
-    tunnel_id = sys.argv[1]
-    segment_count = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    parser = argparse.ArgumentParser(
+        description="Evaluate tunnel segmentation results",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python evaluation.py 1-4                    # Auto-detect segments
+  python evaluation.py 4-1 --segments 7       # Force 7 segments  
+  python evaluation.py 4-1 --data-dir data/configurable
+
+Input files (in order of preference):
+  - <data_dir>/<tunnel_id>/final.csv (with 'segment' column for GT)
+  - <data_dir>/<tunnel_id>/predictions.csv
+"""
+    )
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 4-1)")
+    parser.add_argument("--segments", type=int, default=None,
+                       help="Number of segments per ring (auto-detected if omitted)")
+    parser.add_argument("--data-dir", default="data",
+                       help="Base data directory (default: data)")
     
-    evaluate(tunnel_id, segment_count=segment_count)
+    args = parser.parse_args()
+    
+    evaluate(args.tunnel_id, base_dir=args.data_dir, segment_count=args.segments)
 

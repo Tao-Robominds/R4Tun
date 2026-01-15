@@ -621,7 +621,8 @@ def generate_depth_map(
     data_boundary: Dict,
     resolution: float = DEFAULT_DEPTH_MAP_RESOLUTION,
     window_size: int = DEFAULT_INTERPOLATION_WINDOW,
-    record_mapping: bool = True
+    record_mapping: bool = True,
+    outlier_mode: bool = False
 ) -> Tuple[np.ndarray, List[Dict]]:
     """
     Project point cloud data to a 2D depth map.
@@ -632,6 +633,7 @@ def generate_depth_map(
         resolution: Depth map resolution (meters/pixel).
         window_size: Window size for gap interpolation.
         record_mapping: Whether to record pixel-to-point mapping.
+        outlier_mode: If True, only process boundary data (skip surface).
         
     Returns:
         Tuple of (depth_map, pixel_to_point_mapping).
@@ -680,14 +682,17 @@ def generate_depth_map(
         
         return mapping if record else None
     
-    # Process both point sets
-    with tqdm(total=2, desc="Projecting to depth map") as pbar:
-        mapping = process_points(surface, surface_index, record=record_mapping)
-        pbar.update(1)
+    # Process point sets (skip surface in outlier_mode)
+    mapping = []
+    total_steps = 1 if outlier_mode else 2
+    with tqdm(total=total_steps, desc="Projecting to depth map") as pbar:
+        if not outlier_mode:
+            mapping = process_points(surface, surface_index, record=record_mapping)
+            pbar.update(1)
         process_points(boundary, None, record=False)
         pbar.update(1)
     
-    if record_mapping:
+    if record_mapping and not outlier_mode:
         print(f"Mapped {len(mapping)} points to pixels")
     
     # Interpolate gaps
@@ -860,7 +865,7 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     
     depth_map_outlier, _ = generate_depth_map(
         surface_data, outlier_data,
-        resolution=depth_map_resolution, window_size=1, record_mapping=False
+        resolution=depth_map_resolution, window_size=1, record_mapping=False, outlier_mode=True
     )
     np.save(os.path.join(tunnel_dir, "depth_map_outlier.npy"), depth_map_outlier)
     
