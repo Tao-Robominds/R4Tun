@@ -1,7 +1,7 @@
 {
     "description": "Tunnel centerline extraction and point cloud unfolding parameters",
     "physical_constants": {
-        "ring_spacing": 0.8,
+        "ring_spacing": 1.215,
         "tunnel_diameter": 5.5
     },
     "slicing": {

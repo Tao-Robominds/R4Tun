@@ -199,20 +199,56 @@ def compute_tunnel_direction(points_xy: np.ndarray) -> Tuple[np.ndarray, np.ndar
 # Slicing Plane Generation
 # =============================================================================
 
-def compute_optimal_ring_count(distance: float, ring_spacing: float = DEFAULT_RING_SPACING) -> int:
+
+
+def count_valid_rings(sliced_clouds: List[np.ndarray], min_points_threshold: float = 0.3, 
+                      threshold_reference: str = "median") -> Tuple[int, List[bool]]:
     """
-    Compute the optimal number of rings that best fits the tunnel length.
+    Count rings with sufficient data points.
+    
+    A ring is considered valid if it has at least min_points_threshold * reference_points.
+    This filters out partial/incomplete rings at the edges of the scan.
     
     Args:
-        distance: Total distance along the tunnel.
-        ring_spacing: Nominal spacing between rings.
+        sliced_clouds: List of point clouds for each slice.
+        min_points_threshold: Minimum fraction of reference points to be considered valid.
+        threshold_reference: Reference for threshold calculation - "median" or "max".
+            Use "median" for uniform scans, "max" for scans with density gradient.
         
     Returns:
-        Optimal number of rings.
+        Tuple of (valid_ring_count, validity_mask).
     """
-    base_n = round(distance / ring_spacing)
-    candidates = [base_n - 1, base_n, base_n + 1]
-    return min(candidates, key=lambda n: abs(distance - ring_spacing * n))
+    point_counts = np.array([len(cloud) for cloud in sliced_clouds])
+    
+    if len(point_counts) == 0:
+        return 0, []
+    
+    # Select reference based on threshold_reference parameter
+    if threshold_reference == "max":
+        reference_points = np.max(point_counts)
+    else:  # default to median
+        reference_points = np.median(point_counts)
+    
+    threshold = reference_points * min_points_threshold
+    
+    # A ring is valid if it has enough points
+    validity_mask = point_counts >= threshold
+    valid_count = np.sum(validity_mask)
+    
+    # Find contiguous valid region (exclude isolated valid slices at edges)
+    valid_indices = np.where(validity_mask)[0]
+    if len(valid_indices) > 0:
+        first_valid = valid_indices[0]
+        last_valid = valid_indices[-1]
+        contiguous_count = last_valid - first_valid + 1
+        
+        print(f"Slice point counts: min={point_counts.min()}, max={point_counts.max()}, median={np.median(point_counts):.0f}")
+        print(f"Valid ring threshold: {threshold:.0f} points ({min_points_threshold*100:.0f}% of {threshold_reference}={reference_points:.0f})")
+        print(f"Total slices: {len(sliced_clouds)}, Valid slices: {valid_count}, Contiguous: {contiguous_count}")
+        
+        return contiguous_count, validity_mask
+    
+    return 0, validity_mask
 
 
 def generate_slicing_planes(
@@ -237,9 +273,9 @@ def generate_slicing_planes(
             - planes: Plane equations [A, B, C, D]
             - sliced_clouds: Points within each slice
     """
-    # Compute tunnel length and optimal ring count
+    # Compute tunnel length and ring count
     total_distance = np.linalg.norm(center2 - center1)
-    num_rings = compute_optimal_ring_count(np.linalg.norm(center2[:2] - center1[:2]))
+    num_rings = round(total_distance / ring_spacing)
     
     # Direction vector (normalized, 2D)
     direction_2d = (center2 - center1) / total_distance
@@ -896,6 +932,7 @@ def unfold_tunnel(tunnel_id: str, base_dir: str = "data/") -> None:
         ring_spacing=ring_spacing
     )
     ring_count = len(sliced_clouds)
+    print(f"Generated {ring_count} slices (ring_spacing={ring_spacing})")
     
     # Step 3: Fit ellipse centers
     print("Step 3: Fitting ellipse centers...")
