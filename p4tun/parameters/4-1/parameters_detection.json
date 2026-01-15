@@ -1,5 +1,5 @@
 {
-    "description": "Hough line detection and segment pattern inference parameters",
+    "description": "Hough line detection and segment pattern inference parameters for Tunnel 4-1 (7-segment)",
     "physical_constants": {
         "ring_spacing_m": 1.3,
         "k_height_mm": 1079.92,
@@ -40,5 +40,24 @@
         "intersection_merge_threshold": 6,
         "pattern_tolerance": 10,
         "horizontal_pattern_tolerance": 50
+    },
+    "k_block_detection": {
+        "description": "Generic K-block position detection for 7-segment tunnel",
+        "method": "physical_offset_correction",
+        "segment_count": 7,
+        "wrap_around": true,
+        "algorithm": {
+            "step1": "Detect oblique lines with K_HEIGHT spacing between pos/neg slopes",
+            "step2": "For 7-segment tunnels, K can be at any of 7 rotational positions",
+            "step3": "Apply correction: actual_pos = detected_midpoint + (AB_HEIGHT + K_HEIGHT/2)",
+            "step4": "Handle wrap-around: if pos > image_height, pos -= circumference",
+            "step5": "Assign K position per ring based on local detection"
+        },
+        "formulas": {
+            "offset_correction_px": "AB_HEIGHT + K_HEIGHT/2 = 755.9 px",
+            "circumference_px": "K_HEIGHT + 6*AB_HEIGHT = 4103.7 px",
+            "k_spacing_tolerance_px": 60
+        },
+        "notes": "7-segment tunnel with variable K positions. Uses physical constants only."
     }
 }

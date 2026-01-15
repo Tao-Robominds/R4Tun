@@ -1,5 +1,5 @@
 {
-    "description": "Hough line detection and segment pattern inference parameters",
+    "description": "Hough line detection and segment pattern inference parameters for Tunnel 2-2",
     "physical_constants": {
         "ring_spacing_m": 1.2,
         "k_height_mm": 1079.92,
@@ -16,9 +16,9 @@
     "hough_oblique": {
         "rho": 1,
         "theta_deg": 1.0,
-        "threshold": 50,
-        "min_length": 100,
-        "max_gap": 40,
+        "threshold": 40,
+        "min_length": 120,
+        "max_gap": 48,
         "angle_positive_min": 6.0,
         "angle_positive_max": 9.0,
         "angle_negative_min": -9.0,
@@ -40,5 +40,40 @@
         "intersection_merge_threshold": 6,
         "pattern_tolerance": 10,
         "horizontal_pattern_tolerance": 50
+    },
+    "k_block_detection": {
+        "description": "Dynamic K-block position detection via V-pair inverse mapping",
+        "method": "v_pair_inverse_mapping",
+        "algorithm": {
+            "step1": "Detect V-pairs (oblique line pairs with K_HEIGHT spacing)",
+            "step2": "V-pairs appear at ALTERNATE K position (where K is NOT for that ring)",
+            "step3": "Cluster V-pair midpoints into distinct positions",
+            "step4": "Apply correction: K_position = V_midpoint + AB_HEIGHT/2",
+            "step5": "Classify rings: V-pair near template1 → K at pos2 (inverse mapping)",
+            "step6": "Infer alternation pattern from detected rings (even→pos_X, odd→pos_Y)",
+            "step7": "Propagate to undetected rings using inferred pattern"
+        },
+        "parameters": {
+            "v_pair_spacing_tolerance_px": 80,
+            "offset_correction_px": 324.0,
+            "offset_formula": "AB_HEIGHT / 2",
+            "min_detected_rings_for_pattern": 3,
+            "position_cluster_threshold_px": 200,
+            "oblique_angle_range_deg": [6, 9],
+            "line_x_tolerance_px": 30
+        },
+        "discovered_pattern": {
+            "tunnel": "2-2",
+            "segment_type": "6-segment_alternating",
+            "v_templates_px": [1196, 1629],
+            "k_positions_px": [1520, 1953],
+            "alternation": "even_rings→pos2, odd_rings→pos1"
+        },
+        "performance": {
+            "error_px": 2.2,
+            "error_pct": 0.08,
+            "detection_rate": "10/10 rings"
+        },
+        "notes": "Best performing tunnel. Key insight: V-pairs are detected at the ALTERNATE K position due to segment boundary visibility patterns."
     }
 }

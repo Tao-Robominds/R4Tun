@@ -1,8 +1,13 @@
 """
-SAM-based Tunnel Segment Segmentation
+Algorithm 4-3 - SAM-based Tunnel Segment Segmentation
 Faithful port of sam4tun/4-2_sam.py with:
 1. External parameter loading
 2. Auto-detection of 6 vs 7 segments
+
+Pipeline:
+    4-1_detection.py → detected.csv (line detection)
+    4-2_pattern.py   → pattern.csv (K-block pattern detection)
+    4-3_sam.py       → final.csv (SAM segmentation)
 """
 
 import os
@@ -480,13 +485,34 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
-    initial_prompt_points = pd.read_csv(os.path.join(tunnel_dir, "detected.csv"))
+    
+    # Try to load pattern.csv (from 4-2_pattern.py), fallback to detected.csv
+    pattern_csv_path = os.path.join(tunnel_dir, "pattern.csv")
+    detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
+    
+    if os.path.exists(pattern_csv_path):
+        print(f"Loading K positions from pattern.csv (4-2_pattern.py output)")
+        initial_prompt_points = pd.read_csv(pattern_csv_path)
+    elif os.path.exists(detected_csv_path):
+        print(f"Warning: pattern.csv not found, falling back to detected.csv")
+        initial_prompt_points = pd.read_csv(detected_csv_path)
+    else:
+        raise FileNotFoundError(f"Neither pattern.csv nor detected.csv found in {tunnel_dir}")
+    
     pixel_to_point = pickle.load(open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb"))
     df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "enhanced.csv"))
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     
     print(f"Processing tunnel: {tunnel_id}")
     print(f"Segment geometry: width={segment_width}, K_height={K_height}, AB_height={AB_height}, angle={angle}")
+    
+    # Load pattern metadata if available
+    pattern_json_path = os.path.join(tunnel_dir, "pattern.json")
+    if os.path.exists(pattern_json_path):
+        with open(pattern_json_path, 'r') as f:
+            pattern_info = json.load(f)
+        print(f"Pattern type: {pattern_info.get('pattern_type', 'unknown')}")
+        print(f"Pattern confidence: {pattern_info.get('confidence', 0):.2f}")
     
     # Load SAM model
     sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"

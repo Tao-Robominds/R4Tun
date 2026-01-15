@@ -1,5 +1,5 @@
 {
-    "description": "Hough line detection and segment pattern inference parameters",
+    "description": "Hough line detection and segment pattern inference parameters for Tunnel 3-1",
     "physical_constants": {
         "ring_spacing_m": 1.3,
         "k_height_mm": 1079.92,
@@ -16,9 +16,9 @@
     "hough_oblique": {
         "rho": 1,
         "theta_deg": 1.0,
-        "threshold": 80,
-        "min_length": 150,
-        "max_gap": 50,
+        "threshold": 40,
+        "min_length": 120,
+        "max_gap": 48,
         "angle_positive_min": 5.0,
         "angle_positive_max": 10.0,
         "angle_negative_min": -10.0,
@@ -40,5 +40,26 @@
         "intersection_merge_threshold": 6,
         "pattern_tolerance": 10,
         "horizontal_pattern_tolerance": 50
+    },
+    "k_block_detection": {
+        "description": "Generic K-block position detection using physical constants only",
+        "method": "physical_offset_correction",
+        "algorithm": {
+            "step1": "Detect oblique lines with K_HEIGHT spacing between pos/neg slopes",
+            "step2": "Cluster detected midpoints into lower and higher positions",
+            "step3": "Apply correction: actual_pos = detected_lower + (AB_HEIGHT + K_HEIGHT/2)",
+            "step4": "Compute alternating position: pos1 = pos2 - (2/3 * AB_HEIGHT)",
+            "step5": "Assign K position per ring based on local detection or alternation"
+        },
+        "formulas": {
+            "offset_correction_px": "AB_HEIGHT + K_HEIGHT/2 = 755.9 px",
+            "alternation_offset_px": "2/3 * AB_HEIGHT = 432.0 px",
+            "k_spacing_tolerance_px": 60
+        },
+        "fallback": {
+            "when_no_detection": "Use image_height / 2 as center estimate",
+            "notes": "Tunnel 3-1 has sparse oblique lines - may need fallback"
+        },
+        "notes": "Uses only physical constants (K_HEIGHT, AB_HEIGHT, resolution). No tunnel-specific empirical values."
     }
 }
