@@ -8,8 +8,5 @@
     },
     "image": {
         "resolution": 0.005
-    },
-    "processing": {
-        "mode": "row"
     }
 }

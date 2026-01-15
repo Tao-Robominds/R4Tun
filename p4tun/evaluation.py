@@ -11,7 +11,7 @@ This module evaluates tunnel segmentation quality. It supports two modes:
    - Input: final.csv with 'pred' column (or predictions.csv)
    - Outputs: Class distribution, coverage analysis
 
-Segment count is auto-detected from inferred_from_pattern.csv.
+Segment count (6 or 7) is auto-detected from depth map image height.
 """
 
 import os
@@ -57,31 +57,36 @@ CLASS_NAMES_7 = {
 
 def detect_segment_count(tunnel_dir: str) -> int:
     """
-    Auto-detect segment count from pattern file.
+    Auto-detect segment count from depth map image height.
     
-    Reads inferred_from_pattern.csv and counts unique Block types.
+    Compares image height to expected circumference:
+    - 6 segments: K + 5×AB = 17278.77 mm
+    - 7 segments: K + 6×AB = 20518.54 mm
     """
-    pattern_file = os.path.join(tunnel_dir, "inferred_from_pattern.csv")
+    import cv2
     
-    if os.path.exists(pattern_file):
-        df = pd.read_csv(pattern_file)
-        if 'Block' in df.columns:
-            unique_blocks = df['Block'].unique()
-            segment_count = len(unique_blocks)
-            print(f"Detected {segment_count} segments from pattern: {sorted(unique_blocks)}")
+    K_HEIGHT_MM = 1079.92
+    AB_HEIGHT_MM = 3239.77
+    RESOLUTION = 0.005
+    
+    depth_map_path = os.path.join(tunnel_dir, "depth_map.png")
+    if os.path.exists(depth_map_path):
+        img = cv2.imread(depth_map_path)
+        if img is not None:
+            image_height = img.shape[0]
+            height_mm = image_height * RESOLUTION * 1000
+            
+            circumference_6 = K_HEIGHT_MM + 5 * AB_HEIGHT_MM  # 17278.77
+            circumference_7 = K_HEIGHT_MM + 6 * AB_HEIGHT_MM  # 20518.54
+            
+            dist_6 = abs(height_mm - circumference_6)
+            dist_7 = abs(height_mm - circumference_7)
+            
+            segment_count = 6 if dist_6 < dist_7 else 7
+            print(f"Auto-detected {segment_count} segments (height={image_height}px, {height_mm:.0f}mm)")
             return segment_count
     
-    # Fallback: try to detect from predictions
-    pred_file = os.path.join(tunnel_dir, "predictions.csv")
-    if os.path.exists(pred_file):
-        df = pd.read_csv(pred_file)
-        max_label = df['pred_labels'].max()
-        if max_label <= 6:
-            return 6
-        else:
-            return 7
-    
-    print("Warning: Could not detect segment count, defaulting to 6")
+    print("Warning: Could not load depth map, defaulting to 6 segments")
     return 6
 
 

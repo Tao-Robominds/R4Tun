@@ -1,15 +1,12 @@
 {
     "description": "SAM-based tunnel segment segmentation parameters",
     "segment_geometry": {
-        "segment_width": 1200.0,
+        "segment_width": 1300.0,
         "k_height": 1079.92,
         "ab_height": 3239.77,
         "angle_deg": 7.52
     },
     "image": {
         "resolution": 0.005
-    },
-    "processing": {
-        "mode": "row"
     }
 }

@@ -472,6 +472,12 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     params = load_parameters(tunnel_id, base_dir)
     resolution = get_param(params, 'image', 'resolution', default=0.005)
     
+    # Load segment geometry parameters
+    segment_width = get_param(params, 'segment_geometry', 'segment_width', default=1200.0)
+    K_height = get_param(params, 'segment_geometry', 'k_height', default=1079.92)
+    AB_height = get_param(params, 'segment_geometry', 'ab_height', default=3239.77)
+    angle = get_param(params, 'segment_geometry', 'angle_deg', default=7.52)
+    
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     initial_prompt_points = pd.read_csv(os.path.join(tunnel_dir, "detected.csv"))
@@ -480,6 +486,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     
     print(f"Processing tunnel: {tunnel_id}")
+    print(f"Segment geometry: width={segment_width}, K_height={K_height}, AB_height={AB_height}, angle={angle}")
     
     # Load SAM model
     sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
@@ -493,7 +500,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
-    # Auto-detect segment count if not specified
+    # Auto-detect segment count from image height (or use argument if specified)
     if segment_count is None:
         segment_count = detect_segment_count(image.shape[0], resolution)
     print(f"Using {segment_count} segments per ring")
@@ -504,7 +511,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     # Run SAM segmentation
     all_results = []
     for _, row in tqdm(initial_prompt_points.iterrows(), total=len(initial_prompt_points), desc="Processing rows"):
-        result = process_row(row, image, predictor, resolution, segment_count)
+        result = process_row(row, image, predictor, resolution, segment_count, 
+                            segment_width, K_height, angle, AB_height)
         all_results.append(result)
     
     # Aggregate results
