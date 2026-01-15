@@ -6,14 +6,24 @@ individual blocks (K, B1, A1, A2, ..., B2).
 
 NO GROUND TRUTH REQUIRED.
 
+UNIFIED APPROACH: Works with all tunnel patterns (row, wraparound, mixed).
+
 Modes:
-    - row: Walk from K-block center (recommended default)
-    - pattern: Use inferred segment positions (advanced / debugging)
-    - auto: Choose row if detected.csv exists else pattern if inferred_from_pattern.csv exists
+    - row: Walk from K-block center (legacy, for row-based patterns only)
+    - pattern: Use inferred segment positions (RECOMMENDED - works for ALL patterns)
+    - auto: Choose pattern if inferred_from_pattern.csv exists, else row
+    - unified: Smart mode selection based on detected pattern type
+
+The pattern mode processes each segment INDEPENDENTLY at its inferred position,
+which naturally handles:
+    - Row patterns: Segments stacked vertically
+    - Wraparound patterns: Segments wrap around image boundary
+    - Mixed patterns: Combination of above
+    - (Future unknown patterns)
 
 Input files:
     - detected.csv: K-block centers from Hough detection (for row mode)
-    - inferred_from_pattern.csv: All segment positions (for pattern mode)
+    - inferred_from_pattern.csv: All segment positions (for pattern/unified mode)
 """
 
 import os
@@ -124,9 +134,10 @@ DEFAULT_RESOLUTION = 0.005
 
 
 class ProcessingMode(Enum):
-    ROW = "row"
-    PATTERN = "pattern"
-    AUTO = "auto"
+    ROW = "row"           # Walk from K-block centers (legacy, row patterns only)
+    PATTERN = "pattern"   # Use inferred positions (works for ALL patterns)
+    AUTO = "auto"         # Choose pattern if inferred file exists, else row
+    UNIFIED = "unified"   # Smart selection based on detected pattern type
 
 
 # =============================================================================
@@ -910,13 +921,29 @@ def main(
     print(f"Segments: {segment_count}")
     print(f"Rings: {ring_count}")
 
-    # Determine mode (simple, file-based)
-    # Default is row; auto selects row if detected.csv exists, otherwise pattern if inferred_from_pattern.csv exists.
-    if mode == "auto":
-        if os.path.exists(detected_file):
+    # Determine mode (smart selection based on pattern type and available files)
+    # unified/auto: prefer pattern mode for wraparound, row for simple patterns
+    if mode in ("auto", "unified"):
+        if os.path.exists(pattern_file):
+            # Check if this is a wraparound pattern
+            pattern_df = pd.read_csv(pattern_file)
+            if 'pattern_type' in pattern_df.columns:
+                pattern_type = pattern_df['pattern_type'].iloc[0]
+                if pattern_type in ('wraparound', 'mixed'):
+                    mode = "pattern"
+                    print(f"Detected {pattern_type} pattern - using pattern mode (handles wraparound)")
+                elif mode == "unified" and os.path.exists(detected_file):
+                    # For row patterns, still prefer pattern mode (more robust)
+                    mode = "pattern"
+                    print(f"Detected {pattern_type} pattern - using pattern mode (unified)")
+                else:
+                    mode = "pattern"  # Default to pattern if file exists
+            else:
+                # No pattern_type column - use pattern mode anyway (safer)
+                mode = "pattern"
+        elif os.path.exists(detected_file):
             mode = "row"
-        elif os.path.exists(pattern_file):
-            mode = "pattern"
+            print("Using row mode (no pattern file found)")
         else:
             raise FileNotFoundError(f"No input files found in {tunnel_dir}")
     
@@ -981,45 +1008,41 @@ def main(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python 4-2_sam.py <tunnel_id> [options]")
-        print()
-        print("Options:")
-        print("  --mode <row|pattern|auto>  Processing mode (default: row)")
-        print("  --segments <N>             Force segment count (default: auto-detect)")
-        print()
-        print("Modes:")
-        print("  row     - Walk from K-block centers (recommended default)")
-        print("  pattern - Use inferred positions (advanced / debugging)")
-        print("  auto    - Choose row if detected.csv exists else pattern if inferred_from_pattern.csv exists")
-        print()
-        print("Examples:")
-        print("  python 4-2_sam.py sample                    # Default row mode")
-        print("  python 4-2_sam.py sample --mode row         # Force row mode")
-        print("  python 4-2_sam.py 4-1 --mode pattern        # Force pattern mode")
-        sys.exit(1)
+    import argparse
     
-    tunnel_id = sys.argv[1]
-    mode = "row"
-    segment_count = None
+    parser = argparse.ArgumentParser(
+        description="Unified SAM Tunnel Segmentation (GT-Free)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Modes:
+  unified - RECOMMENDED: Smart selection based on detected pattern type
+  pattern - Use inferred segment positions (handles ALL patterns)
+  row     - Walk from K-block centers (legacy, row patterns only)  
+  auto    - Choose pattern if inferred file exists, else row
+
+The unified/pattern modes work for ALL tunnel patterns:
+  - Row patterns: Segments stacked vertically (1-4, 2-2, 4-1)
+  - Wraparound: Segments wrap around image boundary (3-1, 5-1)
+  - Mixed: Combination of above
+
+Examples:
+  python 4-2_sam.py 1-4                           # Default unified mode
+  python 4-2_sam.py 5-1 --mode unified            # Unified mode (detects wraparound)
+  python 4-2_sam.py 4-1 --mode pattern            # Force pattern mode
+  python 4-2_sam.py sample --mode row --segments 6  # Force row mode with 6 segments
+"""
+    )
     
-    # Parse arguments
-    i = 2
-    while i < len(sys.argv):
-        if sys.argv[i] == "--mode" and i + 1 < len(sys.argv):
-            mode = sys.argv[i + 1]
-            i += 2
-        elif sys.argv[i] == "--segments" and i + 1 < len(sys.argv):
-            segment_count = int(sys.argv[i + 1])
-            i += 2
-        else:
-            # Legacy: positional segment count
-            try:
-                segment_count = int(sys.argv[i])
-            except ValueError:
-                pass
-            i += 1
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 4-1, 5-1)")
+    parser.add_argument("--mode", "-m", choices=['unified', 'pattern', 'row', 'auto'],
+                        default='unified', help="Processing mode (default: unified)")
+    parser.add_argument("--segments", "-s", type=int, default=None,
+                        help="Number of segments per ring (auto-detect if omitted)")
+    parser.add_argument("--data-dir", "-d", default="data",
+                        help="Base data directory (default: data)")
     
-    main(tunnel_id, mode=mode, segment_count=segment_count)
+    args = parser.parse_args()
+    
+    main(args.tunnel_id, mode=args.mode, segment_count=args.segments, base_dir=args.data_dir)
 
 

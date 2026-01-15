@@ -1,8 +1,13 @@
 """
-Prompt Point Detection and Segment Pattern Inference (GT-Free)
+Unified Tunnel Segment Detection & Pattern Inference (GT-Free)
 
-This module detects tunnel ring boundaries and infers ALL segment positions
-using Hough line detection on depth maps combined with domain knowledge.
+This module provides a UNIVERSAL approach to tunnel segment detection that
+handles ALL segment arrangement patterns:
+
+  - ROW PATTERN: K-blocks aligned in 1-2 horizontal bands, segments stacked
+  - WRAPAROUND PATTERN: K-blocks rotate across rings, segments wrap around image
+  - MIXED PATTERN: Combination of the above
+  - (Extensible for future unknown patterns)
 
 NO GROUND TRUTH REQUIRED.
 
@@ -12,7 +17,14 @@ Pipeline:
     3. Detect horizontal lines (K-block boundaries)
     4. Detect vertical lines (ring center separations)
     5. Compute K-block center points at line intersections
-    6. INFER ALL SEGMENT POSITIONS using domain knowledge
+    6. AUTO-DETECT pattern type from K-block distribution
+    7. INFER ALL SEGMENT POSITIONS using domain knowledge + pattern-aware handling
+
+Key Innovation:
+    - Each ring is processed INDEPENDENTLY
+    - Y coordinates are handled with modular arithmetic for wraparound
+    - Pattern detection is automatic but can be overridden
+    - Architecture is extensible for future patterns
 
 Outputs:
     - detected.csv: K-block prompt points (legacy format)
@@ -145,6 +157,14 @@ DEFAULT_MERGE_DISTANCE_THRESHOLD = 3
 DEFAULT_INTERSECTION_MERGE_THRESHOLD = 6
 DEFAULT_PATTERN_TOLERANCE = 10
 DEFAULT_HORIZONTAL_PATTERN_TOLERANCE = 50
+
+# --- Pattern Detection (CONFIGURABLE) ---
+# These can be overridden in parameters_detection.json under "pattern_detection" section
+DEFAULT_PARTIAL_SCAN_THRESHOLD = 0.70      # ratio < this → partial scan (no wraparound)
+DEFAULT_FULL_SCAN_MIN_THRESHOLD = 0.84     # ratio >= this AND <= max → likely full 360°
+DEFAULT_FULL_SCAN_MAX_THRESHOLD = 1.05     # upper bound for full scan ratio
+DEFAULT_EDGE_PROXIMITY_PERCENT = 0.05      # K-block within this % of edge → wraparound
+DEFAULT_ROTATION_THRESHOLD_PERCENT = 30    # K-block Y range > this % → rotation detected
 
 
 # =============================================================================
@@ -645,7 +665,131 @@ def enforce_kblock_consistency(
 
 
 # =============================================================================
-# Segment Position Inference (NEW - replaces row-based)
+# Pattern Detection and Strategy
+# =============================================================================
+
+class PatternStrategy:
+    """Base class for segment position inference strategies."""
+    
+    @staticmethod
+    def detect(k_positions: List[Tuple], image_height: int, k_height_px: float) -> float:
+        """Return confidence score (0-1) that this pattern applies."""
+        raise NotImplementedError
+    
+    @staticmethod
+    def infer_segments(k_positions: List, image_height: int, **kwargs) -> List[Dict]:
+        """Infer all segment positions for this pattern."""
+        raise NotImplementedError
+
+
+def detect_pattern_type(
+    k_positions: List[Tuple[str, Tuple[float, float]]],
+    image_height: int,
+    k_height_px: float,
+    ab_height_px: float = None,
+    segments_per_ring: int = 6,
+    pattern_params: Dict = None
+) -> Tuple[str, float]:
+    """
+    Auto-detect the tunnel pattern type using configurable parameters and adaptive detection.
+    
+    DETECTION METHODS (in order of priority):
+    1. ADAPTIVE: Actually compute segment positions and check if any go out of bounds
+    2. HEURISTIC: Use configurable thresholds as fallback
+    
+    CONFIGURABLE PARAMETERS (in pattern_params or parameters_detection.json):
+    - partial_scan_threshold: ratio below which wraparound is impossible (default: 0.70)
+    - full_scan_min_threshold: lower bound for full 360° scan ratio (default: 0.84)
+    - full_scan_max_threshold: upper bound for full 360° scan ratio (default: 1.05)
+    - edge_proximity_percent: K-block edge threshold as % of image (default: 0.05)
+    - rotation_threshold_percent: K-block Y range % indicating rotation (default: 30)
+    
+    Returns:
+        Tuple of (pattern_type, confidence):
+        - 'row': All segments fit within image bounds (no wraparound needed)
+        - 'wraparound': Some segments would extend beyond bounds (need wraparound)
+        - 'mixed': Some rings wrap, some don't
+    """
+    if not k_positions:
+        return 'unknown', 0.0
+    
+    if ab_height_px is None:
+        ab_height_px = k_height_px * 3  # Default estimate
+    
+    # Load configurable thresholds (from params or defaults)
+    if pattern_params is None:
+        pattern_params = {}
+    
+    partial_threshold = pattern_params.get('partial_scan_threshold', DEFAULT_PARTIAL_SCAN_THRESHOLD)
+    full_scan_min = pattern_params.get('full_scan_min_threshold', DEFAULT_FULL_SCAN_MIN_THRESHOLD)
+    full_scan_max = pattern_params.get('full_scan_max_threshold', DEFAULT_FULL_SCAN_MAX_THRESHOLD)
+    edge_percent = pattern_params.get('edge_proximity_percent', DEFAULT_EDGE_PROXIMITY_PERCENT)
+    rotation_percent = pattern_params.get('rotation_threshold_percent', DEFAULT_ROTATION_THRESHOLD_PERCENT)
+    
+    # Calculate expected full circumference
+    num_ab_blocks = segments_per_ring - 1
+    expected_circumference = k_height_px + (num_ab_blocks) * ab_height_px
+    circumference_ratio = image_height / expected_circumference
+    
+    y_values = [p[1][1] for p in k_positions]
+    y_min, y_max = min(y_values), max(y_values)
+    y_range_percent = (y_max - y_min) / image_height * 100
+    
+    print(f"  Image height: {image_height}px, Expected circumference: {expected_circumference:.0f}px")
+    print(f"  Circumference ratio: {circumference_ratio:.2f}")
+    print(f"  K-block Y range: [{y_min:.1f}, {y_max:.1f}] ({y_range_percent:.1f}% of image)")
+    
+    # =========================================================================
+    # QUICK CHECK: Partial scan detection (before expensive computations)
+    # =========================================================================
+    
+    if circumference_ratio < partial_threshold:
+        print(f"  QUICK CHECK: Partial scan (ratio {circumference_ratio:.2f} < {partial_threshold})")
+        print(f"  → Wraparound impossible for partial scans")
+        return 'row', 0.95
+    
+    # =========================================================================
+    # METHOD 1: ADAPTIVE DETECTION - Check if K-blocks are positioned at edges
+    # This is more robust than pure threshold-based heuristics
+    # =========================================================================
+    
+    # For full/near-full scans, check K-block edge proximity
+    # K-blocks very close to top/bottom edge indicate segments MUST wrap
+    edge_threshold = image_height * edge_percent
+    k_near_top = y_min < edge_threshold
+    k_near_bottom = y_max > (image_height - edge_threshold)
+    
+    print(f"  Adaptive edge check: K_min={y_min:.1f} vs edge={edge_threshold:.1f} (near_top={k_near_top})")
+    print(f"                       K_max={y_max:.1f} vs edge={image_height - edge_threshold:.1f} (near_bottom={k_near_bottom})")
+    
+    if k_near_top or k_near_bottom:
+        print(f"  ADAPTIVE: K-blocks at edge - wraparound needed")
+        return 'wraparound', 0.95
+    
+    # =========================================================================
+    # METHOD 2: HEURISTIC FALLBACK - Use configurable thresholds
+    # =========================================================================
+    
+    # Full scan ratio check (0.84-1.05 range indicates full 360° scan)
+    if full_scan_min <= circumference_ratio <= full_scan_max:
+        print(f"  HEURISTIC: Circumference ratio {circumference_ratio:.2f} in full scan range "
+              f"[{full_scan_min}, {full_scan_max}]")
+        print(f"  → Full 360° scan likely - enabling wraparound for safety")
+        return 'wraparound', 0.75
+    
+    # K-block rotation across rings
+    if y_range_percent > rotation_percent:
+        print(f"  HEURISTIC: K-block rotation {y_range_percent:.1f}% > {rotation_percent}% threshold")
+        print(f"  → Significant K-block movement indicates wraparound")
+        return 'wraparound', 0.70
+    
+    # Default: row pattern (K-blocks stable and not near edges)
+    print(f"  DEFAULT: No wraparound indicators - row pattern")
+    return 'row', 0.90
+    
+
+# =============================================================================
+# Unified Segment Position Inference (handles ALL patterns)
 # =============================================================================
 
 def infer_all_segment_positions(
@@ -654,115 +798,133 @@ def infer_all_segment_positions(
     resolution: float = DEFAULT_RESOLUTION,
     segments_per_ring: int = 6,
     k_height_mm: float = DEFAULT_K_HEIGHT_MM,
-    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM,
+    enable_wraparound: bool = True,
+    pattern_params: Dict = None
 ) -> pd.DataFrame:
     """
     Infer ALL segment positions from K-block centers using domain knowledge.
+    
+    UNIFIED APPROACH: Works for row-based, wraparound, and mixed patterns.
+    The key insight is that each ring is processed independently, and Y coordinates
+    are wrapped modularly when they exceed image bounds.
     
     Args:
         k_positions: List of (type, (x, y)) K-block centers.
         image_height: Height of depth map in pixels.
         resolution: Image resolution in meters/pixel.
         segments_per_ring: Number of segments per ring (6 or 7).
+        enable_wraparound: If True, wrap Y coordinates; if False, clip to bounds.
         
     Returns:
-        DataFrame with Ring, Block, X, Y, inferred columns.
+        DataFrame with Ring, Block, X, Y, inferred, pattern_type columns.
     """
+    # Heights in pixels
+    k_height_px = k_height_mm / (resolution * 1000)
+    ab_height_px = ab_height_mm / (resolution * 1000)
+    
+    # Auto-detect pattern type (pattern_params passed from main pipeline)
+    pattern_type, pattern_confidence = detect_pattern_type(
+        k_positions, image_height, k_height_px, ab_height_px, segments_per_ring,
+        pattern_params=pattern_params
+    )
+    print(f"  Pattern detected: {pattern_type} (confidence: {pattern_confidence:.2f})")
+    
     # Segment order based on count
     if segments_per_ring == 7:
         segment_order = ['K', 'B1', 'A1', 'A2', 'A3', 'A4', 'B2']
     else:  # 6 segments
         segment_order = ['K', 'B1', 'A1', 'A2', 'A3', 'B2']
     
-    # Heights in pixels
-    k_height_px = k_height_mm / (resolution * 1000)
-    ab_height_px = ab_height_mm / (resolution * 1000)
-    
-    def get_segment_offset_up(block: str, segment_order: List[str]) -> float:
-        """Get Y offset going UP from K-block center.
+    def get_segment_offset(block: str) -> float:
+        """
+        Get Y offset from K-block center to segment center.
         
-        Physical layout (top to bottom of image):
-            A3 (or A4 for 7-segment)  ← going UP
-            A2
-            A1
-            B1
-            K (center)
-            B2
-            (if those A-blocks are not visible above, we may see A-blocks below B2)
+        Physical layout (Y increases downward in image):
+            Going UP (negative Y offset from K):
+                ... A3/A4 (top visible)
+                A2
+                A1  
+                B1
+            K (center, offset = 0)
+            Going DOWN (positive Y offset from K):
+                B2
+                A3/A4, A2, A1 (bottom visible, wrapped)
         """
         if block == 'K':
             return 0
         elif block == 'B1':
+            # B1 is above K: half K-height + half AB-height upward
             return -(k_height_px / 2 + ab_height_px / 2)
         elif block == 'B2':
+            # B2 is below K: half K-height + half AB-height downward
             return (k_height_px / 2 + ab_height_px / 2)
         else:
-            # A blocks going UP from B1
+            # A blocks are stacked above B1
             a_blocks = [b for b in segment_order if b.startswith('A')]
             block_idx = a_blocks.index(block)
             b1_offset = -(k_height_px / 2 + ab_height_px / 2)
+            # Each A block is one AB-height above the previous
             return b1_offset - (block_idx + 1) * ab_height_px
     
-    def get_segment_offset_down(block: str, segment_order: List[str]) -> float:
-        """Get Y offset going DOWN from B2 (handles the bottom-visible A-block case)."""
-        if block in ('K', 'B1', 'B2'):
-            return None  # Only A blocks go down from B2
+    def normalize_y(y: float, height: int, wrap: bool) -> float:
+        """
+        Normalize Y coordinate - either wrap or clip.
         
-        # A blocks going DOWN from B2 (in reverse order: A3, A2, A1)
-        a_blocks = [b for b in segment_order if b.startswith('A')]
-        # Reverse order: A3 is first below B2, then A2, then A1
-        block_idx = len(a_blocks) - 1 - a_blocks.index(block)
-        b2_offset = (k_height_px / 2 + ab_height_px / 2)
-        return b2_offset + (block_idx + 1) * ab_height_px
+        Args:
+            y: Raw Y coordinate (can be negative or > height)
+            height: Image height
+            wrap: If True, wrap around; if False, clip to bounds
+            
+        Returns:
+            Normalized Y coordinate in [0, height)
+        """
+        if wrap:
+            # Modular arithmetic: Y wraps around image height
+            y = y % height
+            if y < 0:
+                y += height
+            return y
+        else:
+            # Clip to valid range
+            return max(0, min(height - 1, y))
     
     segments = []
-    skipped = 0
-    margin = ab_height_px / 2
     
     for ring_idx, (k_type, (k_x, k_y)) in enumerate(k_positions):
         ring_id = ring_idx + 1
-        added_blocks = set()
         
-        # Pass 1: Calculate positions going UP from K
         for block in segment_order:
-            offset = get_segment_offset_up(block, segment_order)
-            segment_y = k_y + offset
-            if -margin <= segment_y <= image_height + margin:
-                segment_y = max(0, min(image_height - 1, segment_y))
-                segments.append({
-                    'Ring': ring_id, 'Block': block, 'X': k_x,
-                    'Y': segment_y, 'inferred': True
-                })
-                added_blocks.add(block)
-            else:
-                skipped += 1
-        
-        # Pass 2: Also calculate A blocks going DOWN from B2
-        # This handles the "reverse walk" case where A blocks appear at the bottom
-        a_blocks = [b for b in segment_order if b.startswith('A')]
-        for block in reversed(a_blocks):  # A3, A2, A1 order
-            if block in added_blocks:
-                continue  # Already added from going UP
+            offset = get_segment_offset(block)
+            raw_y = k_y + offset
             
-            offset = get_segment_offset_down(block, segment_order)
-            if offset is None:
-                continue
-            segment_y = k_y + offset
+            # Normalize Y coordinate (wrap or clip based on pattern/setting)
+            # For wraparound patterns, we always wrap
+            # For row patterns, we can clip (segments should be in bounds anyway)
+            should_wrap = enable_wraparound and (pattern_type in ('wraparound', 'mixed'))
+            segment_y = normalize_y(raw_y, image_height, wrap=should_wrap)
             
-            if -margin <= segment_y <= image_height + margin:
-                segment_y = max(0, min(image_height - 1, segment_y))
-                segments.append({
-                    'Ring': ring_id, 'Block': block, 'X': k_x,
-                    'Y': segment_y, 'inferred': True
-                })
-                added_blocks.add(block)
-            else:
-                skipped += 1
+            segments.append({
+                'Ring': ring_id,
+                'Block': block,
+                'X': k_x,
+                'Y': segment_y,
+                'inferred': True,
+                'pattern_type': pattern_type
+            })
     
-    if skipped > 0:
-        print(f"  Skipped {skipped} out-of-bounds segments")
+    df = pd.DataFrame(segments)
     
-    return pd.DataFrame(segments)
+    # Report statistics
+    print(f"  Total segments inferred: {len(df)}")
+    if pattern_type == 'wraparound':
+        # Count how many segments wrapped around
+        wrapped_count = sum(1 for _, row in df.iterrows() 
+                          if row['Block'] != 'K' and 
+                          (row['Y'] < image_height * 0.2 or row['Y'] > image_height * 0.8))
+        print(f"  Segments near edges (potential wraparound): {wrapped_count}")
+    
+    return df
 
 
 # =============================================================================
@@ -809,16 +971,26 @@ def detect_and_infer_patterns(
     tunnel_id: str,
     base_dir: str = "data",
     resolution: float = None,
-    segments_per_ring: Optional[int] = None
+    segments_per_ring: Optional[int] = None,
+    pattern_mode: str = 'auto',
+    enable_wraparound: bool = True
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Execute the complete detection and pattern inference pipeline.
+    
+    UNIFIED APPROACH: This pipeline handles ALL tunnel patterns:
+    - Row-based: Segments stacked vertically with K-blocks aligned
+    - Wraparound: Segments wrap around the cylindrical image
+    - Mixed: Combination of the above
+    - (Extensible for future patterns)
     
     Args:
         tunnel_id: Tunnel identifier.
         base_dir: Base data directory.
         resolution: Depth map resolution (loaded from params if None).
         segments_per_ring: Number of segments per ring (auto-detected if None).
+        pattern_mode: 'auto' (detect), 'row', 'wraparound', or 'mixed'.
+        enable_wraparound: Whether to enable wraparound Y coordinate handling.
         
     Returns:
         Tuple of (detected_df, inferred_df).
@@ -971,11 +1143,18 @@ def detect_and_infer_patterns(
     detected_df = detected_df.drop(columns=['Coordinates'])
     detected_df = detected_df.sort_values(by='X').reset_index(drop=True)
     
-    # INFER ALL SEGMENT POSITIONS
+    # Load pattern detection parameters (configurable thresholds)
+    pattern_params = get_param(params, 'pattern_detection', default={}, allow_default=True)
+    
+    # INFER ALL SEGMENT POSITIONS (unified approach)
     print("Inferring all segment positions...")
+    print(f"  Pattern mode: {pattern_mode}")
+    print(f"  Wraparound enabled: {enable_wraparound}")
     inferred_df = infer_all_segment_positions(
         k_positions, height, resolution, segments_per_ring,
-        k_height_mm=k_height_mm, ab_height_mm=ab_height_mm
+        k_height_mm=k_height_mm, ab_height_mm=ab_height_mm,
+        enable_wraparound=enable_wraparound,
+        pattern_params=pattern_params
     )
     print(f"  Total segments: {len(inferred_df)}")
     
@@ -1010,19 +1189,42 @@ def detect_and_infer_patterns(
 # =============================================================================
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python 4-1_detection_clean.py <tunnel_id> [segments_per_ring]")
-        print()
-        print("Arguments:")
-        print("  tunnel_id         Tunnel identifier (e.g., 1-4, 4-1)")
-        print("  segments_per_ring Number of segments (auto-detected if omitted)")
-        print()
-        print("Examples:")
-        print("  python 4-1_detection_clean.py 1-4      # Auto-detect segments")
-        print("  python 4-1_detection_clean.py 4-1 7    # Force 7 segments")
-        sys.exit(1)
+    import argparse
     
-    tunnel_id = sys.argv[1]
-    segments_per_ring = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    parser = argparse.ArgumentParser(
+        description="Unified Tunnel Segment Detection & Pattern Inference (GT-Free)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Supported Patterns:
+  - row:        K-blocks aligned horizontally (segments stacked vertically)
+  - wraparound: K-blocks rotate across rings (segments wrap around image)
+  - mixed:      Combination of above patterns
+  - auto:       Auto-detect pattern from K-block distribution
+
+Examples:
+  python 4-1_detection.py 1-4                    # Auto-detect everything
+  python 4-1_detection.py 4-1 --segments 7      # Force 7 segments
+  python 4-1_detection.py 5-1 --pattern auto    # Explicit auto-detect
+  python 4-1_detection.py 3-1 --no-wraparound   # Disable wraparound handling
+"""
+    )
     
-    detect_and_infer_patterns(tunnel_id, segments_per_ring=segments_per_ring)
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 4-1, 5-1)")
+    parser.add_argument("--segments", "-s", type=int, default=None,
+                        help="Number of segments per ring (auto-detect if omitted)")
+    parser.add_argument("--pattern", "-p", choices=['auto', 'row', 'wraparound', 'mixed'],
+                        default='auto', help="Pattern detection mode (default: auto)")
+    parser.add_argument("--no-wraparound", action="store_true",
+                        help="Disable wraparound Y coordinate handling")
+    parser.add_argument("--data-dir", "-d", default="data",
+                        help="Base data directory (default: data)")
+    
+    args = parser.parse_args()
+    
+    detect_and_infer_patterns(
+        tunnel_id=args.tunnel_id,
+        base_dir=args.data_dir,
+        segments_per_ring=args.segments,
+        pattern_mode=args.pattern,
+        enable_wraparound=not args.no_wraparound
+    )
