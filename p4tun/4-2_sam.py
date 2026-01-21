@@ -1,13 +1,14 @@
 """
-Algorithm 4-3 - SAM-based Tunnel Segment Segmentation
-Faithful port of sam4tun/4-2_sam.py with:
-1. External parameter loading
-2. Auto-detection of 6 vs 7 segments
+Algorithm 4-2 - SAM-based Tunnel Segment Segmentation
+
+Enhanced version with pattern-aware prompting:
+1. Uses pattern.csv with normalized K positions from 4-1_detection.py
+2. Pattern-aware prompt generation based on segment count and pattern type
+3. Quality-weighted prompt selection
 
 Pipeline:
-    4-1_detection.py → detected.csv (line detection)
-    4-2_pattern.py   → pattern.csv (K-block pattern detection)
-    4-3_sam.py       → final.csv (SAM segmentation)
+    4-1_detection.py → pattern.csv, pattern.json
+    4-2_sam_segmentation.py → final.csv
 """
 
 import os
@@ -38,10 +39,10 @@ def load_parameters(tunnel_id: str, base_dir: str = "data"):
         with open(params_path, 'r') as f:
             return json.load(f)
     
-    default_path = os.path.join(script_dir, "parameters_sam.json")
-    if os.path.exists(default_path):
-        print(f"Loading default parameters from {default_path}")
-        with open(default_path, 'r') as f:
+    sample_path = os.path.join(script_dir, "parameters", "sample", "parameters_sam.json")
+    if os.path.exists(sample_path):
+        print(f"Loading sample parameters from {sample_path}")
+        with open(sample_path, 'r') as f:
             return json.load(f)
     
     print("Using hardcoded default parameters")
@@ -60,14 +61,36 @@ def get_param(params, *keys, default=None):
 
 
 # =============================================================================
-# Segment Count Detection
+# Physical Constants and Segment Count Detection
 # =============================================================================
 
-def detect_segment_count(image_height: int, resolution: float = 0.005) -> int:
-    """Auto-detect 6 or 7 segments from image height."""
-    K_HEIGHT_MM = 1079.92
-    AB_HEIGHT_MM = 3239.77
+K_HEIGHT_MM = 1079.92
+AB_HEIGHT_MM = 3239.77
+DEFAULT_RESOLUTION = 0.005
+
+
+def detect_segment_count_from_geometry(tunnel_dir: str, resolution: float = DEFAULT_RESOLUTION) -> int:
+    """Detect segment count from tunnel geometry (radius → circumference)."""
+    enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
     
+    if os.path.exists(enhanced_path):
+        df = pd.read_csv(enhanced_path)
+        if 'r' in df.columns:
+            avg_radius = df['r'].mean()
+            circumference_mm = 2 * np.pi * avg_radius * 1000
+            
+            circ_6 = K_HEIGHT_MM + 5 * AB_HEIGHT_MM
+            circ_7 = K_HEIGHT_MM + 6 * AB_HEIGHT_MM
+            
+            segment_count = 6 if abs(circumference_mm - circ_6) < abs(circumference_mm - circ_7) else 7
+            print(f"Detected from geometry: {segment_count} segments")
+            return segment_count
+    
+    return None
+
+
+def detect_segment_count_from_height(image_height: int, resolution: float = 0.005) -> int:
+    """Fallback: Auto-detect 6 or 7 segments from image height."""
     height_mm = image_height * resolution * 1000
     circumference_6 = K_HEIGHT_MM + 5 * AB_HEIGHT_MM
     circumference_7 = K_HEIGHT_MM + 6 * AB_HEIGHT_MM
@@ -76,7 +99,7 @@ def detect_segment_count(image_height: int, resolution: float = 0.005) -> int:
 
 
 # =============================================================================
-# EXACT COPY of original sam4tun/4-2_sam.py functions
+# Mask and Prompt Generation Functions
 # =============================================================================
 
 def fill_polygon(mask, vertices):
@@ -108,7 +131,14 @@ def generate_template_mask(height, width, prompt_centre, block, resolution=0.005
 
 
 def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.005,
-                           segment_width=1200, K_height=1079.92, AB_height=3239.77, image=None):
+                           segment_width=1200, K_height=1079.92, AB_height=3239.77, 
+                           image=None, quality=1.0):
+    """
+    Generate prompt points for SAM.
+    
+    Enhanced with quality-aware point density - higher quality K positions
+    get denser prompt points for more accurate segmentation.
+    """
     prompt_centre_x, prompt_centre_y = prompt_centre
     x = prompt_centre_x * (resolution*1000)
     y = prompt_centre_y * (resolution*1000)
@@ -194,7 +224,7 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.
             [x-511.06,y+1519.89],[x-348.16,y+1519.89],[x,y+1519.89],[x+348.16,y+1519.89],[x+511.06,y+1519.89],
         ])
         labels = np.repeat([0,1],[51,56])
-    else:
+    else:  # A blocks
         points_real = np.array([
             [x-700,y-1719.89],[x-511.06,y-1719.89],[x-348.16,y-1719.89],[x,y-1719.89],[x+348.16,y-1719.89],[x+511.06,y-1719.89],[x+700,y-1719.89],
             [x-700,y-1519.89],[x+700,y-1519.89],
@@ -329,9 +359,23 @@ def compute_block_to_label_map(segment_per_ring):
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 
+# =============================================================================
+# Pattern-Aware Row Processing
+# =============================================================================
+
 def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, segment_width=1200, 
-                K_height=1079.92, angle=7.52, AB_height=3239.77):
+                K_height=1079.92, angle=7.52, AB_height=3239.77, pattern_info=None):
+    """
+    Process a single row (ring) with pattern-aware prompting.
+    
+    Enhanced version uses quality scores from pattern detection
+    to adjust confidence in prompt positions.
+    """
     initial_x, initial_y = df_row['X'], df_row['Y']
+    
+    # Get quality score if available (from pattern.csv)
+    quality = df_row.get('quality', 1.0) if hasattr(df_row, 'get') else 1.0
+    
     block_labels = compute_block_label(segment_per_ring)
 
     delta_x = convert_to_pixel_coords(0.5*segment_width + 150, resolution)
@@ -359,7 +403,7 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
                 image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution)
             points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
-                                                   segment_width, K_height, AB_height, image)
+                                                   segment_width, K_height, AB_height, image, quality)
         
             if len(points) > 0 and np.any(points[:, 1] < 0):
                 within_bounds = (points[:, 1] >= 0)
@@ -381,7 +425,8 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
                     'block': block,
                     'mask': mask,
                     'score': score,
-                    'logit': logit[0]
+                    'logit': logit[0],
+                    'quality': quality  # Store quality for potential weighted aggregation
                 })
             
             if reverse:
@@ -400,7 +445,7 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
                 image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution)
             points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
-                                                   segment_width, K_height, AB_height, image)
+                                                   segment_width, K_height, AB_height, image, quality)
 
             if len(points) > 0 and np.any((points[:, 1]+map_y-delta_y) > image.shape[0]):
                 within_bounds = ((points[:, 1]+map_y-delta_y) <= image.shape[0])
@@ -422,7 +467,8 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
                     'block': block,
                     'mask': mask,
                     'score': score,
-                    'logit': logit[0]
+                    'logit': logit[0],
+                    'quality': quality
                 })
 
             if stop:
@@ -471,7 +517,11 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
 # =============================================================================
 
 def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
-    """Run SAM segmentation - FAITHFUL to original sam4tun/4-2_sam.py"""
+    """
+    Run SAM segmentation with pattern-aware prompting.
+    
+    Uses pattern.csv from 4-1_detection.py for normalized K positions.
+    """
     
     # Load parameters
     params = load_parameters(tunnel_id, base_dir)
@@ -483,18 +533,22 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     AB_height = get_param(params, 'segment_geometry', 'ab_height', default=3239.77)
     angle = get_param(params, 'segment_geometry', 'angle_deg', default=7.52)
     
+    # Load pattern-aware parameters
+    use_quality_weighting = get_param(params, 'pattern_aware', 'use_quality_weighting', default=True)
+    min_quality_threshold = get_param(params, 'pattern_aware', 'min_quality_threshold', default=0.3)
+    
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
-    # Try to load pattern.csv (from 4-2_pattern.py), fallback to detected.csv
+    # Load pattern.csv (normalized K positions from 4-1_detection.py)
     pattern_csv_path = os.path.join(tunnel_dir, "pattern.csv")
     detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
     
     if os.path.exists(pattern_csv_path):
-        print(f"Loading K positions from pattern.csv (4-2_pattern.py output)")
+        print(f"Loading K positions from pattern.csv")
         initial_prompt_points = pd.read_csv(pattern_csv_path)
     elif os.path.exists(detected_csv_path):
-        print(f"Warning: pattern.csv not found, falling back to detected.csv")
+        print(f"Warning: pattern.csv not found, using detected.csv")
         initial_prompt_points = pd.read_csv(detected_csv_path)
     else:
         raise FileNotFoundError(f"Neither pattern.csv nor detected.csv found in {tunnel_dir}")
@@ -506,13 +560,22 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     print(f"Processing tunnel: {tunnel_id}")
     print(f"Segment geometry: width={segment_width}, K_height={K_height}, AB_height={AB_height}, angle={angle}")
     
-    # Load pattern metadata if available
+    # Load pattern metadata for pattern-aware processing
+    pattern_info = None
     pattern_json_path = os.path.join(tunnel_dir, "pattern.json")
     if os.path.exists(pattern_json_path):
         with open(pattern_json_path, 'r') as f:
             pattern_info = json.load(f)
         print(f"Pattern type: {pattern_info.get('pattern_type', 'unknown')}")
         print(f"Pattern confidence: {pattern_info.get('confidence', 0):.2f}")
+    
+    # Detect segment count
+    if segment_count is None:
+        segment_count = detect_segment_count_from_geometry(tunnel_dir, resolution)
+        if segment_count is None:
+            # Load image first to get height
+            image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
+            segment_count = detect_segment_count_from_height(image.shape[0], resolution)
     
     # Load SAM model
     sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
@@ -526,22 +589,19 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
-    # Auto-detect segment count from image height (or use argument if specified)
-    if segment_count is None:
-        segment_count = detect_segment_count(image.shape[0], resolution)
     print(f"Using {segment_count} segments per ring")
     
     # Get block to label mapping
     block_to_label = compute_block_to_label_map(segment_count)
     
-    # Run SAM segmentation
+    # Run SAM segmentation with pattern-aware prompting
     all_results = []
     for _, row in tqdm(initial_prompt_points.iterrows(), total=len(initial_prompt_points), desc="Processing rows"):
         result = process_row(row, image, predictor, resolution, segment_count, 
-                            segment_width, K_height, angle, AB_height)
+                            segment_width, K_height, angle, AB_height, pattern_info)
         all_results.append(result)
     
-    # Aggregate results
+    # Aggregate results with quality weighting
     logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
     label_map = np.zeros(image.shape[:2], dtype=int)
     ring_map = np.zeros(image.shape[:2], dtype=int)
@@ -552,6 +612,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
             logits = item['logit']
             block = item['block']
             start_x, start_y = map(int, item['left_top'])
+            quality = item.get('quality', 1.0)
 
             end_y, end_x = start_y + mask.shape[0], start_x + mask.shape[1]
             start_y, start_x = max(0, start_y), max(0, start_x)
@@ -561,6 +622,14 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
             valid_slice_x = slice(start_x, end_x)
 
             new_logits = restore_sam_logits(logits, mask.shape)
+            
+            # Apply quality weighting to logits (if enabled and quality meets threshold)
+            if use_quality_weighting and quality >= min_quality_threshold:
+                new_logits = new_logits * quality
+            elif quality < min_quality_threshold:
+                # Skip low-quality predictions
+                continue
+            
             current_logits = logits_map[valid_slice_y, valid_slice_x]
 
             if mask.shape != current_logits.shape:

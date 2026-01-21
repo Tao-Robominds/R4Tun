@@ -1,5 +1,5 @@
 {
-    "description": "Hough line detection and segment pattern inference parameters for Tunnel 1-4",
+    "description": "Hough line detection parameters for Tunnel 1-4 (6-segment)",
     "physical_constants": {
         "ring_spacing_m": 1.2,
         "k_height_mm": 1079.92,
@@ -36,38 +36,14 @@
         "filter_rings": 5
     },
     "line_processing": {
-        "merge_distance_threshold": 3.0,
-        "intersection_merge_threshold": 6,
-        "pattern_tolerance": 10,
-        "horizontal_pattern_tolerance": 50
+        "merge_distance_threshold": 3.0
     },
-    "k_block_detection": {
-        "description": "Dynamic K-block position detection via V-pair inverse mapping",
-        "method": "v_pair_inverse_mapping",
-        "algorithm": {
-            "step1": "Detect V-pairs (oblique line pairs with K_HEIGHT spacing)",
-            "step2": "V-pairs appear at ALTERNATE K position (where K is NOT for that ring)",
-            "step3": "Cluster V-pair midpoints into distinct positions",
-            "step4": "Apply correction: K_position = V_midpoint + AB_HEIGHT/2",
-            "step5": "Classify rings: V-pair near template1 → K at pos2 (inverse mapping)",
-            "step6": "Infer alternation pattern from detected rings (even→pos_X, odd→pos_Y)",
-            "step7": "Propagate to undetected rings using inferred pattern"
-        },
-        "parameters": {
-            "v_pair_spacing_tolerance_px": 80,
-            "offset_correction_px": 324.0,
-            "offset_formula": "AB_HEIGHT / 2",
-            "min_detected_rings_for_pattern": 3,
-            "position_cluster_threshold_px": 200,
-            "oblique_angle_range_deg": [6, 9],
-            "line_x_tolerance_px": 30
-        },
-        "performance": {
-            "tunnel_2-2_error_px": 2.2,
-            "tunnel_2-2_error_pct": 0.08,
-            "tunnel_1-4_error_px": 63.5,
-            "tunnel_1-4_error_pct": 2.42
-        },
-        "notes": "Key insight: V-pairs are detected at the ALTERNATE K position due to segment boundary visibility patterns. Uses only physical constants (K_HEIGHT, AB_HEIGHT, resolution). Works best for 6-segment alternating tunnels."
+    "pattern_detection": {
+        "_note": "Classification thresholds only - core algorithm is geometry-based",
+        "v_pair_spacing_tolerance_px": 60,
+        "alternation_tolerance_px": 100,
+        "constant_spread_threshold_px": 100,
+        "cluster_separation_threshold_7seg_px": 300,
+        "confidence_scaling_factor": 200
     }
 }

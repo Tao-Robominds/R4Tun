@@ -8,5 +8,10 @@
     },
     "image": {
         "resolution": 0.005
+    },
+    "pattern_aware": {
+        "_note": "Pattern-aware prompting parameters",
+        "use_quality_weighting": true,
+        "min_quality_threshold": 0.3
     }
 }

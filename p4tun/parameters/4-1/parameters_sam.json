@@ -1,12 +1,17 @@
 {
-    "description": "SAM-based tunnel segment segmentation parameters",
+    "description": "SAM-based tunnel segment segmentation parameters for Tunnel 4-1 (7-segment)",
     "segment_geometry": {
-        "segment_width": 1250,
-        "k_height": 1150,
+        "segment_width": 1250.0,
+        "k_height": 1150.0,
         "ab_height": 3239.77,
         "angle_deg": 7.52
     },
     "image": {
         "resolution": 0.005
+    },
+    "pattern_aware": {
+        "_note": "Pattern-aware prompting parameters",
+        "use_quality_weighting": true,
+        "min_quality_threshold": 0.3
     }
 }

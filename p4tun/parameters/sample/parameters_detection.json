@@ -42,10 +42,16 @@
     },
     
     "line_processing": {
-        "merge_distance_threshold": 3,
-        "intersection_merge_threshold": 6,
-        "pattern_tolerance": 10,
-        "horizontal_pattern_tolerance": 50
+        "merge_distance_threshold": 3
+    },
+    
+    "pattern_detection": {
+        "_note": "Classification thresholds only - core algorithm is geometry-based",
+        "v_pair_spacing_tolerance_px": 60,
+        "alternation_tolerance_px": 100,
+        "constant_spread_threshold_px": 100,
+        "cluster_separation_threshold_7seg_px": 300,
+        "confidence_scaling_factor": 200
     }
 }
 
