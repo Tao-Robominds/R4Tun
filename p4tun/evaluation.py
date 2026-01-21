@@ -11,11 +11,12 @@ This module evaluates tunnel segmentation quality. It supports two modes:
    - Input: final.csv with 'pred' column (or predictions.csv)
    - Outputs: Class distribution, coverage analysis
 
-Segment count (6 or 7) is auto-detected from depth map image height.
+Segment count (6 or 7) is auto-detected from tunnel geometry or depth map image height.
 """
 
 import os
 import sys
+import json
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -25,7 +26,54 @@ from sklearn.metrics import accuracy_score, f1_score, jaccard_score, confusion_m
 
 
 # =============================================================================
-# Constants
+# Default Constants (can be overridden via parameters JSON)
+# =============================================================================
+
+DEFAULT_K_HEIGHT_MM = 1079.92
+DEFAULT_AB_HEIGHT_MM = 3239.77
+DEFAULT_RESOLUTION = 0.005
+
+
+# =============================================================================
+# Parameter Loading
+# =============================================================================
+
+def load_parameters(tunnel_id: str, base_dir: str = "data") -> dict:
+    """
+    Load parameters from JSON file.
+    
+    Tries to load physical constants from detection parameters.
+    """
+    script_dir = os.path.dirname(__file__)
+    
+    # Try tunnel-specific detection parameters (has physical constants)
+    params_path = os.path.join(script_dir, "parameters", tunnel_id, "parameters_detection.json")
+    if os.path.exists(params_path):
+        with open(params_path, 'r') as f:
+            return json.load(f)
+    
+    # Try sample parameters
+    sample_path = os.path.join(script_dir, "parameters", "sample", "parameters_detection.json")
+    if os.path.exists(sample_path):
+        with open(sample_path, 'r') as f:
+            return json.load(f)
+    
+    return {}
+
+
+def get_param(params: dict, *keys, default=None):
+    """Get nested parameter value."""
+    value = params
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return default
+    return value
+
+
+# =============================================================================
+# Class Names
 # =============================================================================
 
 # Class names for different segment counts
@@ -55,9 +103,46 @@ CLASS_NAMES_7 = {
 # Segment Count Detection
 # =============================================================================
 
-def detect_segment_count(tunnel_dir: str) -> int:
+def detect_segment_count_from_geometry(
+    tunnel_dir: str,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> Optional[int]:
     """
-    Auto-detect segment count from depth map image height.
+    Detect segment count from tunnel geometry (radius → circumference).
+    
+    Uses the relationship: circumference = 2π × radius
+    This is the preferred method as it uses actual point cloud geometry.
+    """
+    enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
+    
+    if os.path.exists(enhanced_path):
+        df = pd.read_csv(enhanced_path, usecols=['r'] if 'r' in pd.read_csv(enhanced_path, nrows=0).columns else None)
+        if df is not None and 'r' in df.columns:
+            avg_radius = df['r'].mean()
+            circumference_mm = 2 * np.pi * avg_radius * 1000
+            
+            circ_6 = k_height_mm + 5 * ab_height_mm
+            circ_7 = k_height_mm + 6 * ab_height_mm
+            
+            dist_6 = abs(circumference_mm - circ_6)
+            dist_7 = abs(circumference_mm - circ_7)
+            segment_count = 6 if dist_6 < dist_7 else 7
+            
+            print(f"Detected from geometry: {segment_count} segments (radius={avg_radius:.3f}m)")
+            return segment_count
+    
+    return None
+
+
+def detect_segment_count_from_height(
+    tunnel_dir: str,
+    resolution: float = DEFAULT_RESOLUTION,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> int:
+    """
+    Fallback: Auto-detect segment count from depth map image height.
     
     Compares image height to expected circumference:
     - 6 segments: K + 5×AB = 17278.77 mm
@@ -65,29 +150,48 @@ def detect_segment_count(tunnel_dir: str) -> int:
     """
     import cv2
     
-    K_HEIGHT_MM = 1079.92
-    AB_HEIGHT_MM = 3239.77
-    RESOLUTION = 0.005
-    
     depth_map_path = os.path.join(tunnel_dir, "depth_map.png")
     if os.path.exists(depth_map_path):
         img = cv2.imread(depth_map_path)
         if img is not None:
             image_height = img.shape[0]
-            height_mm = image_height * RESOLUTION * 1000
+            height_mm = image_height * resolution * 1000
             
-            circumference_6 = K_HEIGHT_MM + 5 * AB_HEIGHT_MM  # 17278.77
-            circumference_7 = K_HEIGHT_MM + 6 * AB_HEIGHT_MM  # 20518.54
+            circumference_6 = k_height_mm + 5 * ab_height_mm
+            circumference_7 = k_height_mm + 6 * ab_height_mm
             
             dist_6 = abs(height_mm - circumference_6)
             dist_7 = abs(height_mm - circumference_7)
             
             segment_count = 6 if dist_6 < dist_7 else 7
-            print(f"Auto-detected {segment_count} segments (height={image_height}px, {height_mm:.0f}mm)")
+            print(f"Detected from image height: {segment_count} segments (height={image_height}px, {height_mm:.0f}mm)")
             return segment_count
     
     print("Warning: Could not load depth map, defaulting to 6 segments")
     return 6
+
+
+def detect_segment_count(
+    tunnel_dir: str,
+    resolution: float = DEFAULT_RESOLUTION,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> int:
+    """
+    Auto-detect segment count using best available method.
+    
+    Priority:
+    1. Geometry-based (from enhanced.csv radius)
+    2. Image height-based (from depth_map.png)
+    """
+    # Try geometry-based first
+    segment_count = detect_segment_count_from_geometry(tunnel_dir, k_height_mm, ab_height_mm)
+    
+    if segment_count is not None:
+        return segment_count
+    
+    # Fall back to image height
+    return detect_segment_count_from_height(tunnel_dir, resolution, k_height_mm, ab_height_mm)
 
 
 def get_class_names(segment_count: int) -> Dict[int, str]:
@@ -396,9 +500,15 @@ def evaluate(
     output_dir = os.path.join(tunnel_dir, "evaluation")
     os.makedirs(output_dir, exist_ok=True)
     
+    # Load parameters for physical constants
+    params = load_parameters(tunnel_id, base_dir)
+    resolution = get_param(params, 'physical_constants', 'resolution', default=DEFAULT_RESOLUTION)
+    k_height_mm = get_param(params, 'physical_constants', 'k_height_mm', default=DEFAULT_K_HEIGHT_MM)
+    ab_height_mm = get_param(params, 'physical_constants', 'ab_height_mm', default=DEFAULT_AB_HEIGHT_MM)
+    
     # Detect segment count
     if segment_count is None:
-        segment_count = detect_segment_count(tunnel_dir)
+        segment_count = detect_segment_count(tunnel_dir, resolution, k_height_mm, ab_height_mm)
     else:
         print(f"Using specified segment count: {segment_count}")
     
