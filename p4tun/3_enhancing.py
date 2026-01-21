@@ -206,7 +206,9 @@ def compute_midpoints(
     neighbor_indices: np.ndarray,
     distances: np.ndarray,
     target_distance: float,
-    curvature_threshold: float
+    curvature_threshold: float,
+    distance_tolerance_low: float = 0.9,
+    distance_tolerance_high: float = 2.0
 ) -> np.ndarray:
     """
     Compute midpoints between neighboring point pairs.
@@ -219,6 +221,8 @@ def compute_midpoints(
         distances: (N, K) array of distances to neighbors.
         target_distance: Target spacing between points.
         curvature_threshold: Maximum curvature difference for interpolation.
+        distance_tolerance_low: Lower multiplier for target distance (default 0.9).
+        distance_tolerance_high: Upper multiplier for target distance (default 2.0).
         
     Returns:
         Array of new midpoint coordinates.
@@ -228,8 +232,8 @@ def compute_midpoints(
     new_points = np.zeros((max_new, 5), dtype=np.float64)
     count = 0
     
-    dist_min = 0.9 * target_distance  # DEFAULT_DISTANCE_TOLERANCE_LOW
-    dist_max = 2.0 * target_distance  # DEFAULT_DISTANCE_TOLERANCE_HIGH
+    dist_min = distance_tolerance_low * target_distance
+    dist_max = distance_tolerance_high * target_distance
     
     for i in prange(n_points):
         for j in range(1, neighbor_indices.shape[1]):
@@ -292,7 +296,9 @@ def upsample_surface(
     curvature_threshold: float = DEFAULT_CURVATURE_THRESHOLD,
     num_neighbors: int = DEFAULT_UPSAMPLING_NEIGHBORS,
     min_new_point_distance_factor: float = DEFAULT_MIN_NEW_POINT_DISTANCE_FACTOR,
-    radius_filter_factor: float = DEFAULT_RADIUS_FILTER_FACTOR
+    radius_filter_factor: float = DEFAULT_RADIUS_FILTER_FACTOR,
+    distance_tolerance_low: float = DEFAULT_DISTANCE_TOLERANCE_LOW,
+    distance_tolerance_high: float = DEFAULT_DISTANCE_TOLERANCE_HIGH
 ) -> pd.DataFrame:
     """
     Upsample surface by inserting midpoints between neighboring points.
@@ -302,6 +308,10 @@ def upsample_surface(
         target_distance: Target spacing between points.
         curvature_threshold: Maximum curvature difference for interpolation.
         num_neighbors: Number of neighbors to consider.
+        min_new_point_distance_factor: Minimum distance from existing points.
+        radius_filter_factor: Factor for removing clustered new points.
+        distance_tolerance_low: Lower multiplier for target distance (default 0.9).
+        distance_tolerance_high: Upper multiplier for target distance (default 2.0).
         
     Returns:
         DataFrame of new upsampled points.
@@ -316,7 +326,10 @@ def upsample_surface(
     distances, indices = tree.query(coords_2d, k=min(num_neighbors + 1, len(points)))
     
     print('Computing midpoints...')
-    new_points = compute_midpoints(points, indices, distances, target_distance, curvature_threshold)
+    new_points = compute_midpoints(
+        points, indices, distances, target_distance, curvature_threshold,
+        distance_tolerance_low, distance_tolerance_high
+    )
     
     print('Filtering excess points...')
     # Remove points too close to existing points
@@ -362,7 +375,9 @@ def progressive_upsample(
     curvature_threshold: float = DEFAULT_CURVATURE_THRESHOLD,
     upsampling_neighbors: int = DEFAULT_UPSAMPLING_NEIGHBORS,
     min_new_point_distance_factor: float = DEFAULT_MIN_NEW_POINT_DISTANCE_FACTOR,
-    radius_filter_factor: float = DEFAULT_RADIUS_FILTER_FACTOR
+    radius_filter_factor: float = DEFAULT_RADIUS_FILTER_FACTOR,
+    distance_tolerance_low: float = DEFAULT_DISTANCE_TOLERANCE_LOW,
+    distance_tolerance_high: float = DEFAULT_DISTANCE_TOLERANCE_HIGH
 ) -> pd.DataFrame:
     """
     Progressively upsample surface at multiple resolutions.
@@ -374,6 +389,8 @@ def progressive_upsample(
         upsampling_neighbors: Neighbors to consider for midpoint candidates.
         min_new_point_distance_factor: Minimum distance from existing points.
         radius_filter_factor: Factor for removing clustered new points.
+        distance_tolerance_low: Lower multiplier for target distance (default 0.9).
+        distance_tolerance_high: Upper multiplier for target distance (default 2.0).
         
     Returns:
         DataFrame with original and all upsampled points.
@@ -389,7 +406,9 @@ def progressive_upsample(
             curvature_threshold=curvature_threshold,
             num_neighbors=upsampling_neighbors,
             min_new_point_distance_factor=min_new_point_distance_factor,
-            radius_filter_factor=radius_filter_factor
+            radius_filter_factor=radius_filter_factor,
+            distance_tolerance_low=distance_tolerance_low,
+            distance_tolerance_high=distance_tolerance_high
         )
         result_df = pd.concat([result_df, new_points], ignore_index=False)
     
@@ -773,6 +792,8 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     upsampling_neighbors = get_param(params, 'upsampling', 'upsampling_neighbors', default=DEFAULT_UPSAMPLING_NEIGHBORS, allow_default=allow_defaults)
     min_new_point_distance_factor = get_param(params, 'upsampling', 'min_new_point_distance_factor', default=DEFAULT_MIN_NEW_POINT_DISTANCE_FACTOR, allow_default=allow_defaults)
     radius_filter_factor = get_param(params, 'upsampling', 'radius_filter_factor', default=DEFAULT_RADIUS_FILTER_FACTOR, allow_default=allow_defaults)
+    distance_tolerance_low = get_param(params, 'upsampling', 'distance_tolerance_low', default=DEFAULT_DISTANCE_TOLERANCE_LOW, allow_default=allow_defaults)
+    distance_tolerance_high = get_param(params, 'upsampling', 'distance_tolerance_high', default=DEFAULT_DISTANCE_TOLERANCE_HIGH, allow_default=allow_defaults)
     depth_threshold_low = get_param(params, 'outlier_detection', 'depth_threshold_low', default=DEFAULT_DEPTH_THRESHOLD_LOW, allow_default=allow_defaults)
     depth_threshold_high = get_param(params, 'outlier_detection', 'depth_threshold_high', default=DEFAULT_DEPTH_THRESHOLD_HIGH, allow_default=allow_defaults)
     high_density_start = get_param(params, 'outlier_detection', 'high_density_ring_start', default=DEFAULT_HIGH_DENSITY_RING_START, allow_default=allow_defaults)
@@ -801,7 +822,9 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
         curvature_threshold=curvature_threshold,
         upsampling_neighbors=upsampling_neighbors,
         min_new_point_distance_factor=min_new_point_distance_factor,
-        radius_filter_factor=radius_filter_factor
+        radius_filter_factor=radius_filter_factor,
+        distance_tolerance_low=distance_tolerance_low,
+        distance_tolerance_high=distance_tolerance_high
     )
     
     # Step 3: Outlier detection and enhancement

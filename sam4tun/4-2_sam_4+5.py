@@ -1,3 +1,6 @@
+import sys
+sys.path.insert(0, "/home/boringtao/Projects/P4Tun_Off/sam4tun/segment-anything")
+
 import os
 import numpy as np
 import pandas as pd

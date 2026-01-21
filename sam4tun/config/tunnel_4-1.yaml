@@ -1,0 +1,48 @@
+# Tunnel 4-1 Configuration - All Tunable Parameters
+tunnel_id: "4-1"
+segments_per_ring: 7
+resolution: 0.005
+
+detection:
+  preprocessing:
+    binary_threshold: 120
+    kernel_size: 5
+    dilation_iterations: 2
+  hough:
+    threshold: 40
+    min_line_length_ratio: 0.1
+    max_line_gap: 60
+    angle_min: 5
+    angle_max: 10
+  gradient:
+    sigma_smooth: 10
+    sigma_gradient: 5
+    peak_distance: 50
+    peak_prominence: 1
+    k_max_width_px: 280
+    margin_ratio: 0.08
+  fusion:
+    hough_gradient_agree_threshold: 300
+    hough_single_threshold: 350
+
+segmentation:
+  dimensions:
+    K_height: 1300.0
+    AB_height: 3600.0
+    segment_width: 1400.0
+    angle_deg: 7.52
+  templates:
+    K:
+      half_width: 700.0
+      half_height_left: 680.0
+      half_height_right: 520.0
+    AB:
+      half_width: 700.0
+      half_height: 1800.0
+    B1_slant_factor: 0.95
+    B2_slant_factor: 1.05
+  prompt_points:
+    coverage_ratio: 0.95
+  cropping:
+    extra_margin: 150
+    delta_y_extra: 50

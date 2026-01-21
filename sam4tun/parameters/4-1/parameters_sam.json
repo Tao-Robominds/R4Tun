@@ -8,14 +8,14 @@
         "A3",
         "B2"
     ],
-    "segment_width": 1200,
-    "K_height": 1079.92,
+    "segment_width": 1250,
+    "K_height": 1150,
     "AB_height": 3239.77,
     "angle": 7.52,
-    "use_original_label_distributions": true,
+    "use_original_label_distributions": false,
     "processing": {
         "resolution": 0.005,
-        "padding": 150,
+        "padding": 300,
         "crop_margin": 50,
         "mask_eps": 1e-3,
         "y_bounds": [4200, 13100]

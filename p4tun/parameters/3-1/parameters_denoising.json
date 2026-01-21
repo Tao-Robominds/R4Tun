@@ -1,8 +1,5 @@
 {
     "description": "Local density-based point cloud denoising parameters",
-    "physical_constants": {
-        "tunnel_diameter": 5.5
-    },
     "radius_filtering": {
         "radius_min": 2.8,
         "radius_max": 3.0

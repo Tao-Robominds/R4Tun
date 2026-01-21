@@ -1,9 +1,11 @@
 """
 Algorithm 4-2 - K-Block Pattern Detection
 Discovers tunnel segment patterns from detection results:
-1. Pattern type detection (6-seg alternating, 6-seg constant, 7-seg wrap-around)
+1. Pattern type detection (6-seg alternating, 6-seg constant, 7-seg alternating)
 2. K-block position calculation per ring using physical geometry
 3. Outputs pattern.csv with per-ring K positions for SAM
+
+Note: Data should be trimmed to exactly 360° coverage before pattern detection.
 """
 
 import os
@@ -258,7 +260,9 @@ def detect_pattern_type(v_pair_data: Dict, resolution: float = DEFAULT_RESOLUTIO
     Pattern types:
     - 6seg_alternating: K position alternates between two positions ~432px apart
     - 6seg_constant: K position is constant across all rings
-    - 7seg_wraparound: K position varies significantly due to wrap-around
+    - 7seg_alternating: 7-segment tunnel with alternating K positions
+    
+    Note: Data must be trimmed to 360° coverage (no wrap-around).
     
     Returns:
         Dictionary with pattern type, confidence, and detection metrics
@@ -288,8 +292,8 @@ def detect_pattern_type(v_pair_data: Dict, resolution: float = DEFAULT_RESOLUTIO
     if len(v_pairs) < 2:
         # Not enough V-pairs for analysis - use segment count as primary indicator
         if segment_count == 7:
-            # 7-segment tunnels typically have wrap-around patterns
-            pattern_type = '7seg_wraparound'
+            # 7-segment tunnels with 360° coverage follow alternating pattern
+            pattern_type = '7seg_alternating'
             confidence = 0.6  # Lower confidence due to sparse data
             reason = 'Inferred from segment count (sparse V-pair data)'
         else:
@@ -336,14 +340,14 @@ def detect_pattern_type(v_pair_data: Dict, resolution: float = DEFAULT_RESOLUTIO
     
     # Pattern classification
     if segment_count == 7:
-        # 7-segment tunnels: check for wrap-around pattern
-        # Indicators: large spread (>400px), variable ring changes
-        if spread > 400 or cluster_separation > 800:
-            pattern_type = '7seg_wraparound'
-            confidence = 0.8 + 0.2 * min(spread / 800, 1.0)
+        # 7-segment tunnels with 360° coverage follow alternating pattern
+        # Similar to 6-segment but with different spacing due to extra segment
+        if cluster_separation > 300:
+            pattern_type = '7seg_alternating'
+            confidence = 0.8 + 0.2 * min(cluster_separation / 500, 1.0)
         else:
-            # Still assume wrap-around for 7-segment (most common)
-            pattern_type = '7seg_wraparound'
+            # Small spread suggests more aligned/constant pattern
+            pattern_type = '7seg_alternating'
             confidence = 0.7
     else:
         # 6-segment tunnels: alternating vs constant
@@ -500,14 +504,15 @@ def calculate_k_positions_constant(v_pair_data: Dict, pattern_info: Dict,
     return pd.DataFrame(results)
 
 
-def calculate_k_positions_wraparound(v_pair_data: Dict, pattern_info: Dict,
-                                     resolution: float = DEFAULT_RESOLUTION) -> pd.DataFrame:
+def calculate_k_positions_7seg(v_pair_data: Dict, pattern_info: Dict,
+                               resolution: float = DEFAULT_RESOLUTION) -> pd.DataFrame:
     """
-    Calculate K positions for 7-segment wrap-around tunnels.
+    Calculate K positions for 7-segment tunnels.
     Uses direct V-pair detection with propagation to neighbors.
     
-    For 7-segment tunnels, K position can be at any of 7 "slots" due to wrap-around.
-    We use detected V-pairs directly and propagate to undetected rings.
+    For 7-segment tunnels with 360° coverage, K position follows an alternating
+    pattern similar to 6-segment tunnels. Uses detected V-pairs directly and
+    propagates to undetected rings.
     """
     v_pairs = v_pair_data['v_pairs']
     ring_boundaries = v_pair_data['ring_boundaries']
@@ -518,8 +523,7 @@ def calculate_k_positions_wraparound(v_pair_data: Dict, pattern_info: Dict,
     K_HEIGHT_PX = mm_to_px(K_HEIGHT_MM, resolution)
     AB_HEIGHT_PX = mm_to_px(AB_HEIGHT_MM, resolution)
     
-    # For 7-segment, calculate possible slot positions
-    # K can be at positions separated by AB_HEIGHT from each other
+    # For 7-segment tunnels, K can be at positions separated by AB_HEIGHT from each other
     # Center position is approximately at 40% of image height for typical tunnels
     center_estimate = image_height * 0.4
     
@@ -528,7 +532,7 @@ def calculate_k_positions_wraparound(v_pair_data: Dict, pattern_info: Dict,
     detected_positions = {}
     
     for ring_idx in v_pairs:
-        # Use midpoint directly for 7-segment (V-pairs indicate K boundaries)
+        # Use midpoint directly (V-pairs indicate K boundaries)
         detected_positions[ring_idx] = v_pairs[ring_idx]['midpoint']
     
     for ring_idx in range(ring_count):
@@ -553,8 +557,8 @@ def calculate_k_positions_wraparound(v_pair_data: Dict, pattern_info: Dict,
                     nearest_ring = detected_ring
             
             if nearest_ring is not None:
-                # For 7-segment, wrap-around means K position can shift by ±AB_HEIGHT
-                # between rings. Without more info, use nearest neighbor position.
+                # For 7-segment, K position can shift by ±AB_HEIGHT between rings
+                # based on alternating pattern. Use nearest neighbor position.
                 k_y = detected_positions[nearest_ring]
                 quality = max(0.3, v_pairs[nearest_ring]['quality'] - 0.1 * min_dist)
                 detection_type = f'propagated_from_ring_{nearest_ring}'
@@ -629,8 +633,8 @@ def run_pattern_detection(tunnel_id: str, base_dir: str = "data") -> Tuple[pd.Da
         k_positions = calculate_k_positions_alternating(v_pair_data, pattern_info, resolution)
     elif 'constant' in pattern_type:
         k_positions = calculate_k_positions_constant(v_pair_data, pattern_info, resolution)
-    elif 'wraparound' in pattern_type:
-        k_positions = calculate_k_positions_wraparound(v_pair_data, pattern_info, resolution)
+    elif '7seg' in pattern_type:
+        k_positions = calculate_k_positions_7seg(v_pair_data, pattern_info, resolution)
     else:
         # Fallback to alternating method
         k_positions = calculate_k_positions_alternating(v_pair_data, pattern_info, resolution)
