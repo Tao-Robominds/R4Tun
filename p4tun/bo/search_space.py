@@ -47,8 +47,11 @@ DETECTION_SPACE = {
 # Includes prompt point positions, template mask dimensions, and processing params
 
 SAM_SPACE = {
-    # Segment geometry
+    # Segment geometry - NOW TUNABLE
     'segment_width': Real(1150.0, 1250.0, name='segment_width'),
+    'k_height': Real(1000.0, 1160.0, name='k_height'),  # Was fixed at 1079.92
+    'ab_height': Real(3100.0, 3380.0, name='ab_height'),  # Was fixed at 3239.77
+    'angle_deg': Real(6.5, 8.5, name='angle_deg'),  # Was fixed at 7.52
     
     # Processing parameters
     'padding': Integer(100, 200, name='padding'),
@@ -69,6 +72,15 @@ SAM_SPACE = {
     'ab_ultra_fine': Real(130.0, 200.0, name='ab_ultra_fine'),
     'ab_edge_ring': Real(300.0, 400.0, name='ab_edge_ring'),
     'ab_edge_spacing': Real(300.0, 400.0, name='ab_edge_spacing'),
+    
+    # AB-block vertical levels - NOW TUNABLE (±10% from defaults)
+    'ab_level_1': Real(1550.0, 1890.0, name='ab_level_1'),  # Default 1719.89
+    'ab_level_2': Real(1370.0, 1670.0, name='ab_level_2'),  # Default 1519.89
+    'ab_level_3': Real(1210.0, 1480.0, name='ab_level_3'),  # Default 1344.89
+    'ab_level_4': Real(980.0, 1200.0, name='ab_level_4'),   # Default 1090.09
+    'ab_level_5': Real(735.0, 900.0, name='ab_level_5'),    # Default 817.57
+    'ab_level_6': Real(490.0, 600.0, name='ab_level_6'),    # Default 545.05
+    'ab_level_7': Real(245.0, 300.0, name='ab_level_7'),    # Default 272.52
     
     # Template mask dimensions - K block
     'k_mask_width': Real(575.0, 675.0, name='k_mask_width'),
@@ -175,16 +187,16 @@ def params_to_detection_dict(params: List, names: List[str]) -> Dict:
 
 
 def params_to_sam_dict(params: List, names: List[str]) -> Dict:
-    """Convert BO parameters to SAM parameters dict structure (expanded)."""
+    """Convert BO parameters to SAM parameters dict structure (expanded with physical constants)."""
     param_dict = dict(zip(names, params))
     
     return {
         'segment_geometry': {
             'segment_width': float(param_dict.get('segment_width', 1200.0)),
-            # Physical constants - DO NOT TUNE
-            'k_height': 1079.92,
-            'ab_height': 3239.77,
-            'angle_deg': 7.52,
+            # Physical constants - NOW TUNABLE
+            'k_height': float(param_dict.get('k_height', 1079.92)),
+            'ab_height': float(param_dict.get('ab_height', 3239.77)),
+            'angle_deg': float(param_dict.get('angle_deg', 7.52)),
         },
         'image': {
             'resolution': 0.005,
@@ -216,13 +228,13 @@ def params_to_sam_dict(params: List, names: List[str]) -> Dict:
                 'edge_ring': float(param_dict.get('ab_edge_ring', 348.16)),
                 'edge_spacing': float(param_dict.get('ab_edge_spacing', 350)),
                 'vertical_levels': {
-                    'level_1': 1719.89,
-                    'level_2': 1519.89,
-                    'level_3': 1344.89,
-                    'level_4': 1090.09,
-                    'level_5': 817.57,
-                    'level_6': 545.05,
-                    'level_7': 272.52,
+                    'level_1': float(param_dict.get('ab_level_1', 1719.89)),
+                    'level_2': float(param_dict.get('ab_level_2', 1519.89)),
+                    'level_3': float(param_dict.get('ab_level_3', 1344.89)),
+                    'level_4': float(param_dict.get('ab_level_4', 1090.09)),
+                    'level_5': float(param_dict.get('ab_level_5', 817.57)),
+                    'level_6': float(param_dict.get('ab_level_6', 545.05)),
+                    'level_7': float(param_dict.get('ab_level_7', 272.52)),
                     'center': 0
                 }
             },
