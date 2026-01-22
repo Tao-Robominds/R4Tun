@@ -14,15 +14,26 @@ from typing import Dict, List, Tuple, Optional
 import numpy as np
 import pandas as pd
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Lazy imports to avoid circular import issues
+_search_space_funcs = None
 
-from .search_space import (
-    params_to_detection_dict, 
-    params_to_sam_dict, 
-    save_parameters,
-    get_search_space
-)
+def _get_search_space_funcs():
+    """Lazy import search space functions."""
+    global _search_space_funcs
+    if _search_space_funcs is None:
+        from p4tun.bo.search_space import (
+            params_to_detection_dict, 
+            params_to_sam_dict, 
+            save_parameters,
+            get_search_space
+        )
+        _search_space_funcs = {
+            'params_to_detection_dict': params_to_detection_dict,
+            'params_to_sam_dict': params_to_sam_dict,
+            'save_parameters': save_parameters,
+            'get_search_space': get_search_space,
+        }
+    return _search_space_funcs
 
 
 class PipelineObjective:
@@ -65,8 +76,9 @@ class PipelineObjective:
         self.best_params = None
         self.history = []
         
-        # Get parameter names for this stage
-        _, self.param_names = get_search_space(stage)
+        # Get parameter names for this stage (lazy import)
+        funcs = _get_search_space_funcs()
+        _, self.param_names = funcs['get_search_space'](stage)
         
         # Script paths
         self.script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -152,26 +164,27 @@ class PipelineObjective:
     def _update_parameters(self, params: List):
         """Update parameter JSON files with new values."""
         param_dict = dict(zip(self.param_names, params))
+        funcs = _get_search_space_funcs()
         
         if self.stage in ['detection', 'combined']:
-            detection_dict = params_to_detection_dict(params, self.param_names)
+            detection_dict = funcs['params_to_detection_dict'](params, self.param_names)
             
             # Load existing parameters and update
             existing = self._load_existing_params('detection')
             existing.update(detection_dict)
             
-            filepath = save_parameters(existing, self.tunnel_id, 'detection')
+            filepath = funcs['save_parameters'](existing, self.tunnel_id, 'detection')
             if self.verbose:
                 print(f"Updated detection parameters: {filepath}")
         
         if self.stage in ['sam', 'combined']:
-            sam_dict = params_to_sam_dict(params, self.param_names)
+            sam_dict = funcs['params_to_sam_dict'](params, self.param_names)
             
             # Load existing parameters and update
             existing = self._load_existing_params('sam')
             existing.update(sam_dict)
             
-            filepath = save_parameters(existing, self.tunnel_id, 'sam')
+            filepath = funcs['save_parameters'](existing, self.tunnel_id, 'sam')
             if self.verbose:
                 print(f"Updated SAM parameters: {filepath}")
     

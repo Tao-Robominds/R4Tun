@@ -16,11 +16,24 @@ from skopt import gp_minimize, forest_minimize, gbrt_minimize
 from skopt.callbacks import DeltaYStopper, CheckpointSaver
 from skopt.utils import use_named_args
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Delayed imports to avoid RuntimeWarning when running as __main__
+_search_space = None
+_objective = None
 
-from .search_space import get_search_space, save_parameters
-from .objective import PipelineObjective
+def _get_imports():
+    """Lazy import to avoid module loading order issues."""
+    global _search_space, _objective
+    if _search_space is None:
+        from p4tun.bo.search_space import get_search_space, save_parameters, params_to_detection_dict, params_to_sam_dict
+        from p4tun.bo.objective import PipelineObjective
+        _search_space = {
+            'get_search_space': get_search_space,
+            'save_parameters': save_parameters,
+            'params_to_detection_dict': params_to_detection_dict,
+            'params_to_sam_dict': params_to_sam_dict,
+        }
+        _objective = {'PipelineObjective': PipelineObjective}
+    return _search_space, _objective
 
 
 class BayesianOptimizer:
@@ -70,11 +83,14 @@ class BayesianOptimizer:
         # Create output directory
         os.makedirs(output_dir, exist_ok=True)
         
+        # Get imports (lazy loading to avoid RuntimeWarning)
+        search_space_mod, objective_mod = _get_imports()
+        
         # Get search space
-        self.dimensions, self.param_names = get_search_space(stage)
+        self.dimensions, self.param_names = search_space_mod['get_search_space'](stage)
         
         # Initialize objective function
-        self.objective = PipelineObjective(
+        self.objective = objective_mod['PipelineObjective'](
             tunnel_id=tunnel_id,
             stage=stage,
             data_dir=data_dir,
@@ -196,23 +212,23 @@ class BayesianOptimizer:
         
         # Save best parameters to tunnel-specific directory
         if results['best_params']:
+            search_space_mod, _ = _get_imports()
+            
             # Save detection parameters
             if self.stage in ['detection', 'combined']:
-                from .search_space import params_to_detection_dict
-                detection_params = params_to_detection_dict(
+                detection_params = search_space_mod['params_to_detection_dict'](
                     list(results['best_params'].values()),
                     list(results['best_params'].keys())
                 )
-                save_parameters(detection_params, self.tunnel_id, 'detection')
+                search_space_mod['save_parameters'](detection_params, self.tunnel_id, 'detection')
             
             # Save SAM parameters
             if self.stage in ['sam', 'combined']:
-                from .search_space import params_to_sam_dict
-                sam_params = params_to_sam_dict(
+                sam_params = search_space_mod['params_to_sam_dict'](
                     list(results['best_params'].values()),
                     list(results['best_params'].keys())
                 )
-                save_parameters(sam_params, self.tunnel_id, 'sam')
+                search_space_mod['save_parameters'](sam_params, self.tunnel_id, 'sam')
         
         # Save objective history
         history_path = os.path.join(

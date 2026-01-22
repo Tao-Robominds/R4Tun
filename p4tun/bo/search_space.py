@@ -2,6 +2,7 @@
 Search Space Definition for Bayesian Optimization
 
 Defines the parameter search spaces for detection and SAM stages.
+Expanded SAM search space includes prompt point positions and template mask dimensions.
 """
 
 from skopt.space import Real, Integer, Categorical
@@ -41,14 +42,42 @@ DETECTION_SPACE = {
 
 
 # =============================================================================
-# SAM Parameters Search Space
+# SAM Parameters Search Space (Expanded)
 # =============================================================================
-# NOTE: Physical constants (k_height, ab_height, angle_deg) are FIXED
-# Only tune processing parameters, not physical geometry
+# Includes prompt point positions, template mask dimensions, and processing params
 
 SAM_SPACE = {
-    # Segment width can vary slightly due to image processing
+    # Segment geometry
     'segment_width': Real(1150.0, 1250.0, name='segment_width'),
+    
+    # Processing parameters
+    'padding': Integer(100, 200, name='padding'),
+    'crop_margin': Integer(30, 80, name='crop_margin'),
+    
+    # K-block prompt point parameters
+    'k_outer_ring': Real(650.0, 750.0, name='k_outer_ring'),
+    'k_middle_ring': Real(450.0, 550.0, name='k_middle_ring'),
+    'k_inner_ring': Real(300.0, 400.0, name='k_inner_ring'),
+    'k_center_ring': Real(280.0, 370.0, name='k_center_ring'),
+    
+    # AB-block prompt point parameters
+    'ab_outer_ring': Real(650.0, 750.0, name='ab_outer_ring'),
+    'ab_middle_ring': Real(460.0, 560.0, name='ab_middle_ring'),
+    'ab_inner_ring': Real(450.0, 550.0, name='ab_inner_ring'),
+    'ab_center_ring': Real(280.0, 370.0, name='ab_center_ring'),
+    'ab_fine_spacing': Real(200.0, 300.0, name='ab_fine_spacing'),
+    'ab_ultra_fine': Real(130.0, 200.0, name='ab_ultra_fine'),
+    'ab_edge_ring': Real(300.0, 400.0, name='ab_edge_ring'),
+    'ab_edge_spacing': Real(300.0, 400.0, name='ab_edge_spacing'),
+    
+    # Template mask dimensions - K block
+    'k_mask_width': Real(575.0, 675.0, name='k_mask_width'),
+    'k_mask_height_pos': Real(570.0, 670.0, name='k_mask_height_pos'),
+    'k_mask_height_neg': Real(410.0, 510.0, name='k_mask_height_neg'),
+    
+    # Template mask dimensions - A/B blocks
+    'ab_mask_width': Real(575.0, 675.0, name='ab_mask_width'),
+    'ab_mask_height': Real(1570.0, 1670.0, name='ab_mask_height'),
     
     # Pattern-aware parameters
     'min_quality_threshold': Real(0.1, 0.5, name='min_quality_threshold'),
@@ -146,10 +175,7 @@ def params_to_detection_dict(params: List, names: List[str]) -> Dict:
 
 
 def params_to_sam_dict(params: List, names: List[str]) -> Dict:
-    """Convert BO parameters to SAM parameters dict structure.
-    
-    NOTE: Physical constants (k_height, ab_height, angle_deg) are FIXED.
-    """
+    """Convert BO parameters to SAM parameters dict structure (expanded)."""
     param_dict = dict(zip(names, params))
     
     return {
@@ -162,6 +188,67 @@ def params_to_sam_dict(params: List, names: List[str]) -> Dict:
         },
         'image': {
             'resolution': 0.005,
+        },
+        'processing': {
+            'padding': int(param_dict.get('padding', 150)),
+            'crop_margin': int(param_dict.get('crop_margin', 50)),
+            'mask_eps': 0.001,
+            'y_bounds': [4200, 13100],
+        },
+        'prompt_points': {
+            'k_block': {
+                'outer_ring': float(param_dict.get('k_outer_ring', 700)),
+                'middle_ring': float(param_dict.get('k_middle_ring', 500)),
+                'inner_ring': float(param_dict.get('k_inner_ring', 348.16)),
+                'center_ring': float(param_dict.get('k_center_ring', 325)),
+                'spacing_factors': {
+                    'k_block_spacing': 310.91,
+                    'vertical_spacing': [732.35, 505.96, 310.91, 219.01, 373.96]
+                }
+            },
+            'ab_blocks': {
+                'outer_ring': float(param_dict.get('ab_outer_ring', 700)),
+                'middle_ring': float(param_dict.get('ab_middle_ring', 511.06)),
+                'inner_ring': float(param_dict.get('ab_inner_ring', 500)),
+                'center_ring': float(param_dict.get('ab_center_ring', 325)),
+                'fine_spacing': float(param_dict.get('ab_fine_spacing', 250)),
+                'ultra_fine': float(param_dict.get('ab_ultra_fine', 162.5)),
+                'edge_ring': float(param_dict.get('ab_edge_ring', 348.16)),
+                'edge_spacing': float(param_dict.get('ab_edge_spacing', 350)),
+                'vertical_levels': {
+                    'level_1': 1719.89,
+                    'level_2': 1519.89,
+                    'level_3': 1344.89,
+                    'level_4': 1090.09,
+                    'level_5': 817.57,
+                    'level_6': 545.05,
+                    'level_7': 272.52,
+                    'center': 0
+                }
+            },
+            'template_mask': {
+                'k_block': {
+                    'width': float(param_dict.get('k_mask_width', 625)),
+                    'height_pos': float(param_dict.get('k_mask_height_pos', 619.16)),
+                    'height_neg': float(param_dict.get('k_mask_height_neg', 460.77))
+                },
+                'b1_block': {
+                    'width': float(param_dict.get('ab_mask_width', 625)),
+                    'height_top': float(param_dict.get('ab_mask_height', 1619.89)),
+                    'height_bottom_pos': 1540.69,
+                    'height_bottom_neg': 1699.08
+                },
+                'b2_block': {
+                    'width': float(param_dict.get('ab_mask_width', 625)),
+                    'height_top_pos': 1540.69,
+                    'height_top_neg': 1699.08,
+                    'height_bottom': float(param_dict.get('ab_mask_height', 1619.89))
+                },
+                'a_blocks': {
+                    'width': float(param_dict.get('ab_mask_width', 625)),
+                    'height': float(param_dict.get('ab_mask_height', 1619.89))
+                }
+            }
         },
         'pattern_aware': {
             'use_quality_weighting': True,

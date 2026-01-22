@@ -1,14 +1,12 @@
 """
-Algorithm 4-2 - SAM-based Tunnel Segment Segmentation
+Algorithm 4-2 - SAM-based Tunnel Segment Segmentation (Fully Parameterized)
 
-Enhanced version with pattern-aware prompting:
-1. Uses pattern.csv with normalized K positions from 4-1_detection.py
-2. Pattern-aware prompt generation based on segment count and pattern type
-3. Quality-weighted prompt selection
+All prompt points, template masks, and processing parameters are configurable
+via JSON for Bayesian Optimization tuning.
 
 Pipeline:
-    4-1_detection.py → pattern.csv, pattern.json
-    4-2_sam_segmentation.py → final.csv
+    4-1_detection.py → detected.csv (K positions)
+    4-2_sam.py → final.csv (segmented point cloud)
 """
 
 import os
@@ -26,19 +24,103 @@ from segment_anything.utils.transforms import ResizeLongestSide
 from matplotlib.path import Path
 
 # =============================================================================
+# Default Parameter Values (used when not specified in JSON)
+# =============================================================================
+
+DEFAULT_PARAMS = {
+    "segment_geometry": {
+        "segment_width": 1200.0,
+        "k_height": 1079.92,
+        "ab_height": 3239.77,
+        "angle_deg": 7.52
+    },
+    "image": {
+        "resolution": 0.005
+    },
+    "processing": {
+        "padding": 150,
+        "crop_margin": 50,
+        "mask_eps": 0.001,
+        "y_bounds": [4200, 13100]
+    },
+    "prompt_points": {
+        "k_block": {
+            "outer_ring": 700,
+            "middle_ring": 500,
+            "inner_ring": 348.16,
+            "center_ring": 325,
+            "spacing_factors": {
+                "k_block_spacing": 310.91,
+                "vertical_spacing": [732.35, 505.96, 310.91, 219.01, 373.96]
+            }
+        },
+        "ab_blocks": {
+            "outer_ring": 700,
+            "middle_ring": 511.06,
+            "inner_ring": 500,
+            "center_ring": 325,
+            "fine_spacing": 250,
+            "ultra_fine": 162.5,
+            "edge_ring": 348.16,
+            "edge_spacing": 350,
+            "vertical_levels": {
+                "level_1": 1719.89,
+                "level_2": 1519.89,
+                "level_3": 1344.89,
+                "level_4": 1090.09,
+                "level_5": 817.57,
+                "level_6": 545.05,
+                "level_7": 272.52,
+                "center": 0
+            }
+        },
+        "template_mask": {
+            "k_block": {
+                "width": 625,
+                "height_pos": 619.16,
+                "height_neg": 460.77
+            },
+            "b1_block": {
+                "width": 625,
+                "height_top": 1619.89,
+                "height_bottom_pos": 1540.69,
+                "height_bottom_neg": 1699.08
+            },
+            "b2_block": {
+                "width": 625,
+                "height_top_pos": 1540.69,
+                "height_top_neg": 1699.08,
+                "height_bottom": 1619.89
+            },
+            "a_blocks": {
+                "width": 625,
+                "height": 1619.89
+            }
+        }
+    },
+    "pattern_aware": {
+        "use_quality_weighting": True,
+        "min_quality_threshold": 0.3
+    }
+}
+
+
+# =============================================================================
 # Parameter Loading
 # =============================================================================
 
 def load_parameters(tunnel_id: str, base_dir: str = "data"):
-    """Load parameters from JSON file."""
+    """Load parameters from JSON file with defaults fallback."""
     script_dir = os.path.dirname(__file__)
     
+    # Try tunnel-specific params first
     params_path = os.path.join(script_dir, "parameters", tunnel_id, "parameters_sam.json")
     if os.path.exists(params_path):
         print(f"Loading parameters from {params_path}")
         with open(params_path, 'r') as f:
             return json.load(f)
     
+    # Try sample params
     sample_path = os.path.join(script_dir, "parameters", "sample", "parameters_sam.json")
     if os.path.exists(sample_path):
         print(f"Loading sample parameters from {sample_path}")
@@ -50,14 +132,33 @@ def load_parameters(tunnel_id: str, base_dir: str = "data"):
 
 
 def get_param(params, *keys, default=None):
-    """Get nested parameter value."""
+    """Get nested parameter value with fallback to defaults."""
+    # First try user params
     value = params
     for key in keys:
         if isinstance(value, dict) and key in value:
             value = value[key]
         else:
-            return default
+            # Fall back to defaults
+            value = DEFAULT_PARAMS
+            for k in keys:
+                if isinstance(value, dict) and k in value:
+                    value = value[k]
+                else:
+                    return default
+            return value
     return value
+
+
+def deep_merge(base, override):
+    """Deep merge two dictionaries."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 # =============================================================================
@@ -99,10 +200,11 @@ def detect_segment_count_from_height(image_height: int, resolution: float = 0.00
 
 
 # =============================================================================
-# Mask and Prompt Generation Functions
+# Mask Generation Functions (Fully Parameterized)
 # =============================================================================
 
 def fill_polygon(mask, vertices):
+    """Fill polygon in mask using matplotlib Path."""
     path = Path(vertices)
     y_coords, x_coords = np.mgrid[:mask.shape[0], :mask.shape[1]]
     points = np.vstack((x_coords.flatten(), y_coords.flatten())).T
@@ -110,157 +212,236 @@ def fill_polygon(mask, vertices):
     mask[mask_inside] = 1
 
 
-def generate_template_mask(height, width, prompt_centre, block, resolution=0.005):
+def generate_template_mask(height, width, prompt_centre, block, resolution, template_params):
+    """Generate template mask using parameterized dimensions."""
     mask = np.zeros((height, width), dtype=np.uint8)
     prompt_centre_x, prompt_centre_y = prompt_centre
-    x = prompt_centre_x * (resolution*1000)
-    y = prompt_centre_y * (resolution*1000)
+    x = prompt_centre_x * (resolution * 1000)
+    y = prompt_centre_y * (resolution * 1000)
     
     if block == 'K':
-        vertices_real = np.array([[x-625,y-619.16],[x-625,y+619.16],[x+625,y+460.77],[x+625,y-460.77]])
+        k_mask = template_params.get('k_block', DEFAULT_PARAMS['prompt_points']['template_mask']['k_block'])
+        w = k_mask.get('width', 625)
+        hp = k_mask.get('height_pos', 619.16)
+        hn = k_mask.get('height_neg', 460.77)
+        vertices_real = np.array([[x-w, y-hp], [x-w, y+hp], [x+w, y+hn], [x+w, y-hn]])
     elif block == 'B1':
-        vertices_real = np.array([[x-625,y-1619.89],[x-625,y+1540.69],[x+625,y+1699.08],[x+625,y-1619.89]])
+        b1_mask = template_params.get('b1_block', DEFAULT_PARAMS['prompt_points']['template_mask']['b1_block'])
+        w = b1_mask.get('width', 625)
+        ht = b1_mask.get('height_top', 1619.89)
+        hbp = b1_mask.get('height_bottom_pos', 1540.69)
+        hbn = b1_mask.get('height_bottom_neg', 1699.08)
+        vertices_real = np.array([[x-w, y-ht], [x-w, y+hbp], [x+w, y+hbn], [x+w, y-ht]])
     elif block == 'B2':
-        vertices_real = np.array([[x-625,y-1540.69],[x-625,y+1619.89],[x+625,y+1619.89],[x+625,y-1699.08]])
-    else:
-        vertices_real = np.array([[x-625,y-1619.89],[x-625,y+1619.89],[x+625,y+1619.89],[x+625,y-1619.89]])
+        b2_mask = template_params.get('b2_block', DEFAULT_PARAMS['prompt_points']['template_mask']['b2_block'])
+        w = b2_mask.get('width', 625)
+        htp = b2_mask.get('height_top_pos', 1540.69)
+        htn = b2_mask.get('height_top_neg', 1699.08)
+        hb = b2_mask.get('height_bottom', 1619.89)
+        vertices_real = np.array([[x-w, y-htp], [x-w, y+hb], [x+w, y+hb], [x+w, y-htn]])
+    else:  # A blocks
+        a_mask = template_params.get('a_blocks', DEFAULT_PARAMS['prompt_points']['template_mask']['a_blocks'])
+        w = a_mask.get('width', 625)
+        h = a_mask.get('height', 1619.89)
+        vertices_real = np.array([[x-w, y-h], [x-w, y+h], [x+w, y+h], [x+w, y-h]])
         
-    vertices = vertices_real / (resolution*1000)
+    vertices = vertices_real / (resolution * 1000)
     fill_polygon(mask, vertices)
     return mask
 
 
-def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.005,
-                           segment_width=1200, K_height=1079.92, AB_height=3239.77, 
-                           image=None, quality=1.0):
-    """
-    Generate prompt points for SAM.
+# =============================================================================
+# Prompt Point Generation (Fully Parameterized)
+# =============================================================================
+
+def generate_prompt_points_k(x, y, k_params, resolution):
+    """Generate K-block prompt points using parameterized values."""
+    outer = k_params.get('outer_ring', 700)
+    middle = k_params.get('middle_ring', 500)
+    inner = k_params.get('inner_ring', 348.16)
+    center = k_params.get('center_ring', 325)
     
-    Enhanced with quality-aware point density - higher quality K positions
-    get denser prompt points for more accurate segmentation.
+    spacing = k_params.get('spacing_factors', {})
+    k_sp = spacing.get('k_block_spacing', 310.91)
+    v_sp = spacing.get('vertical_spacing', [732.35, 505.96, 310.91, 219.01, 373.96])
+    
+    # Ensure v_sp has at least 5 elements
+    while len(v_sp) < 5:
+        v_sp.append(v_sp[-1] if v_sp else 300)
+    
+    points_real = np.array([
+        # Outer ring points
+        [x-outer, y-v_sp[0]], [x-outer, y-v_sp[1]], [x-outer, y-k_sp], [x-outer, y], [x-outer, y+k_sp], [x-outer, y+v_sp[1]], [x-outer, y+v_sp[0]],
+        # Middle ring points
+        [x-middle, y-v_sp[1]], [x-middle, y+v_sp[1]],
+        # Inner ring points
+        [x-inner, y-v_sp[1]], [x-inner, y-k_sp], [x-center, y], [x-inner, y+k_sp], [x-inner, y+v_sp[1]],
+        # Center column
+        [x, y-v_sp[1]], [x, y], [x, y+v_sp[1]],
+        # Inner ring (right side)
+        [x+inner, y-v_sp[1]], [x+inner, y-v_sp[2]], [x+center, y], [x+inner, y+v_sp[2]], [x+inner, y+v_sp[1]],
+        # Middle ring (right side)
+        [x+middle, y-v_sp[1]], [x+middle, y+v_sp[1]],
+        # Outer ring (right side)
+        [x+outer, y-v_sp[1]], [x+outer, y-v_sp[4]], [x+outer, y-v_sp[3]], [x+outer, y], [x+outer, y+v_sp[3]], [x+outer, y+v_sp[4]], [x+outer, y+v_sp[1]],
+        # Additional inner points
+        [x-middle, y-k_sp], [x-middle-11.06, y-k_sp], [x-middle, y], [x-middle-11.06, y+k_sp], [x-middle, y+k_sp],
+        [x-inner, y-k_sp], [x-inner, y+k_sp],
+        [x, y-k_sp], [x, y+k_sp],
+        [x+inner, y-k_sp], [x+inner, y+k_sp],
+        [x+middle, y-k_sp], [x+middle+11.06, y-v_sp[3]], [x+middle, y], [x+middle+11.06, y+v_sp[3]], [x+middle, y+k_sp]
+    ])
+    labels = np.repeat([0, 1], [31, 16])
+    return points_real, labels
+
+
+def generate_prompt_points_ab(x, y, ab_params, block_type, resolution):
+    """Generate A/B block prompt points using parameterized values."""
+    outer = ab_params.get('outer_ring', 700)
+    middle = ab_params.get('middle_ring', 511.06)
+    inner = ab_params.get('inner_ring', 500)
+    center = ab_params.get('center_ring', 325)
+    fine = ab_params.get('fine_spacing', 250)
+    ultra = ab_params.get('ultra_fine', 162.5)
+    edge = ab_params.get('edge_ring', 348.16)
+    edge_sp = ab_params.get('edge_spacing', 350)
+    
+    levels = ab_params.get('vertical_levels', {})
+    l1 = levels.get('level_1', 1719.89)
+    l2 = levels.get('level_2', 1519.89)
+    l3 = levels.get('level_3', 1344.89)
+    l4 = levels.get('level_4', 1090.09)
+    l5 = levels.get('level_5', 817.57)
+    l6 = levels.get('level_6', 545.05)
+    l7 = levels.get('level_7', 272.52)
+    
+    if block_type == 'B1':
+        points_real = np.array([
+            # Top row
+            [x-outer, y-l1], [x-middle, y-l1], [x-edge, y-l1], [x, y-l1], [x+edge, y-l1], [x+middle, y-l1], [x+outer, y-l1],
+            [x-outer, y-l2], [x+outer, y-l2],
+            [x-outer, y-l3], [x-edge, y-l3], [x+edge, y-l3], [x+outer, y-l3],
+            [x-outer, y-l4], [x-center, y-l4], [x+center, y-l4], [x+outer, y-l4],
+            [x-outer, y-l5], [x+outer, y-l5],
+            [x-outer, y-l6], [x+outer, y-l6],
+            [x-outer, y-l7], [x+outer, y-l7],
+            [x-outer, y], [x-center, y], [x, y], [x+center, y], [x+outer, y],
+            [x-outer, y+l7], [x+outer, y+l7],
+            [x-outer, y+l6], [x+outer, y+l6],
+            [x-outer, y+l5], [x+outer, y+l5],
+            [x-outer, y+l4], [x-center, y+l4], [x+center, y+l4], [x+outer, y+l4],
+            # Slanted bottom rows
+            [x-outer, y+1298.93], [x-edge_sp, y+1298.93], [x+edge_sp, y+1390.84], [x+outer, y+1390.84],
+            [x-outer, y+1427.43], [x+outer, y+1612.28],
+            [x-outer, y+1627.49], [x-middle, y+1652.43], [x-edge_sp, y+1673.69], [x, y+l1], [x+edge_sp, y+1766.08], [x+middle, y+1787.34], [x+outer, y+1812.28],
+            # Inner points
+            [x-middle, y-l2], [x-edge, y-l2], [x, y-l2], [x+edge, y-l2], [x+middle, y-l2],
+            [x-middle, y-l3], [x, y-l3], [x+middle, y-l3],
+            [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
+            [x-inner, y-l5], [x-fine, y-l5], [x, y-l5], [x+fine, y-l5], [x+inner, y-l5],
+            [x-inner, y-l6], [x-fine, y-l6], [x, y-l6], [x+fine, y-l6], [x+inner, y-l6],
+            [x-inner, y-l7], [x-fine, y-l7], [x, y-l7], [x+fine, y-l7], [x+inner, y-l7],
+            [x-inner, y], [x-ultra, y], [x+ultra, y], [x+inner, y],
+            [x-inner, y+l7], [x-fine, y+l7], [x, y+l7], [x+fine, y+l7], [x+inner, y+l7],
+            [x-inner, y+l6], [x-fine, y+l6], [x, y+l6], [x+fine, y+l6], [x+inner, y+l6],
+            [x-inner, y+l5], [x-fine, y+l5], [x, y+l5], [x+fine, y+l5], [x+inner, y+l5],
+            [x-inner, y+l4], [x, y+l4], [x+inner, y+l4],
+            [x-middle, y+1298.93], [x, y+1345.01], [x+middle, y+1390.84],
+            [x-middle, y+1452.43], [x-edge_sp, y+1473.69], [x, y+l2], [x+edge_sp, y+1566.08], [x+middle, y+1587.34]
+        ])
+    elif block_type == 'B2':
+        points_real = np.array([
+            # Slanted top rows
+            [x-outer, y-1627.49], [x-middle, y-1652.43], [x-edge_sp, y-1673.69], [x, y-l1], [x+edge_sp, y-1766.08], [x+middle, y-1787.34], [x+outer, y-1812.28],
+            [x-outer, y-1427.43], [x+outer, y-1612.28],
+            [x-outer, y-1298.93], [x-edge_sp, y-1298.93], [x+edge_sp, y-1390.84], [x+outer, y-1390.84],
+            [x-outer, y-l4], [x-center, y-l4], [x+center, y-l4], [x+outer, y-l4],
+            [x-outer, y-l5], [x+outer, y-l5],
+            [x-outer, y-l6], [x+outer, y-l6],
+            [x-outer, y-l7], [x+outer, y-l7],
+            [x-outer, y], [x-center, y], [x, y], [x+center, y], [x+outer, y],
+            [x-outer, y+l7], [x+outer, y+l7],
+            [x-outer, y+l6], [x+outer, y+l6],
+            [x-outer, y+l5], [x+outer, y+l5],
+            [x-outer, y+l4], [x-center, y+l4], [x+center, y+l4], [x+outer, y+l4],
+            [x-outer, y+l3], [x-edge, y+l3], [x+edge, y+l3], [x+outer, y+l3],
+            [x-outer, y+l2], [x+outer, y+l2],
+            # Bottom row
+            [x-outer, y+l1], [x-middle, y+l1], [x-edge, y+l1], [x, y+l1], [x+edge, y+l1], [x+middle, y+l1], [x+outer, y+l1],
+            # Inner points
+            [x-middle, y-1452.43], [x-edge_sp, y-1473.69], [x, y-l2], [x+edge_sp, y-1566.08], [x+middle, y-1587.34],
+            [x-middle, y-1298.93], [x, y-1345.01], [x+middle, y-1390.84],
+            [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
+            [x-inner, y-l5], [x-fine, y-l5], [x, y-l5], [x+fine, y-l5], [x+inner, y+l5],
+            [x-inner, y-l6], [x-fine, y-l6], [x, y-l6], [x+fine, y-l6], [x+inner, y-l6],
+            [x-inner, y-l7], [x-fine, y-l7], [x, y-l7], [x+fine, y-l7], [x+inner, y-l7],
+            [x-inner, y], [x-ultra, y], [x+ultra, y], [x+inner, y],
+            [x-inner, y+l7], [x-fine, y+l7], [x, y+l7], [x+fine, y+l7], [x+inner, y+l7],
+            [x-inner, y+l6], [x-fine, y+l6], [x, y+l6], [x+fine, y+l6], [x+inner, y+l6],
+            [x-inner, y+l5], [x-fine, y+l5], [x, y+l5], [x+fine, y+l5], [x+inner, y+l5],
+            [x-inner, y+l4], [x, y+l4], [x+inner, y+l4],
+            [x-middle, y+l3], [x, y+l3], [x+middle, y+l3],
+            [x-middle, y+l2], [x-edge, y+l2], [x, y+l2], [x+edge, y+l2], [x+middle, y+l2],
+        ])
+    else:  # A blocks - rectangular pattern
+        points_real = np.array([
+            # Top and bottom rows (symmetric)
+            [x-outer, y-l1], [x-middle, y-l1], [x-edge, y-l1], [x, y-l1], [x+edge, y-l1], [x+middle, y-l1], [x+outer, y-l1],
+            [x-outer, y-l2], [x+outer, y-l2],
+            [x-outer, y-l3], [x-edge, y-l3], [x+edge, y-l3], [x+outer, y-l3],
+            [x-outer, y-l4], [x-center, y-l4], [x+center, y-l4], [x+outer, y-l4],
+            [x-outer, y-l5], [x+outer, y-l5],
+            [x-outer, y-l6], [x+outer, y-l6],
+            [x-outer, y-l7], [x+outer, y-l7],
+            [x-outer, y], [x-center, y], [x, y], [x+center, y], [x+outer, y],
+            [x-outer, y+l7], [x+outer, y+l7],
+            [x-outer, y+l6], [x+outer, y+l6],
+            [x-outer, y+l5], [x+outer, y+l5],
+            [x-outer, y+l4], [x-center, y+l4], [x+center, y+l4], [x+outer, y+l4],
+            [x-outer, y+l3], [x-edge, y+l3], [x+edge, y+l3], [x+outer, y+l3],
+            [x-outer, y+l2], [x+outer, y+l2],
+            [x-outer, y+l1], [x-middle, y+l1], [x-edge, y+l1], [x, y+l1], [x+edge, y+l1], [x+middle, y+l1], [x+outer, y+l1],
+            # Inner points
+            [x-middle, y-l2], [x-edge, y-l2], [x, y-l2], [x+edge, y-l2], [x+middle, y-l2],
+            [x-middle, y-l3], [x, y-l3], [x+middle, y-l3],
+            [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
+            [x-inner, y-l5], [x-fine, y-l5], [x, y-l5], [x+fine, y-l5], [x+inner, y-l5],
+            [x-inner, y-l6], [x-fine, y-l6], [x, y-l6], [x+fine, y-l6], [x+inner, y-l6],
+            [x-inner, y-l7], [x-fine, y-l7], [x, y-l7], [x+fine, y-l7], [x+inner, y-l7],
+            [x-inner, y], [x-ultra, y], [x+ultra, y], [x+inner, y],
+            [x-inner, y+l7], [x-fine, y+l7], [x, y+l7], [x+fine, y+l7], [x+inner, y+l7],
+            [x-inner, y+l6], [x-fine, y+l6], [x, y+l6], [x+fine, y+l6], [x+inner, y+l6],
+            [x-inner, y+l5], [x-fine, y+l5], [x, y+l5], [x+fine, y+l5], [x+inner, y+l5],
+            [x-inner, y+l4], [x, y+l4], [x+inner, y+l4],
+            [x-middle, y+l3], [x, y+l3], [x+middle, y+l3],
+            [x-middle, y+l2], [x-edge, y+l2], [x, y+l2], [x+edge, y+l2], [x+middle, y+l2],
+        ])
+    
+    labels = np.repeat([0, 1], [51, 56])
+    return points_real, labels
+
+
+def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
+                           segment_width, K_height, AB_height, image, 
+                           k_params, ab_params, y_bounds):
+    """
+    Generate prompt points for SAM using fully parameterized values.
     """
     prompt_centre_x, prompt_centre_y = prompt_centre
-    x = prompt_centre_x * (resolution*1000)
-    y = prompt_centre_y * (resolution*1000)
-    map_y_mm = map_y * (resolution*1000)
+    x = prompt_centre_x * (resolution * 1000)
+    y = prompt_centre_y * (resolution * 1000)
+    map_y_mm = map_y * (resolution * 1000)
     
     if block == 'K':
-        points_real = np.array([
-            [x-700,y-732.35],[x-700,y-505.96],[x-700,y-310.91],[x-700,y],[x-700,y+310.91],[x-700,y+505.96],[x-700,y+732.35],
-            [x-500,y-705.96],[x-500,y+705.96],
-            [x-348.16,y-685.91],[x-348.16,y-310.91],[x-325,y],[x-348.16,y+310.91],[x-348.16,y+685.91],
-            [x,y-639.96],[x,y],[x,y+639.96],
-            [x+348.16,y-594.01],[x+348.16,y-219.01],[x+325,y],[x+348.16,y+219.01],[x+348.16,y+594.01],
-            [x+500,y-573.96],[x+500,y+573.96],
-            [x+700,y-547.57],[x+700,y-373.96],[x+700,y-219.01],[x+700,y],[x+700,y+219.01],[x+700,y+373.96],[x+700,y+547.57],
-            [x-500,y-505.96],[x-511.06,y-310.91],[x-500,y],[x-511.06,y+310.91],[x-500,y+505.96],
-            [x-348.16,y-485.91],[x-348.16,y+485.91],
-            [x,y-439.96],[x,y+439.96],
-            [x+348.16,y-394.01],[x+348.16,y+394.01],
-            [x+500,y-373.96],[x+511.06,y-219.01],[x+500,y],[x+511.06,y+219.01],[x+500,y+373.96]
-        ])
-        labels = np.repeat([0, 1], [31, 16])
-    elif block == 'B1':
-        points_real = np.array([
-            [x-700,y-1719.89],[x-511.06,y-1719.89],[x-348.16,y-1719.89],[x,y-1719.89],[x+348.16,y-1719.89],[x+511.06,y-1719.89],[x+700,y-1719.89],
-            [x-700,y-1519.89],[x+700,y-1519.89],
-            [x-700,y-1344.89],[x-348.16,y-1344.89],[x+348.16,y-1344.89],[x+700,y-1344.89],
-            [x-700,y-1090.09],[x-325,y-1090.09],[x+325,y-1090.09],[x+700,y-1090.09],
-            [x-700,y-817.57],[x+700,y-817.57],
-            [x-700,y-545.05],[x+700,y-545.05],
-            [x-700,y-272.52],[x+700,y-272.52],
-            [x-700,y],[x-325,y],[x,y],[x+325,y],[x+700,y],
-            [x-700,y+272.52],[x+700,y+272.52],
-            [x-700,y+545.05],[x+700,y+545.05],
-            [x-700,y+817.57],[x+700,y+817.57],
-            [x-700,y+1090.09],[x-325,y+1090.09],[x+325,y+1090.09],[x+700,y+1090.09],
-            [x-700,y+1298.93],[x-350,y+1298.93],[x+350,y+1390.84],[x+700,y+1390.84],
-            [x-700,y+1427.43],[x+700,y+1612.28],
-            [x-700,y+1627.49],[x-511.06,y+1652.43],[x-350,y+1673.69],[x,y+1719.89],[x+350,y+1766.08],[x+511.06,y+1787.34],[x+700,y+1812.28],
-            [x-511.06,y-1519.89],[x-348.16,y-1519.89],[x,y-1519.89],[x+348.16,y-1519.89],[x+511.06,y-1519.89],
-            [x-511.06,y-1344.89],[x,y-1344.89],[x+511.06,y-1344.89],
-            [x-500,y-1090.09],[x,y-1090.09],[x+500,y-1090.09],
-            [x-500,y-817.57],[x-250,y-817.57],[x,y-817.57],[x+250,y-817.57],[x+500,y-817.57],
-            [x-500,y-545.05],[x-250,y-545.05],[x,y-545.05],[x+250,y-545.05],[x+500,y-545.05],
-            [x-500,y-272.52],[x-250,y-272.52],[x,y-272.52],[x+250,y-272.52],[x+500,y-272.52],
-            [x-500,y],[x-162.5,y],[x+162.5,y],[x+500,y],
-            [x-500,y+272.52],[x-250,y+272.52],[x,y+272.52],[x+250,y+272.52],[x+500,y+272.52],
-            [x-500,y+545.05],[x-250,y+545.05],[x,y+545.05],[x+250,y+545.05],[x+500,y+545.05],
-            [x-500,y+817.57],[x-250,y+817.57],[x,y+817.57],[x+250,y+817.57],[x+500,y+817.57],
-            [x-500,y+1090.09],[x,y+1090.09],[x+500,y+1090.09],
-            [x-511.06,y+1298.93],[x,y+1345.01],[x+511.06,y+1390.84],
-            [x-511.06,y+1452.43],[x-350,y+1473.69],[x,y+1519.89],[x+350,y+1566.08],[x+511.06,y+1587.34]      
-        ])
-        labels = np.repeat([0,1],[51,56])
-    elif block == 'B2':
-        points_real = np.array([
-            [x-700,y-1627.49],[x-511.06,y-1652.43],[x-350,y-1673.69],[x,y-1719.89],[x+350,y-1766.08],[x+511.06,y-1787.34],[x+700,y-1812.28],
-            [x-700,y-1427.43],[x+700,y-1612.28],
-            [x-700,y-1298.93],[x-350,y-1298.93],[x+350,y-1390.84],[x+700,y-1390.84],            
-            [x-700,y-1090.09],[x-325,y-1090.09],[x+325,y-1090.09],[x+700,y-1090.09],
-            [x-700,y-817.57],[x+700,y-817.57],
-            [x-700,y-545.05],[x+700,y-545.05],
-            [x-700,y-272.52],[x+700,y-272.52],
-            [x-700,y],[x-325,y],[x,y],[x+325,y],[x+700,y],
-            [x-700,y+272.52],[x+700,y+272.52],
-            [x-700,y+545.05],[x+700,y+545.05],
-            [x-700,y+817.57],[x+700,y+817.57],
-            [x-700,y+1090.09],[x-325,y+1090.09],[x+325,y+1090.09],[x+700,y+1090.09],
-            [x-700,y+1344.89],[x-348.16,y+1344.89],[x+348.16,y+1344.89],[x+700,y+1344.89],
-            [x-700,y+1519.89],[x+700,y+1519.89],
-            [x-700,y+1719.89],[x-511.06,y+1719.89],[x-348.16,y+1719.89],[x,y+1719.89],[x+348.16,y+1719.89],[x+511.06,y+1719.89],[x+700,y+1719.89],
-            [x-511.06,y-1452.43],[x-350,y-1473.69],[x,y-1519.89],[x+350,y-1566.08],[x+511.06,y-1587.34],     
-            [x-511.06,y-1298.93],[x,y-1345.01],[x+511.06,y-1390.84],
-            [x-500,y-1090.09],[x,y-1090.09],[x+500,y-1090.09],
-            [x-500,y-817.57],[x-250,y-817.57],[x,y-817.57],[x+250,y-817.57],[x+500,y+817.57],
-            [x-500,y-545.05],[x-250,y-545.05],[x,y-545.05],[x+250,y-545.05],[x+500,y-545.05],
-            [x-500,y-272.52],[x-250,y-272.52],[x,y-272.52],[x+250,y-272.52],[x+500,y-272.52],
-            [x-500,y],[x-162.5,y],[x+162.5,y],[x+500,y],
-            [x-500,y+272.52],[x-250,y+272.52],[x,y+272.52],[x+250,y+272.52],[x+500,y+272.52],
-            [x-500,y+545.05],[x-250,y+545.05],[x,y+545.05],[x+250,y+545.05],[x+500,y+545.05],
-            [x-500,y+817.57],[x-250,y+817.57],[x,y+817.57],[x+250,y+817.57],[x+500,y+817.57],
-            [x-500,y+1090.09],[x,y+1090.09],[x+500,y+1090.09],
-            [x-511.06,y+1344.89],[x,y+1344.89],[x+511.06,y+1344.89],
-            [x-511.06,y+1519.89],[x-348.16,y+1519.89],[x,y+1519.89],[x+348.16,y+1519.89],[x+511.06,y+1519.89],
-        ])
-        labels = np.repeat([0,1],[51,56])
-    else:  # A blocks
-        points_real = np.array([
-            [x-700,y-1719.89],[x-511.06,y-1719.89],[x-348.16,y-1719.89],[x,y-1719.89],[x+348.16,y-1719.89],[x+511.06,y-1719.89],[x+700,y-1719.89],
-            [x-700,y-1519.89],[x+700,y-1519.89],
-            [x-700,y-1344.89],[x-348.16,y-1344.89],[x+348.16,y-1344.89],[x+700,y-1344.89],
-            [x-700,y-1090.09],[x-325,y-1090.09],[x+325,y-1090.09],[x+700,y-1090.09],
-            [x-700,y-817.57],[x+700,y-817.57],
-            [x-700,y-545.05],[x+700,y-545.05],
-            [x-700,y-272.52],[x+700,y-272.52],
-            [x-700,y],[x-325,y],[x,y],[x+325,y],[x+700,y],
-            [x-700,y+272.52],[x+700,y+272.52],
-            [x-700,y+545.05],[x+700,y+545.05],
-            [x-700,y+817.57],[x+700,y+817.57],
-            [x-700,y+1090.09],[x-325,y+1090.09],[x+325,y+1090.09],[x+700,y+1090.09],
-            [x-700,y+1344.89],[x-348.16,y+1344.89],[x+348.16,y+1344.89],[x+700,y+1344.89],
-            [x-700,y+1519.89],[x+700,y+1519.89],
-            [x-700,y+1719.89],[x-511.06,y+1719.89],[x-348.16,y+1719.89],[x,y+1719.89],[x+348.16,y+1719.89],[x+511.06,y+1719.89],[x+700,y+1719.89],
-            [x-511.06,y-1519.89],[x-348.16,y-1519.89],[x,y-1519.89],[x+348.16,y-1519.89],[x+511.06,y-1519.89],
-            [x-511.06,y-1344.89],[x,y-1344.89],[x+511.06,y-1344.89],
-            [x-500,y-1090.09],[x,y-1090.09],[x+500,y-1090.09],
-            [x-500,y-817.57],[x-250,y-817.57],[x,y-817.57],[x+250,y-817.57],[x+500,y-817.57],
-            [x-500,y-545.05],[x-250,y-545.05],[x,y-545.05],[x+250,y-545.05],[x+500,y-545.05],
-            [x-500,y-272.52],[x-250,y-272.52],[x,y-272.52],[x+250,y-272.52],[x+500,y-272.52],
-            [x-500,y],[x-162.5,y],[x+162.5,y],[x+500,y],
-            [x-500,y+272.52],[x-250,y+272.52],[x,y+272.52],[x+250,y+272.52],[x+500,y+272.52],
-            [x-500,y+545.05],[x-250,y+545.05],[x,y+545.05],[x+250,y+545.05],[x+500,y+545.05],
-            [x-500,y+817.57],[x-250,y+817.57],[x,y+817.57],[x+250,y+817.57],[x+500,y+817.57],
-            [x-500,y+1090.09],[x,y+1090.09],[x+500,y+1090.09],
-            [x-511.06,y+1344.89],[x,y+1344.89],[x+511.06,y+1344.89],
-            [x-511.06,y+1519.89],[x-348.16,y+1519.89],[x,y+1519.89],[x+348.16,y+1519.89],[x+511.06,y+1519.89],
-        ])
-        labels = np.repeat([0,1],[51,56])
+        points_real, labels = generate_prompt_points_k(x, y, k_params, resolution)
+    else:
+        points_real, labels = generate_prompt_points_ab(x, y, ab_params, block, resolution)
 
+    # Filter points based on y_bounds
     keep_mask = np.ones(len(labels), dtype=bool)
     for i in range(len(labels)):
         if labels[i] == 0:
-            y_cond = points_real[i, 1] + map_y_mm < 4200 or points_real[i, 1] + map_y_mm > 13100
+            y_cond = points_real[i, 1] + map_y_mm < y_bounds[0] or points_real[i, 1] + map_y_mm > y_bounds[1]
             x_cond = abs(points_real[i, 0] - x) <= segment_width * 0.5
             y_limit = K_height if block == 'K' else AB_height
             y_cond2 = abs(points_real[i, 1] - y) <= y_limit * 0.5
@@ -271,21 +452,27 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.
     points_real = points_real[keep_mask]
     labels = labels[keep_mask]
     
-    points = points_real / (resolution*1000)
+    points = points_real / (resolution * 1000)
 
+    # Filter points outside image bounds
     if image is not None:
-        within_bounds = (points[:, 0] >= 0) & ((points[:, 0] + initial_x - (segment_width*0.5+150)/(resolution*1000)) <= image.shape[1])
+        padding = 150  # Default padding
+        within_bounds = (points[:, 0] >= 0) & ((points[:, 0] + initial_x - (segment_width*0.5+padding)/(resolution*1000)) <= image.shape[1])
         points = points[within_bounds]
         labels = labels[within_bounds]
         
     return points, labels
 
 
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
 def convert_to_pixel_coords(real_dist, resolution=0.005):
-    return int(real_dist / (resolution*1000))
+    return int(real_dist / (resolution * 1000))
 
 
-def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution):
+def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params, mask_eps):
     img_height, img_width, _ = image.shape
     x1 = max(cx - crop_width // 2, 0)
     y1 = max(cy - crop_height // 2, 0)
@@ -297,8 +484,11 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
     prompt_centre_y = cy - y1
     prompt_centre = (prompt_centre_x, prompt_centre_y)
     
-    cropped_template_mask = generate_template_mask(cropped_image.shape[0], cropped_image.shape[1], prompt_centre, block, resolution)
-    template_mask_logits = compute_logits_from_mask(cropped_template_mask)
+    cropped_template_mask = generate_template_mask(
+        cropped_image.shape[0], cropped_image.shape[1], 
+        prompt_centre, block, resolution, template_params
+    )
+    template_mask_logits = compute_logits_from_mask(cropped_template_mask, mask_eps)
 
     return cropped_image, template_mask_logits, prompt_centre
 
@@ -344,7 +534,7 @@ def restore_sam_logits(logits, original_shape):
 
 
 def compute_block_label(segment_per_ring):
-    block_labels = ['K','B1']
+    block_labels = ['K', 'B1']
     num_a_labels = segment_per_ring - 3
     block_labels += [f'A{i+1}' for i in range(num_a_labels)]
     block_labels += ['B2']
@@ -352,33 +542,39 @@ def compute_block_label(segment_per_ring):
 
 
 def compute_block_to_label_map(segment_per_ring):
-    """Create mapping from block names to numeric labels."""
     if segment_per_ring == 7:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
-    else:  # 6 segments
+    else:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 
 # =============================================================================
-# Pattern-Aware Row Processing
+# Row Processing (Fully Parameterized)
 # =============================================================================
 
-def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, segment_width=1200, 
-                K_height=1079.92, angle=7.52, AB_height=3239.77, pattern_info=None):
-    """
-    Process a single row (ring) with pattern-aware prompting.
-    
-    Enhanced version uses quality scores from pattern detection
-    to adjust confidence in prompt positions.
-    """
+def process_row(df_row, image, predictor, config):
+    """Process a single row (ring) with fully parameterized settings."""
     initial_x, initial_y = df_row['X'], df_row['Y']
-    
-    # Get quality score if available (from pattern.csv)
     quality = df_row.get('quality', 1.0) if hasattr(df_row, 'get') else 1.0
+    
+    # Extract config
+    resolution = config['resolution']
+    segment_per_ring = config['segment_per_ring']
+    segment_width = config['segment_width']
+    K_height = config['K_height']
+    AB_height = config['AB_height']
+    angle = config['angle']
+    padding = config['padding']
+    crop_margin = config['crop_margin']
+    mask_eps = config['mask_eps']
+    y_bounds = config['y_bounds']
+    k_params = config['k_params']
+    ab_params = config['ab_params']
+    template_params = config['template_params']
     
     block_labels = compute_block_label(segment_per_ring)
 
-    delta_x = convert_to_pixel_coords(0.5*segment_width + 150, resolution)
+    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
     delta_y = 0
 
     reverse = False
@@ -388,22 +584,23 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
 
     results = []
     for i in range(segment_per_ring):
-        if reverse == False:
+        if not reverse:
             block = block_labels[block_label_index]
             if block_label_index == 0:
-                delta_y = convert_to_pixel_coords(0.5*K_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
+                delta_y = convert_to_pixel_coords(0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
                 map_y = initial_y
             else:
-                delta_y = convert_to_pixel_coords(0.5*AB_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
+                delta_y = convert_to_pixel_coords(0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
                 if block_label_index == 1:
                     map_y = initial_y - convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
                 else:
                     map_y = map_y - convert_to_pixel_coords(AB_height, resolution)
 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution)
-            points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
-                                                   segment_width, K_height, AB_height, image, quality)
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps)
+            points, labels = generate_prompt_points(
+                prompt_centre, initial_x, map_y, block, resolution,
+                segment_width, K_height, AB_height, image, k_params, ab_params, y_bounds)
         
             if len(points) > 0 and np.any(points[:, 1] < 0):
                 within_bounds = (points[:, 1] >= 0)
@@ -421,12 +618,12 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
                 )
             
                 results.append({
-                    'left_top': (initial_x-prompt_centre[0], map_y-prompt_centre[1]),
+                    'left_top': (initial_x - prompt_centre[0], map_y - prompt_centre[1]),
                     'block': block,
                     'mask': mask,
                     'score': score,
                     'logit': logit[0],
-                    'quality': quality  # Store quality for potential weighted aggregation
+                    'quality': quality
                 })
             
             if reverse:
@@ -443,12 +640,13 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
                 map_y = map_y + convert_to_pixel_coords(AB_height, resolution)
 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution)
-            points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
-                                                   segment_width, K_height, AB_height, image, quality)
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps)
+            points, labels = generate_prompt_points(
+                prompt_centre, initial_x, map_y, block, resolution,
+                segment_width, K_height, AB_height, image, k_params, ab_params, y_bounds)
 
-            if len(points) > 0 and np.any((points[:, 1]+map_y-delta_y) > image.shape[0]):
-                within_bounds = ((points[:, 1]+map_y-delta_y) <= image.shape[0])
+            if len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
+                within_bounds = ((points[:, 1] + map_y - delta_y) <= image.shape[0])
                 points = points[within_bounds]
                 labels = labels[within_bounds]
                 stop = True
@@ -463,7 +661,7 @@ def process_row(df_row, image, predictor, resolution=0.005, segment_per_ring=6, 
                 )
 
                 results.append({
-                    'left_top': (initial_x-prompt_centre[0], map_y-prompt_centre[1]),
+                    'left_top': (initial_x - prompt_centre[0], map_y - prompt_centre[1]),
                     'block': block,
                     'mask': mask,
                     'score': score,
@@ -517,30 +715,37 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
 # =============================================================================
 
 def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
-    """
-    Run SAM segmentation with pattern-aware prompting.
+    """Run SAM segmentation with fully parameterized settings."""
     
-    Uses pattern.csv from 4-1_detection.py for normalized K positions.
-    """
-    
-    # Load parameters
+    # Load and merge parameters
     params = load_parameters(tunnel_id, base_dir)
-    resolution = get_param(params, 'image', 'resolution', default=0.005)
+    params = deep_merge(DEFAULT_PARAMS, params)
     
-    # Load segment geometry parameters
-    segment_width = get_param(params, 'segment_geometry', 'segment_width', default=1200.0)
-    K_height = get_param(params, 'segment_geometry', 'k_height', default=1079.92)
-    AB_height = get_param(params, 'segment_geometry', 'ab_height', default=3239.77)
-    angle = get_param(params, 'segment_geometry', 'angle_deg', default=7.52)
+    # Extract parameters
+    resolution = params['image']['resolution']
+    segment_width = params['segment_geometry']['segment_width']
+    K_height = params['segment_geometry']['k_height']
+    AB_height = params['segment_geometry']['ab_height']
+    angle = params['segment_geometry']['angle_deg']
     
-    # Load pattern-aware parameters
-    use_quality_weighting = get_param(params, 'pattern_aware', 'use_quality_weighting', default=True)
-    min_quality_threshold = get_param(params, 'pattern_aware', 'min_quality_threshold', default=0.3)
+    # Processing parameters
+    padding = params['processing']['padding']
+    crop_margin = params['processing']['crop_margin']
+    mask_eps = params['processing']['mask_eps']
+    y_bounds = params['processing']['y_bounds']
+    
+    # Prompt point parameters
+    k_params = params['prompt_points']['k_block']
+    ab_params = params['prompt_points']['ab_blocks']
+    template_params = params['prompt_points']['template_mask']
+    
+    # Pattern-aware parameters
+    use_quality_weighting = params['pattern_aware']['use_quality_weighting']
+    min_quality_threshold = params['pattern_aware']['min_quality_threshold']
     
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
-    # Load pattern.csv (normalized K positions from 4-1_detection.py)
     pattern_csv_path = os.path.join(tunnel_dir, "pattern.csv")
     detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
     
@@ -560,20 +765,10 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     print(f"Processing tunnel: {tunnel_id}")
     print(f"Segment geometry: width={segment_width}, K_height={K_height}, AB_height={AB_height}, angle={angle}")
     
-    # Load pattern metadata for pattern-aware processing
-    pattern_info = None
-    pattern_json_path = os.path.join(tunnel_dir, "pattern.json")
-    if os.path.exists(pattern_json_path):
-        with open(pattern_json_path, 'r') as f:
-            pattern_info = json.load(f)
-        print(f"Pattern type: {pattern_info.get('pattern_type', 'unknown')}")
-        print(f"Pattern confidence: {pattern_info.get('confidence', 0):.2f}")
-    
     # Detect segment count
     if segment_count is None:
         segment_count = detect_segment_count_from_geometry(tunnel_dir, resolution)
         if segment_count is None:
-            # Load image first to get height
             image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
             segment_count = detect_segment_count_from_height(image.shape[0], resolution)
     
@@ -591,17 +786,32 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     
     print(f"Using {segment_count} segments per ring")
     
-    # Get block to label mapping
     block_to_label = compute_block_to_label_map(segment_count)
     
-    # Run SAM segmentation with pattern-aware prompting
+    # Build config for row processing
+    config = {
+        'resolution': resolution,
+        'segment_per_ring': segment_count,
+        'segment_width': segment_width,
+        'K_height': K_height,
+        'AB_height': AB_height,
+        'angle': angle,
+        'padding': padding,
+        'crop_margin': crop_margin,
+        'mask_eps': mask_eps,
+        'y_bounds': y_bounds,
+        'k_params': k_params,
+        'ab_params': ab_params,
+        'template_params': template_params,
+    }
+    
+    # Run SAM segmentation
     all_results = []
     for _, row in tqdm(initial_prompt_points.iterrows(), total=len(initial_prompt_points), desc="Processing rows"):
-        result = process_row(row, image, predictor, resolution, segment_count, 
-                            segment_width, K_height, angle, AB_height, pattern_info)
+        result = process_row(row, image, predictor, config)
         all_results.append(result)
     
-    # Aggregate results with quality weighting
+    # Aggregate results
     logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
     label_map = np.zeros(image.shape[:2], dtype=int)
     ring_map = np.zeros(image.shape[:2], dtype=int)
@@ -623,11 +833,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
 
             new_logits = restore_sam_logits(logits, mask.shape)
             
-            # Apply quality weighting to logits (if enabled and quality meets threshold)
             if use_quality_weighting and quality >= min_quality_threshold:
                 new_logits = new_logits * quality
             elif quality < min_quality_threshold:
-                # Skip low-quality predictions
                 continue
             
             current_logits = logits_map[valid_slice_y, valid_slice_x]
@@ -653,7 +861,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     os.makedirs(tunnel_dir, exist_ok=True)
     updated_df.to_csv(os.path.join(tunnel_dir, 'final.csv'), index=False)
     
-    # Save label comparison if ground truth available
     if 'segment' in updated_df.columns:
         df_pred = pd.DataFrame()
         df_pred['gt_labels'] = updated_df['segment']
@@ -672,7 +879,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="SAM-based tunnel segmentation")
+    parser = argparse.ArgumentParser(description="SAM-based tunnel segmentation (fully parameterized)")
     parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4)")
     parser.add_argument("--segments", type=int, default=None, help="Number of segments (auto-detect if omitted)")
     parser.add_argument("--data-dir", default="data", help="Base data directory")

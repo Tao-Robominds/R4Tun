@@ -1,7 +1,7 @@
 {
     "description": "SAM-based tunnel segment segmentation parameters for Tunnel 2-2 (6-segment)",
     "segment_geometry": {
-        "segment_width": 1194.5832752853592,
+        "segment_width": 1229.6542986860234,
         "k_height": 1079.92,
         "ab_height": 3239.77,
         "angle_deg": 7.52
@@ -9,8 +9,78 @@
     "image": {
         "resolution": 0.005
     },
+    "processing": {
+        "padding": 118,
+        "crop_margin": 69,
+        "mask_eps": 0.001,
+        "y_bounds": [
+            4200,
+            13100
+        ]
+    },
+    "prompt_points": {
+        "k_block": {
+            "outer_ring": 709.6850157946487,
+            "middle_ring": 494.58327528535915,
+            "inner_ring": 309.9974915818003,
+            "center_ring": 321.33240027692807,
+            "spacing_factors": {
+                "k_block_spacing": 310.91,
+                "vertical_spacing": [
+                    732.35,
+                    505.96,
+                    310.91,
+                    219.01,
+                    373.96
+                ]
+            }
+        },
+        "ab_blocks": {
+            "outer_ring": 683.3708611139022,
+            "middle_ring": 474.2866817921941,
+            "inner_ring": 515.0888472948853,
+            "center_ring": 285.077042112439,
+            "fine_spacing": 272.1998772266825,
+            "ultra_fine": 195.69868963110252,
+            "edge_ring": 300.07787658410143,
+            "edge_spacing": 399.2211559291218,
+            "vertical_levels": {
+                "level_1": 1719.89,
+                "level_2": 1519.89,
+                "level_3": 1344.89,
+                "level_4": 1090.09,
+                "level_5": 817.57,
+                "level_6": 545.05,
+                "level_7": 272.52,
+                "center": 0
+            }
+        },
+        "template_mask": {
+            "k_block": {
+                "width": 636.7481509627717,
+                "height_pos": 631.1653160488281,
+                "height_neg": 410.70663052197176
+            },
+            "b1_block": {
+                "width": 577.3062425041416,
+                "height_top": 1622.477466025839,
+                "height_bottom_pos": 1540.69,
+                "height_bottom_neg": 1699.08
+            },
+            "b2_block": {
+                "width": 577.3062425041416,
+                "height_top_pos": 1540.69,
+                "height_top_neg": 1699.08,
+                "height_bottom": 1622.477466025839
+            },
+            "a_blocks": {
+                "width": 577.3062425041416,
+                "height": 1622.477466025839
+            }
+        }
+    },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.13998996632720118
+        "min_quality_threshold": 0.25994438868610226
     }
 }

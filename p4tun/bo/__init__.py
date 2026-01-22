@@ -11,7 +11,7 @@ Usage:
     # Optimize only detection parameters
     python -m p4tun.bo.optimize --tunnel 4-1 --stage detection --n-calls 30
     
-    # Optimize only SAM parameters
+    # Optimize only SAM parameters (expanded search space)
     python -m p4tun.bo.optimize --tunnel 2-2 --stage sam --n-calls 30
     
     # Use different metric (OA instead of mIoU)
@@ -24,16 +24,35 @@ Search Spaces:
     Detection:
         - Preprocessing: binary_threshold, dilation settings
         - Hough line detection: thresholds, min_length, max_gap, angles
-        - Pattern detection: tolerances for V-pair spacing, alternation
+        - Line processing: merge_distance_threshold
     
-    SAM:
-        - Segment geometry: segment_width, k_height, ab_height, angle
+    SAM (Expanded):
+        - Segment geometry: segment_width
+        - Processing: padding, crop_margin
+        - K-block prompt points: outer_ring, middle_ring, inner_ring, center_ring
+        - AB-block prompt points: outer_ring, middle_ring, inner_ring, etc.
+        - Template mask dimensions: width, height for K, A, B blocks
         - Pattern-aware: quality weighting threshold
 """
 
-from .search_space import get_search_space, params_to_detection_dict, params_to_sam_dict
-from .objective import PipelineObjective
-from .optimize import BayesianOptimizer
+# Lazy imports to avoid circular import warnings when running as __main__
+def __getattr__(name):
+    if name == 'get_search_space':
+        from .search_space import get_search_space
+        return get_search_space
+    elif name == 'params_to_detection_dict':
+        from .search_space import params_to_detection_dict
+        return params_to_detection_dict
+    elif name == 'params_to_sam_dict':
+        from .search_space import params_to_sam_dict
+        return params_to_sam_dict
+    elif name == 'PipelineObjective':
+        from .objective import PipelineObjective
+        return PipelineObjective
+    elif name == 'BayesianOptimizer':
+        from .optimize import BayesianOptimizer
+        return BayesianOptimizer
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     'get_search_space', 
