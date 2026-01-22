@@ -23,13 +23,19 @@ def _get_search_space_funcs():
     if _search_space_funcs is None:
         from p4tun.bo.search_space import (
             params_to_detection_dict, 
-            params_to_sam_dict, 
+            params_to_sam_dict,
+            params_to_denoising_dict,
+            params_to_enhancing_dict,
+            params_to_unfolding_dict,
             save_parameters,
             get_search_space
         )
         _search_space_funcs = {
             'params_to_detection_dict': params_to_detection_dict,
             'params_to_sam_dict': params_to_sam_dict,
+            'params_to_denoising_dict': params_to_denoising_dict,
+            'params_to_enhancing_dict': params_to_enhancing_dict,
+            'params_to_unfolding_dict': params_to_unfolding_dict,
             'save_parameters': save_parameters,
             'get_search_space': get_search_space,
         }
@@ -82,6 +88,9 @@ class PipelineObjective:
         
         # Script paths
         self.script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.unfolding_script = os.path.join(self.script_dir, '1_unfolding.py')
+        self.denoising_script = os.path.join(self.script_dir, '2_denoising.py')
+        self.enhancing_script = os.path.join(self.script_dir, '3_enhancing.py')
         self.detection_script = os.path.join(self.script_dir, '4-1_detection.py')
         self.sam_script = os.path.join(self.script_dir, '4-2_sam.py')
         self.eval_script = os.path.join(self.script_dir, 'evaluation.py')
@@ -92,8 +101,14 @@ class PipelineObjective:
         # Project root directory
         self.project_root = os.path.dirname(self.script_dir)
         
-        # Verify scripts exist
-        for script in [self.detection_script, self.sam_script, self.eval_script]:
+        # Verify scripts exist (only check scripts needed for the stage)
+        required_scripts = [self.detection_script, self.sam_script, self.eval_script]
+        if stage in ['preprocessing', 'denoising', 'enhancing']:
+            required_scripts.extend([self.denoising_script, self.enhancing_script])
+        if stage == 'unfolding':
+            required_scripts.extend([self.unfolding_script, self.denoising_script, self.enhancing_script])
+        
+        for script in required_scripts:
             if not os.path.exists(script):
                 raise FileNotFoundError(f"Script not found: {script}")
     
@@ -125,16 +140,34 @@ class PipelineObjective:
             self._update_parameters(params)
             
             # Run pipeline
-            # For detection optimization: run detection with new params, then SAM with existing (optimized) params
-            # For SAM optimization: use existing detection, run SAM with new params
-            # For combined: run both with new params
+            # For unfolding: run unfolding with new params, then all downstream with frozen params
+            # For preprocessing: run denoising + enhancing with new params, then detection + SAM with frozen params
+            # For detection: run detection with new params, then SAM with frozen params
+            # For SAM: use frozen detection, run SAM with new params
+            # For combined: run all with new params
             
-            if self.stage in ['detection', 'combined']:
+            if self.stage == 'unfolding':
+                # Run unfolding with new params, then full downstream pipeline
+                self._run_unfolding()
+                self._run_denoising()
+                self._run_enhancing()
                 self._run_detection()
-            
-            # Always run SAM to get segmentation for evaluation
-            # This uses existing SAM params for detection stage, new params for sam/combined
-            self._run_sam()
+                self._run_sam()
+            elif self.stage in ['preprocessing', 'denoising', 'enhancing']:
+                # Run preprocessing stages
+                if self.stage in ['preprocessing', 'denoising']:
+                    self._run_denoising()
+                if self.stage in ['preprocessing', 'enhancing']:
+                    self._run_enhancing()
+                # Run detection and SAM with frozen params to evaluate
+                self._run_detection()
+                self._run_sam()
+            elif self.stage in ['detection', 'combined']:
+                self._run_detection()
+                self._run_sam()
+            else:
+                # SAM only - just run SAM
+                self._run_sam()
             
             # Evaluate
             metrics = self._evaluate()
@@ -170,6 +203,39 @@ class PipelineObjective:
         """Update parameter JSON files with new values."""
         param_dict = dict(zip(self.param_names, params))
         funcs = _get_search_space_funcs()
+        
+        if self.stage == 'unfolding':
+            unfolding_dict = funcs['params_to_unfolding_dict'](params, self.param_names)
+            
+            # Load existing parameters and update
+            existing = self._load_existing_params('unfolding')
+            existing.update(unfolding_dict)
+            
+            filepath = funcs['save_parameters'](existing, self.tunnel_id, 'unfolding')
+            if self.verbose:
+                print(f"Updated unfolding parameters: {filepath}")
+        
+        if self.stage in ['preprocessing', 'denoising']:
+            denoising_dict = funcs['params_to_denoising_dict'](params, self.param_names)
+            
+            # Load existing parameters and update
+            existing = self._load_existing_params('denoising')
+            existing.update(denoising_dict)
+            
+            filepath = funcs['save_parameters'](existing, self.tunnel_id, 'denoising')
+            if self.verbose:
+                print(f"Updated denoising parameters: {filepath}")
+        
+        if self.stage in ['preprocessing', 'enhancing']:
+            enhancing_dict = funcs['params_to_enhancing_dict'](params, self.param_names)
+            
+            # Load existing parameters and update
+            existing = self._load_existing_params('enhancing')
+            existing.update(enhancing_dict)
+            
+            filepath = funcs['save_parameters'](existing, self.tunnel_id, 'enhancing')
+            if self.verbose:
+                print(f"Updated enhancing parameters: {filepath}")
         
         if self.stage in ['detection', 'combined']:
             detection_dict = funcs['params_to_detection_dict'](params, self.param_names)
@@ -209,6 +275,99 @@ class PipelineObjective:
                 return json.load(f)
         
         return {}
+    
+    def _run_unfolding(self):
+        """Run unfolding pipeline."""
+        if self.verbose:
+            print("Running unfolding...")
+        
+        # Unfolding script only takes tunnel_id as argument
+        cmd = [
+            sys.executable, 
+            self.unfolding_script, 
+            self.tunnel_id
+        ]
+        
+        # Set up environment
+        env = os.environ.copy()
+        pythonpath = env.get('PYTHONPATH', '')
+        env['PYTHONPATH'] = f"{self.segment_anything_path}:{pythonpath}" if pythonpath else self.segment_anything_path
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            timeout=self.timeout,
+            cwd=self.project_root,
+            env=env
+        )
+        
+        if result.returncode != 0:
+            if self.verbose:
+                print(f"Unfolding stderr: {result.stderr}")
+            raise RuntimeError(f"Unfolding failed: {result.stderr}")
+    
+    def _run_denoising(self):
+        """Run denoising pipeline."""
+        if self.verbose:
+            print("Running denoising...")
+        
+        # Denoising script only takes tunnel_id as argument
+        cmd = [
+            sys.executable, 
+            self.denoising_script, 
+            self.tunnel_id
+        ]
+        
+        # Set up environment
+        env = os.environ.copy()
+        pythonpath = env.get('PYTHONPATH', '')
+        env['PYTHONPATH'] = f"{self.segment_anything_path}:{pythonpath}" if pythonpath else self.segment_anything_path
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            timeout=self.timeout,
+            cwd=self.project_root,
+            env=env
+        )
+        
+        if result.returncode != 0:
+            if self.verbose:
+                print(f"Denoising stderr: {result.stderr}")
+            raise RuntimeError(f"Denoising failed: {result.stderr}")
+    
+    def _run_enhancing(self):
+        """Run enhancing pipeline."""
+        if self.verbose:
+            print("Running enhancing...")
+        
+        # Enhancing script only takes tunnel_id as argument
+        cmd = [
+            sys.executable, 
+            self.enhancing_script, 
+            self.tunnel_id
+        ]
+        
+        # Set up environment
+        env = os.environ.copy()
+        pythonpath = env.get('PYTHONPATH', '')
+        env['PYTHONPATH'] = f"{self.segment_anything_path}:{pythonpath}" if pythonpath else self.segment_anything_path
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            timeout=self.timeout,
+            cwd=self.project_root,
+            env=env
+        )
+        
+        if result.returncode != 0:
+            if self.verbose:
+                print(f"Enhancing stderr: {result.stderr}")
+            raise RuntimeError(f"Enhancing failed: {result.stderr}")
     
     def _run_detection(self):
         """Run detection pipeline."""

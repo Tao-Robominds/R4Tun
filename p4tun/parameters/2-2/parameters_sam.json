@@ -1,9 +1,9 @@
 {
     "segment_geometry": {
-        "segment_width": 1157.466571857352,
-        "k_height": 1071.0875865012526,
-        "ab_height": 3289.5152027731133,
-        "angle_deg": 6.977975905536419
+        "segment_width": 1157.47,
+        "k_height": 1071.09,
+        "ab_height": 3289.52,
+        "angle_deg": 6.978
     },
     "image": {
         "resolution": 0.005
@@ -19,9 +19,9 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 657.0823740250179,
-            "middle_ring": 514.1004738977343,
-            "inner_ring": 327.00315892612144,
+            "outer_ring": 657.08,
+            "middle_ring": 514.1,
+            "inner_ring": 327.0,
             "center_ring": 370.0,
             "spacing_factors": {
                 "k_block_spacing": 310.91,
@@ -35,34 +35,34 @@
             }
         },
         "ab_blocks": {
-            "outer_ring": 674.5288085692108,
-            "middle_ring": 519.9115563381505,
-            "inner_ring": 479.2343079124282,
-            "center_ring": 310.76713327587186,
-            "fine_spacing": 219.56143407731216,
-            "ultra_fine": 146.4848651869963,
-            "edge_ring": 340.193889757555,
-            "edge_spacing": 312.25138161776994,
+            "outer_ring": 674.53,
+            "middle_ring": 519.91,
+            "inner_ring": 479.23,
+            "center_ring": 310.77,
+            "fine_spacing": 219.56,
+            "ultra_fine": 146.48,
+            "edge_ring": 340.19,
+            "edge_spacing": 312.25,
             "vertical_levels": {
-                "level_1": 1779.9028085796847,
+                "level_1": 1779.9,
                 "level_2": 1670.0,
-                "level_3": 1399.9170351055627,
-                "level_4": 1193.6019941858365,
-                "level_5": 812.6117532790923,
-                "level_6": 584.8503045119575,
+                "level_3": 1399.92,
+                "level_4": 1193.6,
+                "level_5": 812.61,
+                "level_6": 584.85,
                 "level_7": 300.0,
                 "center": 0
             }
         },
         "template_mask": {
             "k_block": {
-                "width": 642.9469693552535,
-                "height_pos": 656.4727148964724,
-                "height_neg": 460.4138819860728
+                "width": 642.95,
+                "height_pos": 656.47,
+                "height_neg": 460.41
             },
             "b1_block": {
                 "width": 575.0,
-                "height_top": 1581.361565473606,
+                "height_top": 1581.36,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
@@ -70,16 +70,16 @@
                 "width": 575.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1581.361565473606
+                "height_bottom": 1581.36
             },
             "a_blocks": {
                 "width": 575.0,
-                "height": 1581.361565473606
+                "height": 1581.36
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.2669234165261959
+        "min_quality_threshold": 0.267
     }
 }

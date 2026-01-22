@@ -12,6 +12,86 @@ import os
 
 
 # =============================================================================
+# Unfolding Parameters Search Space
+# =============================================================================
+
+UNFOLDING_SPACE = {
+    # Slicing parameters - slice_half_thickness must be large enough to capture points
+    'unfold_slice_half_thickness': Real(0.004, 0.007, name='unfold_slice_half_thickness'),
+    'unfold_max_distance_from_top': Real(4.2, 4.8, name='unfold_max_distance_from_top'),
+    
+    # Curve fitting
+    'unfold_polynomial_degree': Integer(2, 4, name='unfold_polynomial_degree'),
+    
+    # RANSAC ellipse fitting - conservative ranges to avoid fitting failures
+    'unfold_inlier_ratio': Real(0.70, 0.80, name='unfold_inlier_ratio'),
+    'unfold_confidence': Real(0.88, 0.92, name='unfold_confidence'),
+    'unfold_inlier_threshold': Real(0.6, 1.0, name='unfold_inlier_threshold'),
+    
+    # Arc length resolution
+    'unfold_samples_per_ring': Integer(1100, 1400, name='unfold_samples_per_ring'),
+}
+
+
+# =============================================================================
+# Denoising Parameters Search Space
+# =============================================================================
+
+DENOISING_SPACE = {
+    # Radius filtering - use center and half-width to ensure valid range
+    # radius_min = center - half_width, radius_max = center + half_width
+    'denoise_radius_center': Real(2.70, 2.80, name='denoise_radius_center'),
+    'denoise_radius_half_width': Real(0.03, 0.10, name='denoise_radius_half_width'),
+    
+    # Grid resolution
+    'denoise_theta_step': Real(0.3, 0.7, name='denoise_theta_step'),
+    'denoise_radial_step': Real(0.0008, 0.0015, name='denoise_radial_step'),
+    
+    # Gradient detection
+    'denoise_gradient_threshold': Real(0.1, 0.4, name='denoise_gradient_threshold'),
+    
+    # Cutoff smoothing
+    'denoise_smoothing_window': Integer(2, 5, name='denoise_smoothing_window'),
+    'denoise_smoothing_offset': Real(-0.005, -0.001, name='denoise_smoothing_offset'),
+}
+
+
+# =============================================================================
+# Enhancing Parameters Search Space
+# =============================================================================
+
+ENHANCING_SPACE = {
+    # Curvature
+    'enhance_curvature_neighbors': Integer(15, 30, name='enhance_curvature_neighbors'),
+    
+    # Upsampling - target distances (simplified to single scale factor)
+    'enhance_target_distance_1': Real(0.06, 0.10, name='enhance_target_distance_1'),
+    'enhance_target_distance_2': Real(0.03, 0.06, name='enhance_target_distance_2'),
+    'enhance_target_distance_3': Real(0.015, 0.03, name='enhance_target_distance_3'),
+    
+    # Upsampling parameters
+    'enhance_curvature_threshold': Real(0.0003, 0.0008, name='enhance_curvature_threshold'),
+    'enhance_upsampling_neighbors': Integer(15, 30, name='enhance_upsampling_neighbors'),
+    'enhance_distance_tolerance_low': Real(0.7, 1.1, name='enhance_distance_tolerance_low'),
+    'enhance_distance_tolerance_high': Real(1.5, 2.5, name='enhance_distance_tolerance_high'),
+    'enhance_radius_filter_factor': Real(0.10, 0.20, name='enhance_radius_filter_factor'),
+    
+    # Outlier detection
+    'enhance_depth_threshold_low': Real(0.002, 0.005, name='enhance_depth_threshold_low'),
+    'enhance_depth_threshold_high': Real(0.006, 0.012, name='enhance_depth_threshold_high'),
+    'enhance_outlier_neighbors': Integer(15, 30, name='enhance_outlier_neighbors'),
+    
+    # Outlier interpolation
+    'enhance_interpolation_radius': Real(0.04, 0.08, name='enhance_interpolation_radius'),
+    'enhance_num_interpolations': Integer(1, 3, name='enhance_num_interpolations'),
+    
+    # Depth map
+    'enhance_resolution': Real(0.004, 0.006, name='enhance_resolution'),
+    'enhance_interpolation_window': Integer(3, 7, name='enhance_interpolation_window'),
+}
+
+
+# =============================================================================
 # Detection Parameters Search Space
 # =============================================================================
 
@@ -100,6 +180,37 @@ SAM_SPACE = {
 # Combined Search Spaces
 # =============================================================================
 
+def get_unfolding_space() -> Tuple[List, List[str]]:
+    """Get unfolding parameter search space."""
+    dimensions = list(UNFOLDING_SPACE.values())
+    names = list(UNFOLDING_SPACE.keys())
+    return dimensions, names
+
+
+def get_denoising_space() -> Tuple[List, List[str]]:
+    """Get denoising parameter search space."""
+    dimensions = list(DENOISING_SPACE.values())
+    names = list(DENOISING_SPACE.keys())
+    return dimensions, names
+
+
+def get_enhancing_space() -> Tuple[List, List[str]]:
+    """Get enhancing parameter search space."""
+    dimensions = list(ENHANCING_SPACE.values())
+    names = list(ENHANCING_SPACE.keys())
+    return dimensions, names
+
+
+def get_preprocessing_space() -> Tuple[List, List[str]]:
+    """Get combined denoising + enhancing search space."""
+    combined = {}
+    combined.update(DENOISING_SPACE)
+    combined.update(ENHANCING_SPACE)
+    dimensions = list(combined.values())
+    names = list(combined.keys())
+    return dimensions, names
+
+
 def get_detection_space() -> Tuple[List, List[str]]:
     """Get detection parameter search space."""
     dimensions = list(DETECTION_SPACE.values())
@@ -129,7 +240,7 @@ def get_search_space(stage: str = 'combined') -> Tuple[List, List[str]]:
     Get search space for specified stage.
     
     Args:
-        stage: 'detection', 'sam', or 'combined'
+        stage: 'detection', 'sam', 'preprocessing', 'denoising', 'enhancing', 'unfolding', or 'combined'
     
     Returns:
         Tuple of (dimensions list, parameter names list)
@@ -138,6 +249,14 @@ def get_search_space(stage: str = 'combined') -> Tuple[List, List[str]]:
         return get_detection_space()
     elif stage == 'sam':
         return get_sam_space()
+    elif stage == 'denoising':
+        return get_denoising_space()
+    elif stage == 'enhancing':
+        return get_enhancing_space()
+    elif stage == 'preprocessing':
+        return get_preprocessing_space()
+    elif stage == 'unfolding':
+        return get_unfolding_space()
     else:
         return get_combined_space()
 
@@ -145,6 +264,112 @@ def get_search_space(stage: str = 'combined') -> Tuple[List, List[str]]:
 # =============================================================================
 # Parameter Conversion
 # =============================================================================
+
+def params_to_unfolding_dict(params: List, names: List[str]) -> Dict:
+    """Convert BO parameters to unfolding parameters dict structure."""
+    param_dict = dict(zip(names, params))
+    
+    return {
+        'physical_constants': {
+            'ring_spacing': 1.2,
+            'tunnel_diameter': 5.5,
+        },
+        'slicing': {
+            'slice_half_thickness': float(param_dict.get('unfold_slice_half_thickness', 0.005)),
+            'max_distance_from_top': float(param_dict.get('unfold_max_distance_from_top', 4.5)),
+        },
+        'curve_fitting': {
+            'polynomial_degree': int(param_dict.get('unfold_polynomial_degree', 3)),
+        },
+        'ransac_ellipse': {
+            'inlier_ratio': float(param_dict.get('unfold_inlier_ratio', 0.75)),
+            'confidence': float(param_dict.get('unfold_confidence', 0.9)),
+            'min_samples': 5,  # Fixed at safe value to avoid RANSAC failures
+            'inlier_threshold': float(param_dict.get('unfold_inlier_threshold', 0.8)),
+        },
+        'arc_length': {
+            'samples_per_ring': int(param_dict.get('unfold_samples_per_ring', 1210)),
+        },
+        'performance': {
+            'batch_size': 1000000,
+            'num_jobs': 12,
+        },
+    }
+
+
+def params_to_denoising_dict(params: List, names: List[str]) -> Dict:
+    """Convert BO parameters to denoising parameters dict structure."""
+    param_dict = dict(zip(names, params))
+    
+    # Compute radius_min and radius_max from center and half_width
+    radius_center = float(param_dict.get('denoise_radius_center', 2.75))
+    radius_half_width = float(param_dict.get('denoise_radius_half_width', 0.05))
+    radius_min = radius_center - radius_half_width
+    radius_max = radius_center + radius_half_width
+    
+    return {
+        'radius_filtering': {
+            'radius_min': radius_min,
+            'radius_max': radius_max,
+        },
+        'grid_resolution': {
+            'theta_step': float(param_dict.get('denoise_theta_step', 0.5)),
+            'radial_step': float(param_dict.get('denoise_radial_step', 0.001)),
+        },
+        'gradient_detection': {
+            'gradient_threshold': float(param_dict.get('denoise_gradient_threshold', 0.2)),
+            'gradient_epsilon': 1e-06,
+        },
+        'cutoff_smoothing': {
+            'smoothing_window': int(param_dict.get('denoise_smoothing_window', 3)),
+            'smoothing_offset': float(param_dict.get('denoise_smoothing_offset', -0.003)),
+        },
+    }
+
+
+def params_to_enhancing_dict(params: List, names: List[str]) -> Dict:
+    """Convert BO parameters to enhancing parameters dict structure."""
+    param_dict = dict(zip(names, params))
+    
+    return {
+        'physical_constants': {
+            'ring_spacing': 1.2,
+        },
+        'curvature': {
+            'curvature_neighbors': int(param_dict.get('enhance_curvature_neighbors', 20)),
+        },
+        'upsampling': {
+            'target_distances': [
+                float(param_dict.get('enhance_target_distance_1', 0.08)),
+                float(param_dict.get('enhance_target_distance_2', 0.04)),
+                float(param_dict.get('enhance_target_distance_3', 0.02)),
+            ],
+            'curvature_threshold': float(param_dict.get('enhance_curvature_threshold', 0.0005)),
+            'upsampling_neighbors': int(param_dict.get('enhance_upsampling_neighbors', 20)),
+            'distance_tolerance_low': float(param_dict.get('enhance_distance_tolerance_low', 0.9)),
+            'distance_tolerance_high': float(param_dict.get('enhance_distance_tolerance_high', 2.0)),
+            'radius_filter_factor': float(param_dict.get('enhance_radius_filter_factor', 0.15)),
+            'min_new_point_distance_factor': 0.2,
+        },
+        'outlier_detection': {
+            'depth_threshold_low': float(param_dict.get('enhance_depth_threshold_low', 0.003)),
+            'depth_threshold_high': float(param_dict.get('enhance_depth_threshold_high', 0.008)),
+            'high_density_ring_start': 0,
+            'high_density_ring_end': 5,
+            'outlier_neighbors': int(param_dict.get('enhance_outlier_neighbors', 20)),
+        },
+        'outlier_interpolation': {
+            'interpolation_radius': float(param_dict.get('enhance_interpolation_radius', 0.06)),
+            'num_interpolations': int(param_dict.get('enhance_num_interpolations', 2)),
+            'duplicate_threshold': 0.02,
+            'max_outlier_points': 5000,
+        },
+        'depth_map': {
+            'resolution': float(param_dict.get('enhance_resolution', 0.005)),
+            'interpolation_window': int(param_dict.get('enhance_interpolation_window', 5)),
+        },
+    }
+
 
 def params_to_detection_dict(params: List, names: List[str]) -> Dict:
     """Convert BO parameters to detection parameters dict structure."""

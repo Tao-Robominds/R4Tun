@@ -294,8 +294,8 @@ Examples:
     parser.add_argument('--tunnel', '-t', required=True,
                        help='Tunnel ID (e.g., 4-1, 2-2)')
     parser.add_argument('--stage', '-s', default='combined',
-                       choices=['detection', 'sam', 'combined'],
-                       help='Stage to optimize (default: combined)')
+                       choices=['detection', 'sam', 'combined', 'preprocessing', 'denoising', 'enhancing', 'unfolding'],
+                       help='Stage to optimize: unfolding, preprocessing (denoising+enhancing), denoising, enhancing, detection, sam, or combined (default: combined)')
     parser.add_argument('--metric', '-m', default='mIoU',
                        choices=['mIoU', 'OA', 'F1'],
                        help='Optimization metric (default: mIoU)')
