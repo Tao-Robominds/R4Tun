@@ -533,7 +533,17 @@ def restore_sam_logits(logits, original_shape):
     return resized_logits
 
 
-def compute_block_label(segment_per_ring):
+def compute_block_label(segment_per_ring, segment_order=None):
+    """
+    Get block labels in processing order.
+    
+    If segment_order is provided, use it directly.
+    Otherwise, compute default order from segment count.
+    """
+    if segment_order is not None:
+        return segment_order
+    
+    # Default order: K, B1, A1, ..., An, B2
     block_labels = ['K', 'B1']
     num_a_labels = segment_per_ring - 3
     block_labels += [f'A{i+1}' for i in range(num_a_labels)]
@@ -541,7 +551,14 @@ def compute_block_label(segment_per_ring):
     return block_labels
 
 
-def compute_block_to_label_map(segment_per_ring):
+def compute_block_to_label_map(segment_per_ring, segment_order=None):
+    """
+    Create mapping from block names to numeric labels.
+    
+    Labels are assigned based on default order (K=1, B1=2, A1=3, ...),
+    NOT the processing order. This ensures consistent labeling regardless
+    of segment_order changes.
+    """
     if segment_per_ring == 7:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
     else:
@@ -553,7 +570,12 @@ def compute_block_to_label_map(segment_per_ring):
 # =============================================================================
 
 def process_row(df_row, image, predictor, config):
-    """Process a single row (ring) with fully parameterized settings."""
+    """
+    Process a single row (ring) with fully parameterized settings.
+    
+    Uses original algorithm that handles partial visibility correctly.
+    segment_order is used for aggregation priority, not position calculation.
+    """
     initial_x, initial_y = df_row['X'], df_row['Y']
     quality = df_row.get('quality', 1.0) if hasattr(df_row, 'get') else 1.0
     
@@ -572,7 +594,8 @@ def process_row(df_row, image, predictor, config):
     ab_params = config['ab_params']
     template_params = config['template_params']
     
-    block_labels = compute_block_label(segment_per_ring)
+    # Always use physical order for position calculation
+    block_labels = compute_block_label(segment_per_ring, None)
 
     delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
     delta_y = 0
@@ -743,6 +766,10 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     use_quality_weighting = params['pattern_aware']['use_quality_weighting']
     min_quality_threshold = params['pattern_aware']['min_quality_threshold']
     
+    # Segment order parameters (for processing priority)
+    segment_order = params.get('segment_order', None)
+    segment_per_ring_from_params = params.get('segment_per_ring', None)
+    
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
@@ -765,12 +792,15 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     print(f"Processing tunnel: {tunnel_id}")
     print(f"Segment geometry: width={segment_width}, K_height={K_height}, AB_height={AB_height}, angle={angle}")
     
-    # Detect segment count
+    # Detect segment count (priority: argument > params > auto-detect)
     if segment_count is None:
-        segment_count = detect_segment_count_from_geometry(tunnel_dir, resolution)
-        if segment_count is None:
-            image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
-            segment_count = detect_segment_count_from_height(image.shape[0], resolution)
+        if segment_per_ring_from_params is not None:
+            segment_count = segment_per_ring_from_params
+        else:
+            segment_count = detect_segment_count_from_geometry(tunnel_dir, resolution)
+            if segment_count is None:
+                image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
+                segment_count = detect_segment_count_from_height(image.shape[0], resolution)
     
     # Load SAM model
     sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
@@ -785,13 +815,16 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     
     print(f"Using {segment_count} segments per ring")
+    if segment_order:
+        print(f"Processing order: {segment_order}")
     
-    block_to_label = compute_block_to_label_map(segment_count)
+    block_to_label = compute_block_to_label_map(segment_count, segment_order)
     
     # Build config for row processing
     config = {
         'resolution': resolution,
         'segment_per_ring': segment_count,
+        'segment_order': segment_order,  # For processing priority
         'segment_width': segment_width,
         'K_height': K_height,
         'AB_height': AB_height,

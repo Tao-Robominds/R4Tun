@@ -1,7 +1,6 @@
 {
-    "description": "SAM-based tunnel segment segmentation parameters for Tunnel 2-2 (6-segment)",
     "segment_geometry": {
-        "segment_width": 1229.6542986860234,
+        "segment_width": 1191.9394487269624,
         "k_height": 1079.92,
         "ab_height": 3239.77,
         "angle_deg": 7.52
@@ -10,8 +9,8 @@
         "resolution": 0.005
     },
     "processing": {
-        "padding": 118,
-        "crop_margin": 69,
+        "padding": 100,
+        "crop_margin": 61,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -20,10 +19,10 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 709.6850157946487,
-            "middle_ring": 494.58327528535915,
-            "inner_ring": 309.9974915818003,
-            "center_ring": 321.33240027692807,
+            "outer_ring": 711.0246219892488,
+            "middle_ring": 450.0,
+            "inner_ring": 341.6615301903957,
+            "center_ring": 370.0,
             "spacing_factors": {
                 "k_block_spacing": 310.91,
                 "vertical_spacing": [
@@ -36,14 +35,14 @@
             }
         },
         "ab_blocks": {
-            "outer_ring": 683.3708611139022,
-            "middle_ring": 474.2866817921941,
-            "inner_ring": 515.0888472948853,
-            "center_ring": 285.077042112439,
-            "fine_spacing": 272.1998772266825,
-            "ultra_fine": 195.69868963110252,
-            "edge_ring": 300.07787658410143,
-            "edge_spacing": 399.2211559291218,
+            "outer_ring": 661.8600467503823,
+            "middle_ring": 460.0,
+            "inner_ring": 468.2302396162375,
+            "center_ring": 280.0,
+            "fine_spacing": 295.5983676824127,
+            "ultra_fine": 139.49798244328704,
+            "edge_ring": 300.0,
+            "edge_spacing": 400.0,
             "vertical_levels": {
                 "level_1": 1719.89,
                 "level_2": 1519.89,
@@ -57,30 +56,30 @@
         },
         "template_mask": {
             "k_block": {
-                "width": 636.7481509627717,
-                "height_pos": 631.1653160488281,
-                "height_neg": 410.70663052197176
+                "width": 672.3136377679782,
+                "height_pos": 670.0,
+                "height_neg": 510.0
             },
             "b1_block": {
-                "width": 577.3062425041416,
-                "height_top": 1622.477466025839,
+                "width": 591.0754291844523,
+                "height_top": 1646.9485197655001,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 577.3062425041416,
+                "width": 591.0754291844523,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1622.477466025839
+                "height_bottom": 1646.9485197655001
             },
             "a_blocks": {
-                "width": 577.3062425041416,
-                "height": 1622.477466025839
+                "width": 591.0754291844523,
+                "height": 1646.9485197655001
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.25994438868610226
+        "min_quality_threshold": 0.34584819568593783
     }
 }

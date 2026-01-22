@@ -1,5 +1,7 @@
 {
     "description": "SAM-based tunnel segment segmentation parameters (fully parameterized)",
+    "segment_per_ring": 6,
+    "segment_order": ["K", "B1", "A1", "A2", "A3", "B2"],
     
     "segment_geometry": {
         "segment_width": 1200.0,
