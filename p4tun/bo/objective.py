@@ -125,11 +125,16 @@ class PipelineObjective:
             self._update_parameters(params)
             
             # Run pipeline
+            # For detection optimization: run detection with new params, then SAM with existing (optimized) params
+            # For SAM optimization: use existing detection, run SAM with new params
+            # For combined: run both with new params
+            
             if self.stage in ['detection', 'combined']:
                 self._run_detection()
             
-            if self.stage in ['sam', 'combined']:
-                self._run_sam()
+            # Always run SAM to get segmentation for evaluation
+            # This uses existing SAM params for detection stage, new params for sam/combined
+            self._run_sam()
             
             # Evaluate
             metrics = self._evaluate()

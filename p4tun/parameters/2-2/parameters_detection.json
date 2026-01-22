@@ -1,56 +1,34 @@
 {
-    "description": "Hough line detection and segment pattern inference parameters",
-    
-    "physical_constants": {
-        "ring_spacing_m": 1.2,
-        "k_height_mm": 1079.92,
-        "ab_height_mm": 3239.77,
-        "segment_width_mm": 1200,
-        "oblique_angle_deg": 7.52,
-        "resolution": 0.005
-    },
-    
     "preprocessing": {
-        "binary_threshold": 127,
-        "dilation_kernel_size": 3,
+        "binary_threshold": 149,
+        "dilation_kernel_size": 2,
         "dilation_iterations": 1
     },
-    
     "hough_oblique": {
-        "rho": 1,
-        "theta_deg": 1.0,
-        "threshold": 50,
-        "min_length": 100,
-        "max_gap": 40,
-        "angle_positive_min": 6,
-        "angle_positive_max": 9,
-        "angle_negative_min": -9,
-        "angle_negative_max": -6
+        "threshold": 69,
+        "min_length": 99,
+        "max_gap": 60,
+        "angle_positive_min": 5.509092461481611,
+        "angle_positive_max": 8.652373428158048,
+        "angle_negative_min": -8.652373428158048,
+        "angle_negative_max": -5.509092461481611
     },
-    
     "hough_horizontal": {
-        "threshold": 50,
-        "min_length": 100,
-        "max_gap": 10,
+        "threshold": 66,
+        "min_length": 122,
+        "max_gap": 14,
         "angle_tolerance": 1
     },
-    
     "hough_vertical": {
-        "threshold": 500,
-        "angle_tolerance": 0.5,
+        "threshold": 700,
         "filter_rings": 5
     },
-    
     "line_processing": {
-        "merge_distance_threshold": 3
+        "merge_distance_threshold": 2
     },
-    
-    "pattern_detection": {
-        "_note": "Classification thresholds only - core algorithm is geometry-based",
-        "v_pair_spacing_tolerance_px": 60,
-        "alternation_tolerance_px": 100,
-        "constant_spread_threshold_px": 100,
-        "cluster_separation_threshold_7seg_px": 300,
-        "confidence_scaling_factor": 200
+    "physical_constants": {
+        "resolution": 0.005,
+        "k_height_mm": 1079.92,
+        "ab_height_mm": 3239.77
     }
 }
