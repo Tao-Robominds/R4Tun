@@ -1,5 +1,6 @@
 {
-    "description": "Hough line detection parameters for Tunnel 2-2 (6-segment)",
+    "description": "Hough line detection and segment pattern inference parameters",
+    
     "physical_constants": {
         "ring_spacing_m": 1.2,
         "k_height_mm": 1079.92,
@@ -8,36 +9,42 @@
         "oblique_angle_deg": 7.52,
         "resolution": 0.005
     },
+    
     "preprocessing": {
         "binary_threshold": 127,
         "dilation_kernel_size": 3,
         "dilation_iterations": 1
     },
+    
     "hough_oblique": {
         "rho": 1,
         "theta_deg": 1.0,
-        "threshold": 40,
-        "min_length": 120,
-        "max_gap": 48,
-        "angle_positive_min": 6.0,
-        "angle_positive_max": 9.0,
-        "angle_negative_min": -9.0,
-        "angle_negative_max": -6.0
+        "threshold": 50,
+        "min_length": 100,
+        "max_gap": 40,
+        "angle_positive_min": 6,
+        "angle_positive_max": 9,
+        "angle_negative_min": -9,
+        "angle_negative_max": -6
     },
+    
     "hough_horizontal": {
         "threshold": 50,
         "min_length": 100,
         "max_gap": 10,
         "angle_tolerance": 1
     },
+    
     "hough_vertical": {
         "threshold": 500,
         "angle_tolerance": 0.5,
         "filter_rings": 5
     },
+    
     "line_processing": {
-        "merge_distance_threshold": 3.0
+        "merge_distance_threshold": 3
     },
+    
     "pattern_detection": {
         "_note": "Classification thresholds only - core algorithm is geometry-based",
         "v_pair_spacing_tolerance_px": 60,

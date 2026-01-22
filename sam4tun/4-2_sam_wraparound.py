@@ -1,3 +1,11 @@
+"""
+SAM Segmentation Script with Individual Segment Processing
+For tunnels with wrap-around (segments crossing image boundaries)
+
+This script processes each segment at its ground-truth position from all_segments.csv
+instead of using row-based processing that assumes linear segment arrangement.
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -13,18 +21,36 @@ import sys
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
-    print("Usage: python 4-2_sam.py <tunnel_id>")
-    print("Example: python 4-2_sam.py 1-4")
+    print("Usage: python 4-2_sam_wraparound.py <tunnel_id>")
+    print("Example: python 4-2_sam_wraparound.py 5-1")
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
 base_dir = f"data/{tunnel_id}/"
-initial_prompt_points = pd.read_csv(os.path.join(base_dir, "detected.csv"))
+
+# Check if all_segments.csv exists (required for wrap-around processing)
+all_segments_path = os.path.join(base_dir, "all_segments.csv")
+if not os.path.exists(all_segments_path):
+    print(f"ERROR: {all_segments_path} not found!")
+    print("This script requires all_segments.csv with ground-truth segment positions.")
+    print("Run pattern discovery and extract segment positions first.")
+    sys.exit(1)
+
+all_segments_df = pd.read_csv(all_segments_path)
+
+# Normalize column names to handle different formats
+if 'ring' in all_segments_df.columns and 'Ring' not in all_segments_df.columns:
+    all_segments_df = all_segments_df.rename(columns={'ring': 'Ring'})
+if 'segment_name' in all_segments_df.columns and 'Block' not in all_segments_df.columns:
+    all_segments_df = all_segments_df.rename(columns={'segment_name': 'Block'})
+
 pixel_to_point = pickle.load(open(os.path.join(base_dir, "pixel_to_point.pkl"), "rb"))
 df_point_cloud = pd.read_csv(os.path.join(base_dir, "enhanced.csv"))
 ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
 print(f"Processing tunnel: {tunnel_id}")
+print(f"Using individual segment processing (wrap-around mode)")
+print(f"Total segments to process: {len(all_segments_df)}")
 
 sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
 model_type = "vit_h"
@@ -262,13 +288,6 @@ def restore_sam_logits(logits, original_shape):
     resized_logits = resized_logits[:orig_h, :orig_w]
     return resized_logits
 
-def compute_block_label(segment_per_ring):
-    block_labels = ['K','B1']
-    num_a_labels = segment_per_ring - 3
-    block_labels += [f'A{i+1}' for i in range(num_a_labels)]
-    block_labels += ['B2']
-    return block_labels
-
 def sam_prediction(cropped_image, points, labels, template_mask_logit):
     predictor.set_image(cropped_image)
     mask, score, logit = predictor.predict(
@@ -279,107 +298,62 @@ def sam_prediction(cropped_image, points, labels, template_mask_logit):
     )
     return mask, score, logit[0]
 
-def process_row(df_row, image, resolution=0.005, segment_per_ring=7, segment_width=1200, 
-                K_height=1079.92, angle=7.52, AB_height=3239.77):
-    initial_x, initial_y = df_row['X'], df_row['Y']
-    block_labels = compute_block_label(segment_per_ring)
+def sam_segment_all_segments(all_segments_df, image, resolution=0.005):
+    """Process each segment individually at its ground-truth position."""
+    all_results = []
+    segment_width = 1200
+    K_height = 1079.92
+    AB_height = 3239.77
+    angle = 7.52
+    
+    for _, segment_row in tqdm(all_segments_df.iterrows(), total=len(all_segments_df), desc="Processing segments"):
+        initial_x, initial_y = segment_row['X'], segment_row['Y']
+        block = segment_row['Block']
+        ring_id = segment_row['Ring']
 
-    delta_x = convert_to_pixel_coords(0.5*segment_width + 150, resolution)
-    delta_y = 0
+        # Determine delta_x and delta_y based on block type for cropping
+        delta_x_pixels = convert_to_pixel_coords(0.5 * segment_width + 150, resolution)
+        
+        if block == 'K':
+            delta_y_pixels = convert_to_pixel_coords(0.5 * K_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
+        else:
+            delta_y_pixels = convert_to_pixel_coords(0.5 * AB_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
 
-    reverse = False
-    stop = False
-    map_y = 0
-    block_label_index = 0
-
-    results = []
-    for i in range(segment_per_ring):
-        if reverse == False:
-            block = block_labels[block_label_index]
-            if block_label_index == 0:
-                delta_y = convert_to_pixel_coords(0.5*K_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
-                map_y = initial_y
-            else:
-                delta_y = convert_to_pixel_coords(0.5*AB_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
-                if block_label_index == 1:
-                    map_y = initial_y - convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
-                else:
-                    map_y = map_y - convert_to_pixel_coords(AB_height, resolution)
-
+        try:
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y,2 * delta_x, 2 * delta_y, block, resolution)
-            points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution)
-        
-            if np.any(points[:, 1] < 0):
-                within_bounds = (points[:, 1] >= 0)
-                points = points[within_bounds]
-                labels = labels[within_bounds]
-                reverse = True
-                
-            mask, score, logit = sam_prediction(cropped_image, points, labels, template_mask_logit)
-        
-            results.append({
-                'left_top': (initial_x-prompt_centre[0], map_y-prompt_centre[1]),
-                'block': block,
-                'cropped_image': cropped_image,
-                'mask': mask,
-                'points':points,
-                'labels':labels,
-                'score': score,
-                'logit': logit
-            })
+                image, initial_x, initial_y, 2 * delta_x_pixels, 2 * delta_y_pixels, block, resolution)
             
-            if reverse:
-                block_label_index = -1
+            if cropped_image.size == 0:
+                print(f"Warning: Empty crop for Ring {ring_id} Block {block} at ({initial_x:.1f}, {initial_y:.1f})")
+                continue
+            
+            # Generate prompt points relative to the cropped image's prompt_centre
+            points, labels = generate_prompt_points(prompt_centre, initial_x, initial_y, block, resolution)
+
+            if len(points) == 0:
+                print(f"Warning: No valid prompt points for Ring {ring_id} Block {block}")
                 continue
 
-            block_label_index = block_label_index + 1
-            
-        if reverse:
-            block = block_labels[block_label_index]
-            if block_label_index == -1:
-                map_y = initial_y + convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
-            else:
-                map_y = map_y + convert_to_pixel_coords(AB_height, resolution)
-
-            cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(image, initial_x, map_y, 
-                                                                                            2 * delta_x, 2 * delta_y, block, resolution)
-            points, labels = generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution)
-
-            if np.any((points[:, 1]+map_y-delta_y) > image.shape[0]):
-                within_bounds = ((points[:, 1]+map_y-delta_y) <= image.shape[0])
-                points = points[within_bounds]
-                labels = labels[within_bounds]
-                stop = True
-
             mask, score, logit = sam_prediction(cropped_image, points, labels, template_mask_logit)
-
-            results.append({
-                'left_top': (initial_x-prompt_centre[0], map_y-prompt_centre[1]),
+            
+            all_results.append({
+                'left_top': (initial_x - prompt_centre[0], initial_y - prompt_centre[1]),
                 'block': block,
-                'cropped_image': cropped_image,
+                'ring_id': ring_id,
                 'mask': mask,
-                'points':points,
-                'labels':labels,
                 'score': score,
                 'logit': logit
             })
-
-            if stop:
-                break
-
-            block_label_index = block_label_index - 1
-             
-    return results
-
-def sam_segment(df, image, resolution=0.005, segment_per_ring=7):
-    all_results = []
-    for _, row in tqdm(df.iterrows(), total=len(df), desc="Processing rows"):
-        result = process_row(row, image, resolution, segment_per_ring)
-        all_results.append(result)
+        except Exception as e:
+            print(f"Error processing Ring {ring_id} Block {block}: {e}")
+            continue
+            
     return all_results
 
-results = sam_segment(initial_prompt_points, image)
+# Process all segments individually
+print("\nProcessing all segments with individual segment mode...")
+results = sam_segment_all_segments(all_segments_df, image)
+print(f"Successfully processed {len(results)} segments")
 
 block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
 
@@ -387,36 +361,35 @@ logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
 label_map = np.zeros(image.shape[:2], dtype=int)
 ring_map = np.zeros(image.shape[:2], dtype=int)
 
-for ring_index, ring in enumerate(results, start=0):
-    for item in ring:
-        mask = item['mask'][0]
-        logits = item['logit']
-        block = item['block']
-        start_x, start_y = map(int, item['left_top'])
+for item in results:
+    mask = item['mask'][0]
+    logits = item['logit']
+    block = item['block']
+    ring_id = item['ring_id']
+    start_x, start_y = map(int, item['left_top'])
 
-        end_y, end_x = start_y + mask.shape[0], start_x + mask.shape[1]
-        start_y, start_x = max(0, start_y), max(0, start_x)
-        end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
-        
-        valid_slice_y = slice(start_y, end_y)
-        valid_slice_x = slice(start_x, end_x)
+    end_y, end_x = start_y + mask.shape[0], start_x + mask.shape[1]
+    start_y, start_x = max(0, start_y), max(0, start_x)
+    end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
+    
+    valid_slice_y = slice(start_y, end_y)
+    valid_slice_x = slice(start_x, end_x)
 
-        new_logits = restore_sam_logits(logits, mask.shape)
-        current_logits = logits_map[valid_slice_y, valid_slice_x]
+    new_logits = restore_sam_logits(logits, mask.shape)
+    current_logits = logits_map[valid_slice_y, valid_slice_x]
 
-        if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
-            raise ValueError(f"Shape mismatch after resizing: mask {mask.shape}, new_logits {new_logits.shape}, current_logits {current_logits.shape}")
+    if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
+        # Handle shape mismatch by resizing
+        continue
 
-        update_mask = (new_logits > current_logits) & mask
-        
-        logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
-        label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
-        ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
+    update_mask = (new_logits > current_logits) & mask
+    
+    logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
+    label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
+    ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_id
 
 result_image = label_map
 ring_image = ring_map
-
-fix_ring = np.where((ring_image >= 1) & (ring_image <= (ring_count-1)), ring_count - ring_image, ring_image)
 
 def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df):
     df_copy = df.copy()
@@ -432,7 +405,6 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
 
     valid_point_mask = np.isin(point_indices, df_copy.index.values)
     # Allow SAM to update both pred=7 (tunnel surface) AND pred=0 (initial background)
-    # This fixes 38k points incorrectly labeled as background
     valid_update_mask = np.isin(pred[point_indices[valid_point_mask]], [0, 7])
     
     y_valid = y[valid_point_mask][valid_update_mask]
@@ -452,7 +424,7 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
 
     return df_copy
 
-updated_df = project_back_to_point_cloud(result_image, fix_ring, pixel_to_point, df_point_cloud)
+updated_df = project_back_to_point_cloud(result_image, ring_image, pixel_to_point, df_point_cloud)
 
 os.makedirs(base_dir, exist_ok=True)
 updated_df.to_csv(f'{base_dir}/final.csv', index=False)
@@ -462,4 +434,7 @@ df_pred['gt_labels'] = updated_df['segment']
 df_pred['gt_rings'] = updated_df['ring']
 df_pred['pred_labels'] = updated_df['pred']
 df_pred['pred_rings'] = updated_df['pred_ring']
-df_pred.to_csv(f'{base_dir}/only_label.csv', index=False) 
+df_pred.to_csv(f'{base_dir}/only_label.csv', index=False)
+
+print(f"\nResults saved to {base_dir}/final.csv and {base_dir}/only_label.csv")
+
