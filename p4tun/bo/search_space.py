@@ -162,10 +162,10 @@ SAM_SPACE = {
     'ab_level_6': Real(490.0, 600.0, name='ab_level_6'),    # Default 545.05
     'ab_level_7': Real(245.0, 300.0, name='ab_level_7'),    # Default 272.52
     
-    # Template mask dimensions - K block
-    'k_mask_width': Real(575.0, 675.0, name='k_mask_width'),
-    'k_mask_height_pos': Real(570.0, 670.0, name='k_mask_height_pos'),
-    'k_mask_height_neg': Real(410.0, 510.0, name='k_mask_height_neg'),
+    # Template mask dimensions - K block (expanded based on GT analysis)
+    'k_mask_width': Real(580.0, 720.0, name='k_mask_width'),      # GT suggests ~660mm
+    'k_mask_height_pos': Real(580.0, 720.0, name='k_mask_height_pos'),  # Need symmetric expansion
+    'k_mask_height_neg': Real(450.0, 650.0, name='k_mask_height_neg'),  # GT shows need for ~600mm
     
     # Template mask dimensions - A/B blocks
     'ab_mask_width': Real(575.0, 675.0, name='ab_mask_width'),

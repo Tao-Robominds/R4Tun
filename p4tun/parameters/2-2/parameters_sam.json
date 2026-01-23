@@ -56,24 +56,24 @@
         },
         "template_mask": {
             "k_block": {
-                "width": 642.95,
+                "width": 700.0,
                 "height_pos": 656.47,
-                "height_neg": 460.41
+                "height_neg": 540.0
             },
             "b1_block": {
-                "width": 575.0,
+                "width": 610.0,
                 "height_top": 1581.36,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 575.0,
+                "width": 610.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
                 "height_bottom": 1581.36
             },
             "a_blocks": {
-                "width": 575.0,
+                "width": 610.0,
                 "height": 1581.36
             }
         }
