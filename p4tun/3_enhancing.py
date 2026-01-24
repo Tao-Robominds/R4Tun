@@ -25,9 +25,11 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import cv2
 from numba import njit, prange
 from scipy.spatial import KDTree, cKDTree
 from scipy.interpolate import griddata
+from scipy.cluster.vq import kmeans2
 from tqdm.notebook import tqdm
 
 # =============================================================================
@@ -912,6 +914,189 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     
     print(f"Added {len(all_new)} new enhanced points")
     print(f"Total points in enhanced.csv: {len(df_enhanced)}")
+    
+    # Step 6: Pattern classification from enhanced depth map
+    print("\n=== Step 6: Pattern Classification ===")
+    pattern_info = classify_tunnel_pattern(depth_map_outlier, tunnel_dir)
+    
+    # Save pattern classification
+    pattern_path = os.path.join(tunnel_dir, "pattern_type.json")
+    with open(pattern_path, 'w') as f:
+        json.dump(pattern_info, f, indent=2)
+    
+    print(f"Pattern classified as: {pattern_info['pattern_type']}")
+    print(f"Confidence: {pattern_info['confidence']:.2f}")
+    print(f"Pattern info saved to: {pattern_path}")
+
+
+# =============================================================================
+# Pattern Classification
+# =============================================================================
+
+def classify_tunnel_pattern(depth_map_outlier: np.ndarray, tunnel_dir: str) -> Dict[str, Any]:
+    """
+    Classify tunnel joint pattern from enhanced depth map.
+    
+    Analyzes oblique line patterns to determine:
+    - Continuous (T3): Horizontally aligned K-blocks
+    - Simple Staggered (T1/T2): Regular alternating pattern
+    - Complex Staggered (T4/T5): Irregular/variable offset
+    
+    Args:
+        depth_map_outlier: Enhanced depth map (L x W numpy array)
+        tunnel_dir: Tunnel data directory path
+    
+    Returns:
+        Dictionary with pattern classification and metadata
+    """
+    L, W = depth_map_outlier.shape
+    
+    # Convert to binary for line detection
+    binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
+    ret, binary = cv2.threshold(binary_map, 120, 255, cv2.THRESH_BINARY)
+    
+    # Detect oblique lines (K-block joints)
+    lines_oblique = cv2.HoughLinesP(binary, 1, np.pi/180, 30, minLineLength=50, maxLineGap=20)
+    
+    angles = []
+    y_positions = []
+    
+    if lines_oblique is not None:
+        for line in lines_oblique[:200]:  # Sample up to 200 lines
+            x1, y1, x2, y2 = line[0]
+            angle = np.degrees(np.arctan2(-(y2 - y1), x2 - x1))
+            
+            # Filter for oblique range (K-block joint angles)
+            if 5 <= abs(angle) <= 10:
+                angles.append(angle)
+                # Get Y position at middle X
+                mid_x = (x1 + x2) / 2
+                mid_y = (y1 + y2) / 2
+                y_positions.append(mid_y)
+    
+    # Calculate statistics
+    if len(angles) > 0 and len(y_positions) > 0:
+        angle_std = np.std(angles)
+        angle_mean = np.mean(np.abs(angles))
+        y_std = np.std(y_positions)
+        y_mean = np.mean(y_positions)
+        
+        # Check for alternating pattern using clustering
+        is_alternating = False
+        if len(y_positions) >= 4:
+            try:
+                y_array = np.array(y_positions).reshape(-1, 1)
+                centroids, labels = kmeans2(y_array, 2, iter=10)
+                cluster_stds = [float(np.std(y_array[labels == i])) for i in range(2)]
+                unique_labels = len(set(labels))
+                
+                # Alternating if 2 clusters with low variance
+                is_alternating = (unique_labels == 2 and 
+                                all(std < 50 for std in cluster_stds) and
+                                abs(float(centroids[0]) - float(centroids[1])) > 200)
+            except:
+                pass
+        
+        # Pattern classification logic
+        if y_std < 100:  # Low Y variance = continuous (horizontally aligned)
+            pattern_type = "continuous"
+            confidence = min(1.0, (100 - y_std) / 100)
+            description = "Continuous joints (T3-like): K-blocks horizontally aligned"
+        elif is_alternating or (angle_std < 3.0 and y_std > 150):
+            pattern_type = "simple_staggered"
+            confidence = 0.8 if is_alternating else 0.6
+            description = "Simple staggered joints (T1/T2-like): Regular alternating pattern"
+        else:
+            pattern_type = "complex_staggered"
+            confidence = 0.7
+            description = "Complex staggered joints (T4/T5-like): Irregular/variable offset"
+    else:
+        # Fallback if no lines detected
+        pattern_type = "unknown"
+        confidence = 0.0
+        angle_std = 0.0
+        angle_mean = 0.0
+        y_std = 0.0
+        y_mean = 0.0
+        description = "No oblique lines detected - pattern classification unavailable"
+    
+    pattern_info = {
+        "pattern_type": pattern_type,
+        "confidence": float(confidence),
+        "description": description,
+        "statistics": {
+            "oblique_lines_detected": len(angles),
+            "angle_mean_deg": float(angle_mean) if len(angles) > 0 else 0.0,
+            "angle_std_deg": float(angle_std) if len(angles) > 0 else 0.0,
+            "y_position_mean": float(y_mean) if len(y_positions) > 0 else 0.0,
+            "y_position_std": float(y_std) if len(y_positions) > 0 else 0.0,
+            "is_alternating": is_alternating if len(y_positions) >= 4 else False
+        },
+        "recommendations": {
+            "detection_strategy": _get_detection_strategy(pattern_type),
+            "sam_strategy": _get_sam_strategy(pattern_type)
+        }
+    }
+    
+    return pattern_info
+
+
+def _get_detection_strategy(pattern_type: str) -> Dict[str, Any]:
+    """Get recommended detection strategy based on pattern type."""
+    strategies = {
+        "continuous": {
+            "use_alternation_logic": False,
+            "focus_horizontal_features": True,
+            "angle_range_tolerance": "narrow",
+            "fallback_strategy": "horizontal_alignment"
+        },
+        "simple_staggered": {
+            "use_alternation_logic": True,
+            "focus_horizontal_features": False,
+            "angle_range_tolerance": "standard",
+            "fallback_strategy": "alternation_inference"
+        },
+        "complex_staggered": {
+            "use_alternation_logic": True,
+            "focus_horizontal_features": False,
+            "angle_range_tolerance": "wide",
+            "fallback_strategy": "adaptive_learning"
+        },
+        "unknown": {
+            "use_alternation_logic": True,  # Default fallback
+            "focus_horizontal_features": False,
+            "angle_range_tolerance": "standard",
+            "fallback_strategy": "alternation_inference"
+        }
+    }
+    return strategies.get(pattern_type, strategies["unknown"])
+
+
+def _get_sam_strategy(pattern_type: str) -> Dict[str, Any]:
+    """Get recommended SAM strategy based on pattern type."""
+    strategies = {
+        "continuous": {
+            "enable_wraparound": True,  # A2-block issues we observed
+            "template_placement": "standard",
+            "adaptive_sizing": False
+        },
+        "simple_staggered": {
+            "enable_wraparound": False,
+            "template_placement": "standard",
+            "adaptive_sizing": False
+        },
+        "complex_staggered": {
+            "enable_wraparound": False,
+            "template_placement": "adaptive",
+            "adaptive_sizing": True
+        },
+        "unknown": {
+            "enable_wraparound": False,  # Default
+            "template_placement": "standard",
+            "adaptive_sizing": False
+        }
+    }
+    return strategies.get(pattern_type, strategies["unknown"])
 
 
 # =============================================================================
