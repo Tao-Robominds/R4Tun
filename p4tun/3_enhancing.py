@@ -997,16 +997,28 @@ def classify_tunnel_pattern(depth_map_outlier: np.ndarray, tunnel_dir: str) -> D
             except:
                 pass
         
-        # Pattern classification logic
+        # Pattern classification logic (based on Seg2Tunnel categories)
+        # T3 (Continuous): K-blocks horizontally aligned - low Y variance
+        # T1/T2 (Simple Staggered): Regular alternating pattern - moderate Y variance, regular pattern
+        # T4/T5 (Complex Staggered): Irregular/variable offset - high Y variance, irregular pattern
+        
         if y_std < 100:  # Low Y variance = continuous (horizontally aligned)
             pattern_type = "continuous"
             confidence = min(1.0, (100 - y_std) / 100)
             description = "Continuous joints (T3-like): K-blocks horizontally aligned"
-        elif is_alternating or (angle_std < 3.0 and y_std > 150):
+        elif is_alternating:
+            # Clear alternating pattern = simple staggered
             pattern_type = "simple_staggered"
-            confidence = 0.8 if is_alternating else 0.6
+            confidence = 0.8
             description = "Simple staggered joints (T1/T2-like): Regular alternating pattern"
+        elif y_std < 250 and angle_std < 8.0:
+            # Moderate Y variance with consistent angles = simple staggered (regular pattern)
+            # T1/T2 have regular patterns, not as irregular as T4/T5
+            pattern_type = "simple_staggered"
+            confidence = 0.7
+            description = "Simple staggered joints (T1/T2-like): Regular pattern"
         else:
+            # High variance or inconsistent angles = complex staggered (irregular pattern)
             pattern_type = "complex_staggered"
             confidence = 0.7
             description = "Complex staggered joints (T4/T5-like): Irregular/variable offset"
