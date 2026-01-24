@@ -1,39 +1,16 @@
 {
-    "description": "Geometry-guided point cloud enhancement parameters",
-    "physical_constants": {
-        "ring_spacing": 1.2
-    },
-    "curvature": {
-        "curvature_neighbors": 20
-    },
-    "upsampling": {
-        "target_distances": [
-            0.06,
-            0.03,
-            0.015
-        ],
-        "curvature_threshold": 0.005,
-        "upsampling_neighbors": 20,
-        "distance_tolerance_low": 0.9,
-        "distance_tolerance_high": 2.0,
-        "radius_filter_factor": 0.15,
-        "min_new_point_distance_factor": 0.2
-    },
-    "outlier_detection": {
-        "depth_threshold_low": 0.005,
-        "depth_threshold_high": 0.015,
-        "high_density_ring_start": 0,
-        "high_density_ring_end": 9,
-        "outlier_neighbors": 20
-    },
-    "outlier_interpolation": {
-        "interpolation_radius": 0.03,
-        "num_interpolations": 2,
-        "duplicate_threshold": 0.02,
-        "max_outlier_points": 5000
-    },
-    "depth_map": {
-        "resolution": 0.005,
-        "interpolation_window": 9
-    }
+  "upsampling_stage1_target_distance": 0.06,
+  "upsampling_stage2_target_distance": 0.03,
+  "upsampling_stage3_target_distance": 0.015,
+  "curvature_threshold": 0.005,
+  "depth_threshold_low": 0.005,
+  "depth_threshold_high": 0.015,
+  "inter_radius": 0.03,
+  "duplicate_threshold": 0.02,
+  "n_segment_start": 0,
+  "n_segment_end": 9,
+  "num_neighbors": 20,
+  "num_interpolations": 2,
+  "resolution": 0.005,
+  "window_size": 9
 }

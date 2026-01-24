@@ -200,18 +200,26 @@ def compute_ring_centers(line_data: Dict, ring_count: int) -> List[float]:
         return [(i + 0.5) * block_width for i in range(ring_count)]
     
     # Calculate midpoints between adjacent vertical lines
+    # Convert rho,theta to X positions first (matching sam4tun logic)
     mid_lines = []
     for i in range(len(vertical_lines) - 1):
-        rho1, _ = vertical_lines[i]
-        rho2, _ = vertical_lines[i + 1]
-        mid_lines.append((rho1 + rho2) / 2)
+        rho1, theta1 = vertical_lines[i]
+        rho2, theta2 = vertical_lines[i + 1]
+        # Calculate midpoint in rho,theta space
+        new_rho = (rho1 + rho2) / 2
+        new_theta = (theta1 + theta2) / 2
+        # Convert to X position (matching sam4tun line 158)
+        a = np.cos(new_theta)
+        x_pos = a * new_rho
+        mid_lines.append((x_pos, new_theta))
     
     if len(mid_lines) == 0:
         block_width = W / ring_count
         return [(i + 0.5) * block_width for i in range(ring_count)]
     
-    # Calculate average distance
-    distances = [mid_lines[i+1] - mid_lines[i] for i in range(len(mid_lines)-1)]
+    # Calculate average distance using X positions
+    x_positions = [x for x, _ in mid_lines]
+    distances = [x_positions[i+1] - x_positions[i] for i in range(len(x_positions)-1)]
     avg_distance_detected = np.mean(distances) if distances else 0
     avg_distance_designed = W / ring_count
     
@@ -221,27 +229,29 @@ def compute_ring_centers(line_data: Dict, ring_count: int) -> List[float]:
     else:
         avg_distance = avg_distance_designed
     
-    # Extend to cover all rings
+    # Extend to cover all rings (matching sam4tun logic)
     all_mid_lines = list(mid_lines)
     
-    # Extend left
-    leftmost = mid_lines[0]
-    x = leftmost - avg_distance
-    while x >= 0:
-        all_mid_lines.insert(0, x)
-        x -= avg_distance
+    # Extend left (matching sam4tun lines 191-205)
+    if mid_lines:
+        leftmost_x, leftmost_theta = mid_lines[0]
+        x = leftmost_x - avg_distance
+        while x >= 0:
+            all_mid_lines.insert(0, (x, leftmost_theta))
+            x -= avg_distance
+        
+        # Extend right (matching sam4tun lines 208-222)
+        rightmost_x, rightmost_theta = mid_lines[-1]
+        x = rightmost_x + avg_distance
+        while x <= W:
+            all_mid_lines.append((x, rightmost_theta))
+            x += avg_distance
     
-    # Extend right
-    rightmost = mid_lines[-1]
-    x = rightmost + avg_distance
-    while x <= W:
-        all_mid_lines.append(x)
-        x += avg_distance
+    # Sort by X position and extract X values (matching sam4tun line 224)
+    all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
+    x_positions = [x for x, _ in all_mid_lines]
     
-    # Sort and deduplicate
-    all_mid_lines = sorted(set(all_mid_lines))
-    
-    return all_mid_lines
+    return x_positions
 
 
 # =============================================================================

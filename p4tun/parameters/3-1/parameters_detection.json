@@ -9,8 +9,8 @@
         "resolution": 0.005
     },
     "preprocessing": {
-        "binary_threshold": 120,
-        "dilation_kernel_size": 5,
+        "binary_threshold": 127,
+        "dilation_kernel_size": 3,
         "dilation_iterations": 1
     },
     "hough_oblique": {
@@ -31,7 +31,7 @@
         "angle_tolerance": 1
     },
     "hough_vertical": {
-        "threshold": 300,
+        "threshold": 500,
         "angle_tolerance": 0.5,
         "filter_rings": 5
     },

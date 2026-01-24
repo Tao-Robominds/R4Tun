@@ -19,6 +19,20 @@ import pandas as pd
 import torch
 import cv2
 from tqdm import tqdm
+
+# Add segment_anything to path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.dirname(script_dir)
+# Try p4tun/segment-anything first, then sam4tun/segment-anything
+segment_anything_paths = [
+    os.path.join(repo_root, "p4tun", "segment-anything"),
+    os.path.join(repo_root, "sam4tun", "segment-anything"),
+]
+for path in segment_anything_paths:
+    if os.path.exists(path) and path not in sys.path:
+        sys.path.insert(0, path)
+        break
+
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.transforms import ResizeLongestSide
 from matplotlib.path import Path
@@ -41,7 +55,8 @@ DEFAULT_PARAMS = {
         "padding": 150,
         "crop_margin": 50,
         "mask_eps": 0.001,
-        "y_bounds": [4200, 13100]
+        "y_bounds": [4200, 13100],
+        "enable_y_wraparound": True  # Enable theta-seam wraparound cropping
     },
     "prompt_points": {
         "k_block": {
@@ -71,7 +86,8 @@ DEFAULT_PARAMS = {
                 "level_5": 817.57,
                 "level_6": 545.05,
                 "level_7": 272.52,
-                "center": 0
+                "center": 0,
+                "special_levels": [1298.93, 1390.84, 1427.43, 1612.28, 1627.49, 1652.43, 1673.69, 1766.08, 1787.34, 1812.28, 1345.01, 1452.43, 1473.69, 1566.08, 1587.34]
             }
         },
         "template_mask": {
@@ -472,16 +488,75 @@ def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution * 1000))
 
 
-def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params, mask_eps):
-    img_height, img_width, _ = image.shape
-    x1 = max(cx - crop_width // 2, 0)
-    y1 = max(cy - crop_height // 2, 0)
-    x2 = min(cx + crop_width // 2, img_width)
-    y2 = min(cy + crop_height // 2, img_height)
+def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params, mask_eps, enable_y_wraparound=True):
+    """
+    Crop image around (cx, cy) and build template mask logits.
 
-    cropped_image = image[int(y1):int(y2), int(x1):int(x2)]
-    prompt_centre_x = cx - x1
-    prompt_centre_y = cy - y1
+    IMPORTANT: In our depth-map convention, the circumferential axis (theta) is the IMAGE Y axis.
+    Theta is periodic, so Y should be treated as wraparound (top/bottom seam).
+
+    This function performs **Y-wraparound-aware cropping** when enabled:
+    - If the crop extends above y=0, it stitches bottom rows above the top.
+    - If the crop extends below y=H, it stitches top rows below the bottom.
+
+    Args:
+        enable_y_wraparound: If True, enable wraparound stitching. If False, use clamping (old behavior).
+
+    Returns:
+        cropped_image, template_mask_logits, prompt_centre, is_wrapped_y
+    """
+    img_height, img_width, _ = image.shape
+
+    # X is NOT periodic (along-tunnel); clamp as usual
+    x1 = max(int(cx - crop_width // 2), 0)
+    x2 = min(int(cx + crop_width // 2), img_width)
+
+    # Y (theta) IS periodic; handle based on enable_y_wraparound flag
+    y1 = int(cy - crop_height // 2)
+    y2 = int(cy + crop_height // 2)
+
+    is_wrapped_y = False
+
+    if not enable_y_wraparound:
+        # Old behavior: clamp Y (may cut off segments that span boundary)
+        y1 = max(y1, 0)
+        y2 = min(y2, img_height)
+        cropped_image = image[y1:y2, x1:x2]
+        prompt_centre_x = cx - x1
+        prompt_centre_y = cy - y1
+    elif y1 >= 0 and y2 <= img_height:
+        # Normal case: no wraparound needed
+        cropped_image = image[y1:y2, x1:x2]
+        prompt_centre_x = cx - x1
+        prompt_centre_y = cy - y1
+    else:
+        # Wraparound crop in Y by stitching
+        is_wrapped_y = True
+        # Clamp slice extents for safe indexing, but stitch the overflow
+        if y1 < 0:
+            top_overflow = -y1
+            # Bottom part that wraps to the top of the crop
+            bottom_start = max(0, img_height - top_overflow)
+            part1 = image[bottom_start:img_height, x1:x2]
+            part2 = image[0:max(0, y2), x1:x2]
+            cropped_image = np.concatenate([part1, part2], axis=0)
+            # In stitched crop: wrapped part is [0:top_overflow], normal part is [top_overflow:]
+            # cy maps to: top_overflow + cy (since cy is in [0, y2] range)
+            prompt_centre_x = cx - x1
+            prompt_centre_y = top_overflow + cy
+        else:
+            # y2 > img_height
+            bottom_overflow = y2 - img_height
+            part1 = image[min(img_height, y1):img_height, x1:x2]
+            part2 = image[0:min(img_height, bottom_overflow), x1:x2]
+            cropped_image = np.concatenate([part1, part2], axis=0)
+            # In stitched crop: normal part is [0:img_height-y1], wrapped part is [img_height-y1:]
+            # cy maps to: cy - y1 (since cy is in [y1, img_height] range, this is in [0, img_height-y1])
+            prompt_centre_x = cx - x1
+            prompt_centre_y = cy - y1
+
+    # prompt_centre is in CROPPED image coordinates.
+    # Note: use the *unclamped* y1 for left_top calculation so aggregation can handle wraparound
     prompt_centre = (prompt_centre_x, prompt_centre_y)
     
     cropped_template_mask = generate_template_mask(
@@ -490,7 +565,125 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
     )
     template_mask_logits = compute_logits_from_mask(cropped_template_mask, mask_eps)
 
-    return cropped_image, template_mask_logits, prompt_centre
+    return cropped_image, template_mask_logits, prompt_centre, is_wrapped_y
+
+
+def _apply_patch_region(
+    logits_map: np.ndarray,
+    label_map: np.ndarray,
+    ring_map: np.ndarray,
+    new_logits: np.ndarray,
+    mask: np.ndarray,
+    start_x: int,
+    start_y: int,
+    block_label: int,
+    ring_index: int,
+):
+    """
+    Apply (new_logits, mask) onto maps at (start_x, start_y) with max-logit overwrite.
+    Assumes the placement region lies fully within [0,H) in Y and [0,W) in X.
+    """
+    img_height, img_width = label_map.shape[:2]
+    mask_h, mask_w = mask.shape
+
+    end_y = min(start_y + mask_h, img_height)
+    end_x = min(start_x + mask_w, img_width)
+    start_y_clamped = max(0, start_y)
+    start_x_clamped = max(0, start_x)
+
+    actual_h = end_y - start_y_clamped
+    actual_w = end_x - start_x_clamped
+    if actual_h <= 0 or actual_w <= 0:
+        return
+
+    # Align mask/logits slices if start_x/start_y were clamped
+    mask_y0 = start_y_clamped - start_y
+    mask_x0 = start_x_clamped - start_x
+    mask_region = mask[mask_y0:mask_y0 + actual_h, mask_x0:mask_x0 + actual_w]
+    logits_region = new_logits[mask_y0:mask_y0 + actual_h, mask_x0:mask_x0 + actual_w]
+
+    current = logits_map[start_y_clamped:end_y, start_x_clamped:end_x]
+    if mask_region.shape != current.shape or logits_region.shape != current.shape:
+        return
+
+    update = (logits_region > current) & mask_region
+    if not np.any(update):
+        return
+
+    logits_map[start_y_clamped:end_y, start_x_clamped:end_x][update] = logits_region[update]
+    label_map[start_y_clamped:end_y, start_x_clamped:end_x][update] = block_label
+    ring_map[start_y_clamped:end_y, start_x_clamped:end_x][update] = ring_index
+
+
+def apply_mask_logits_with_y_wraparound(
+    logits_map: np.ndarray,
+    label_map: np.ndarray,
+    ring_map: np.ndarray,
+    new_logits: np.ndarray,
+    mask: np.ndarray,
+    start_x: int,
+    start_y: int,
+    block_label: int,
+    ring_index: int,
+):
+    """
+    Apply a crop-local (mask, new_logits) back to the full image maps.
+
+    Y is treated as periodic (theta seam): if start_y < 0 or start_y+H_crop > H_img,
+    we split the patch and write the overflow to the opposite side.
+    """
+    img_height, _ = label_map.shape[:2]
+    mask_h = mask.shape[0]
+    end_y = start_y + mask_h
+
+    if start_y >= 0 and end_y <= img_height:
+        _apply_patch_region(logits_map, label_map, ring_map, new_logits, mask, start_x, start_y, block_label, ring_index)
+        return
+
+    # Wraparound cases
+    if start_y < 0:
+        top_overflow = -start_y
+        wrap_h = min(top_overflow, mask_h)
+
+        # Part that wraps to bottom of image: mask rows [0:wrap_h] -> y [H-wrap_h:H]
+        if wrap_h > 0:
+            wrapped_start_y = img_height - wrap_h
+            _apply_patch_region(
+                logits_map, label_map, ring_map,
+                new_logits[:wrap_h, :], mask[:wrap_h, :],
+                start_x, wrapped_start_y, block_label, ring_index
+            )
+
+        # Remaining part goes to top starting at y=0: mask rows [wrap_h:] -> y [0:...]
+        remaining_h = mask_h - wrap_h
+        if remaining_h > 0:
+            _apply_patch_region(
+                logits_map, label_map, ring_map,
+                new_logits[wrap_h:, :], mask[wrap_h:, :],
+                start_x, 0, block_label, ring_index
+            )
+        return
+
+    # end_y > img_height
+    bottom_overflow = end_y - img_height
+    normal_h = max(0, mask_h - bottom_overflow)
+
+    # Normal bottom part: mask rows [0:normal_h] -> y [start_y:H]
+    if normal_h > 0:
+        _apply_patch_region(
+            logits_map, label_map, ring_map,
+            new_logits[:normal_h, :], mask[:normal_h, :],
+            start_x, start_y, block_label, ring_index
+        )
+
+    # Overflow wraps to top: mask rows [normal_h:] -> y [0:bottom_overflow]
+    wrap_h = min(bottom_overflow, mask_h - normal_h)
+    if wrap_h > 0:
+        _apply_patch_region(
+            logits_map, label_map, ring_map,
+            new_logits[normal_h:normal_h + wrap_h, :], mask[normal_h:normal_h + wrap_h, :],
+            start_x, 0, block_label, ring_index
+        )
 
 
 def compute_logits_from_mask(mask, eps=1e-3):
@@ -593,6 +786,7 @@ def process_row(df_row, image, predictor, config):
     k_params = config['k_params']
     ab_params = config['ab_params']
     template_params = config['template_params']
+    enable_y_wraparound = config.get('enable_y_wraparound', True)
     
     # Always use physical order for position calculation
     block_labels = compute_block_label(segment_per_ring, None)
@@ -619,13 +813,20 @@ def process_row(df_row, image, predictor, config):
                 else:
                     map_y = map_y - convert_to_pixel_coords(AB_height, resolution)
 
-            cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps)
+            cropped_image, template_mask_logit, prompt_centre, is_wrapped_y = crop_image_and_mask_logits(
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps, enable_y_wraparound)
             points, labels = generate_prompt_points(
                 prompt_centre, initial_x, map_y, block, resolution,
                 segment_width, K_height, AB_height, image, k_params, ab_params, y_bounds)
-        
-            if len(points) > 0 and np.any(points[:, 1] < 0):
+
+            # If crop wrapped in Y (theta seam), points are already in correct cropped coordinates
+            # (prompt_centre_y was adjusted during crop, so points relative to it are correct)
+            if len(points) > 0 and is_wrapped_y:
+                # Just ensure points are within crop bounds (they should already be, but clamp for safety)
+                crop_h = cropped_image.shape[0]
+                points[:, 1] = np.clip(points[:, 1], 0, crop_h - 1)
+                reverse = False
+            elif len(points) > 0 and np.any(points[:, 1] < 0):
                 within_bounds = (points[:, 1] >= 0)
                 points = points[within_bounds]
                 labels = labels[within_bounds]
@@ -662,13 +863,18 @@ def process_row(df_row, image, predictor, config):
             else:
                 map_y = map_y + convert_to_pixel_coords(AB_height, resolution)
 
-            cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps)
+            cropped_image, template_mask_logit, prompt_centre, is_wrapped_y = crop_image_and_mask_logits(
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params, mask_eps, enable_y_wraparound)
             points, labels = generate_prompt_points(
                 prompt_centre, initial_x, map_y, block, resolution,
                 segment_width, K_height, AB_height, image, k_params, ab_params, y_bounds)
 
-            if len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
+            # If crop wrapped in Y (theta seam), points are already in correct cropped coordinates
+            if len(points) > 0 and is_wrapped_y:
+                crop_h = cropped_image.shape[0]
+                points[:, 1] = np.clip(points[:, 1], 0, crop_h - 1)
+                stop = False
+            elif len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
                 within_bounds = ((points[:, 1] + map_y - delta_y) <= image.shape[0])
                 points = points[within_bounds]
                 labels = labels[within_bounds]
@@ -756,6 +962,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     crop_margin = params['processing']['crop_margin']
     mask_eps = params['processing']['mask_eps']
     y_bounds = params['processing']['y_bounds']
+    enable_y_wraparound = get_param(params, 'processing', 'enable_y_wraparound', default=True)
     
     # Prompt point parameters
     k_params = params['prompt_points']['k_block']
@@ -767,17 +974,29 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     min_quality_threshold = params['pattern_aware']['min_quality_threshold']
     
     # Segment order parameters (for processing priority)
+    # Try root level first, then segment_geometry for nested format
     segment_order = params.get('segment_order', None)
+    if segment_order is None:
+        segment_order = get_param(params, 'segment_geometry', 'segment_order', default=None)
+    
     segment_per_ring_from_params = params.get('segment_per_ring', None)
+    if segment_per_ring_from_params is None:
+        segment_per_ring_from_params = get_param(params, 'segment_geometry', 'segment_per_ring', default=None)
     
     # Load data
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
+    pattern_csv_path = os.path.join(tunnel_dir, "pattern.csv")
     detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
-    if not os.path.exists(detected_csv_path):
-        raise FileNotFoundError(f"detected.csv not found in {tunnel_dir}")
     
-    initial_prompt_points = pd.read_csv(detected_csv_path)
+    if os.path.exists(pattern_csv_path):
+        print(f"Loading K positions from pattern.csv")
+        initial_prompt_points = pd.read_csv(pattern_csv_path)
+    elif os.path.exists(detected_csv_path):
+        print(f"Warning: pattern.csv not found, using detected.csv")
+        initial_prompt_points = pd.read_csv(detected_csv_path)
+    else:
+        raise FileNotFoundError(f"Neither pattern.csv nor detected.csv found in {tunnel_dir}")
     
     pixel_to_point = pickle.load(open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb"))
     df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "enhanced.csv"))
@@ -830,6 +1049,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
         'k_params': k_params,
         'ab_params': ab_params,
         'template_params': template_params,
+        'enable_y_wraparound': enable_y_wraparound,
     }
     
     # Run SAM segmentation
@@ -851,32 +1071,25 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
             start_x, start_y = map(int, item['left_top'])
             quality = item.get('quality', 1.0)
 
-            end_y, end_x = start_y + mask.shape[0], start_x + mask.shape[1]
-            start_y, start_x = max(0, start_y), max(0, start_x)
-            end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
-            
-            valid_slice_y = slice(start_y, end_y)
-            valid_slice_x = slice(start_x, end_x)
-
             new_logits = restore_sam_logits(logits, mask.shape)
             
             if use_quality_weighting and quality >= min_quality_threshold:
                 new_logits = new_logits * quality
             elif quality < min_quality_threshold:
                 continue
-            
-            current_logits = logits_map[valid_slice_y, valid_slice_x]
 
-            if mask.shape != current_logits.shape:
-                continue
-            if new_logits.shape != current_logits.shape:
-                new_logits = new_logits[:current_logits.shape[0], :current_logits.shape[1]]
-
-            update_mask = (new_logits > current_logits) & mask
-            
-            logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
-            label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
-            ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
+            # Apply patch back with Y-wraparound (theta seam) support
+            apply_mask_logits_with_y_wraparound(
+                logits_map=logits_map,
+                label_map=label_map,
+                ring_map=ring_map,
+                new_logits=new_logits,
+                mask=mask,
+                start_x=start_x,
+                start_y=start_y,
+                block_label=block_to_label.get(block, 0),
+                ring_index=ring_index,
+            )
 
     # Fix ring numbering
     fix_ring = np.where((ring_map >= 1) & (ring_map <= (ring_count-1)), ring_count - ring_map, ring_map)
