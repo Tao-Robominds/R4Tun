@@ -2,7 +2,7 @@
     "preprocessing": {
         "binary_threshold": 107,
         "dilation_kernel_size": 3,
-        "dilation_iterations": 1
+        "dilation_iterations": 2
     },
     "hough_oblique": {
         "threshold": 37,
@@ -20,7 +20,7 @@
         "angle_tolerance": 1
     },
     "hough_vertical": {
-        "threshold": 477,
+        "threshold": 500,
         "filter_rings": 5
     },
     "line_processing": {

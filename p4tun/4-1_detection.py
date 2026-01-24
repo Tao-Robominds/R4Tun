@@ -106,11 +106,32 @@ def detect_lines(depth_map_outlier: np.ndarray, params: dict, resolution: float 
     # Line processing parameters
     merge_distance_threshold = get_param(params, 'line_processing', 'merge_distance_threshold', default=3)
     
-    # Pre-processing
+    # Pre-processing - improved edge detection
+    # Method 1: Binary on NaN/non-NaN (original)
     binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
     ret, binary_image = cv2.threshold(binary_map, binary_threshold, 255, cv2.THRESH_BINARY)
+    
+    # Method 2: Use actual depth values for better edge detection
+    depth_valid = depth_map_outlier[~np.isnan(depth_map_outlier)]
+    if len(depth_valid) > 0:
+        depth_min, depth_max = depth_valid.min(), depth_valid.max()
+        if depth_max > depth_min:
+            depth_normalized = ((depth_map_outlier - depth_min) / (depth_max - depth_min) * 255).astype(np.uint8)
+            depth_normalized[np.isnan(depth_map_outlier)] = 0
+            
+            # Use Canny edge detection for better line detection
+            canny_edges = cv2.Canny(depth_normalized, 50, 150)
+            
+            # Combine both methods
+            combined_edges = cv2.bitwise_or(binary_image, canny_edges)
+        else:
+            combined_edges = binary_image
+    else:
+        combined_edges = binary_image
+    
+    # Dilation to connect broken line segments
     kernel = np.ones((dilation_kernel_size, dilation_kernel_size), np.uint8)
-    dilated_edges = cv2.dilate(binary_image, kernel, iterations=dilation_iterations)
+    dilated_edges = cv2.dilate(combined_edges, kernel, iterations=dilation_iterations)
     
     # Detect oblique lines
     lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 
@@ -127,7 +148,11 @@ def detect_lines(depth_map_outlier: np.ndarray, params: dict, resolution: float 
     # Detect vertical lines
     lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, hough_vert_threshold)
     if lines_vertical is not None:
-        lines_vertical = lines_vertical[lines_vertical[:, 0, 0] <= (vert_filter_rings * 1200 / (resolution*1000))]
+        # Filter: For vertical lines (theta ≈ 0), rho represents X position
+        # rho can range from 0 to W (image width)
+        # Keep all lines within image bounds
+        max_rho = W  # Maximum rho = image width
+        lines_vertical = lines_vertical[lines_vertical[:, 0, 0] <= max_rho]
     
     # Separate positive and negative slope lines
     positive_lines = []
