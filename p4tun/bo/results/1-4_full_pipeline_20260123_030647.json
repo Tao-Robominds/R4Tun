@@ -1,0 +1,46 @@
+{
+  "tunnel_id": "1-4",
+  "stage": "full_pipeline",
+  "metric": "mIoU",
+  "best_score": 0.567,
+  "best_params": {
+    "unfold_theta_offset": 120.0,
+    "segment_width": 1169.1425126066947,
+    "k_height": 1000.0,
+    "ab_height": 3270.7756825926326,
+    "angle_deg": 7.472167835743314,
+    "padding": 200.0,
+    "crop_margin": 55.0,
+    "k_mask_width": 685.0533413425655,
+    "ab_mask_width": 652.7447929112693,
+    "ab_mask_height": 1618.1500175904305,
+    "min_quality_threshold": 0.1
+  },
+  "n_calls": 10,
+  "n_evaluations": 10,
+  "all_scores": [
+    0.486,
+    -0.0,
+    0.565,
+    0.55,
+    0.492,
+    -0.0,
+    0.552,
+    0.539,
+    0.521,
+    0.567
+  ],
+  "convergence": [
+    0.486,
+    0.486,
+    0.565,
+    0.565,
+    0.565,
+    0.565,
+    0.565,
+    0.565,
+    0.565,
+    0.567
+  ],
+  "timestamp": "2026-01-23T03:06:47.568175"
+}
