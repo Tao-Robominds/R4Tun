@@ -13,7 +13,7 @@
 #   2 = denoising
 #   3 = enhancing
 #   4 = detection
-#   5 = sam
+#   5 = sam (pattern-routed: T1/T2/T3→sam, T4/T5→wrap_around)
 #   6 = evaluation
 #
 # Examples:
@@ -42,9 +42,11 @@ SKIP_SAM=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Activate virtual environment if exists
-if [ -d "venv" ]; then
-    source venv/bin/activate
+# Use venv Python explicitly (do not modify venv)
+PYTHON="venv/bin/python3"
+if [ ! -x "$PYTHON" ]; then
+    echo "Error: $PYTHON not found or not executable. Ensure venv exists."
+    exit 1
 fi
 
 # Print banner
@@ -76,7 +78,7 @@ usage() {
     echo "  2 = denoising     Remove noise from point cloud"
     echo "  3 = enhancing     Enhance point cloud and generate depth map"
     echo "  4 = detection     Detect lines and infer segment positions"
-    echo "  5 = sam           SAM-based segmentation"
+    echo "  5 = sam           SAM (pattern-routed: T1/T2/T3→sam, T4/T5→wrap_around)"
     echo "  6 = evaluation    Evaluate results"
     echo ""
     echo "Examples:"
@@ -128,31 +130,32 @@ run_stage() {
     case $stage in
         1)
             echo -e "${YELLOW}[Stage 1/6] Unfolding...${NC}"
-            python3 p4tun/1_unfolding.py "$tunnel_id"
+            "$PYTHON" p4tun/1_unfolding.py "$tunnel_id"
             ;;
         2)
             echo -e "${YELLOW}[Stage 2/6] Denoising...${NC}"
-            python3 p4tun/2_denoising.py "$tunnel_id"
+            "$PYTHON" p4tun/2_denoising.py "$tunnel_id"
             ;;
         3)
             echo -e "${YELLOW}[Stage 3/6] Enhancing...${NC}"
-            python3 p4tun/3_enhancing.py "$tunnel_id"
+            "$PYTHON" p4tun/3_enhancing.py "$tunnel_id"
             ;;
         4)
             echo -e "${YELLOW}[Stage 4/6] Detection & Pattern Inference...${NC}"
-            python3 p4tun/4-1_detection.py "$tunnel_id"
+            "$PYTHON" p4tun/4-1_detection.py "$tunnel_id"
             ;;
         5)
             if [ "$SKIP_SAM" = true ]; then
                 echo -e "${YELLOW}[Stage 5/6] SAM Segmentation... SKIPPED${NC}"
             else
-                echo -e "${YELLOW}[Stage 5/6] SAM Segmentation...${NC}"
-                python3 p4tun/4-2_sam.py "$tunnel_id"
+                SAM_SCRIPT=$("$PYTHON" -m p4tun.sam_router "$tunnel_dir")
+                echo -e "${YELLOW}[Stage 5/6] SAM Segmentation ($SAM_SCRIPT)...${NC}"
+                "$PYTHON" "p4tun/$SAM_SCRIPT" "$tunnel_id"
             fi
             ;;
         6)
             echo -e "${YELLOW}[Stage 6/6] Evaluation...${NC}"
-            python3 p4tun/evaluation.py "$tunnel_id"
+            "$PYTHON" p4tun/evaluation.py "$tunnel_id"
             ;;
     esac
 }

@@ -237,11 +237,11 @@ def compute_midpoints(
     dist_min = distance_tolerance_low * target_distance
     dist_max = distance_tolerance_high * target_distance
     
-    for i in prange(n_points):
+    for i in range(n_points):
         for j in range(1, neighbor_indices.shape[1]):
             dist = distances[i, j]
             idx = neighbor_indices[i, j]
-            
+
             # Check distance and curvature criteria
             curvature_diff = abs(points[i, 3] - points[idx, 3])
             if dist_min <= dist <= dist_max and curvature_diff <= curvature_threshold:
@@ -251,10 +251,10 @@ def compute_midpoints(
                 mid_r = (points[i, 2] + points[idx, 2]) / 2
                 mid_curv = (points[i, 3] + points[idx, 3]) / 2
                 mid_intensity = (points[i, 4] + points[idx, 4]) / 2
-                
+
                 new_points[count] = np.array([mid_h, mid_theta, mid_r, mid_curv, mid_intensity])
                 count += 1
-    
+
     return new_points[:count]
 
 
@@ -279,7 +279,7 @@ def filter_clustered_points(
     removed = np.zeros(num_points, dtype=np.int32)
     count = 0
     
-    for i in prange(num_points):
+    for i in range(num_points):
         if removed[i] == 0:
             keep_indices[count] = i
             count += 1
@@ -288,7 +288,7 @@ def filter_clustered_points(
                 neighbor_idx = neighbors_array[i, j]
                 if valid_mask[i, j] and removed[neighbor_idx] == 0:
                     removed[neighbor_idx] = 1
-    
+
     return keep_indices[:count]
 
 
@@ -431,11 +431,12 @@ def detect_outlier_points(
     h_min: float,
     high_density_start: float,
     high_density_end: float,
-    ring_spacing: float
+    ring_spacing: float,
+    min_neighbors: int
 ) -> np.ndarray:
     """
     Detect outlier points with significant local depth variation.
-    
+
     Args:
         points: (N, 3) array of (h, theta, r) coordinates.
         radial_values: Radial (depth) values.
@@ -446,16 +447,17 @@ def detect_outlier_points(
         high_density_start: Start of high-density region (ring units).
         high_density_end: End of high-density region (ring units).
         ring_spacing: Nominal ring spacing.
-        
+        min_neighbors: Minimum number of neighbors required for detection.
+
     Returns:
         Boolean mask of outlier points.
     """
     n_points = len(points)
     outlier_mask = np.zeros(n_points, dtype=np.bool_)
-    
+
     for i in prange(n_points):
         neighbors = neighbor_indices[i, 1:]
-        if len(neighbors) < 20:
+        if len(neighbors) < min_neighbors:
             continue
         
         # Compute average depth difference
@@ -503,10 +505,10 @@ def interpolate_between_outliers(
     new_points = np.zeros((max_new, 4))
     count = 0
     
-    for i in prange(n_outliers):
+    for i in range(n_outliers):
         idx1 = outlier_indices[i]
         p1 = points[idx1]
-        
+
         for j in range(i + 1, n_outliers):
             idx2 = outlier_indices[j]
             p2 = points[idx2]
@@ -591,7 +593,7 @@ def enhance_outlier_boundaries(
         points[:, :3], points[:, 2], indices,
         depth_threshold_low, depth_threshold_high,
         h_min, high_density_range[0], high_density_range[1],
-        ring_spacing
+        ring_spacing, outlier_neighbors
     )
     
     outlier_indices = np.where(outlier_mask)[0]
@@ -986,15 +988,17 @@ def classify_tunnel_pattern(depth_map_outlier: np.ndarray, tunnel_dir: str) -> D
         if len(y_positions) >= 4:
             try:
                 y_array = np.array(y_positions).reshape(-1, 1)
-                centroids, labels = kmeans2(y_array, 2, iter=10)
+                centroids, labels = kmeans2(y_array, 2, iter=10, minit="++")
                 cluster_stds = [float(np.std(y_array[labels == i])) for i in range(2)]
                 unique_labels = len(set(labels))
-                
+                c0 = float(np.asarray(centroids[0]).flat[0])
+                c1 = float(np.asarray(centroids[1]).flat[0])
+
                 # Alternating if 2 clusters with low variance
-                is_alternating = (unique_labels == 2 and 
-                                all(std < 50 for std in cluster_stds) and
-                                abs(float(centroids[0]) - float(centroids[1])) > 200)
-            except:
+                is_alternating = (unique_labels == 2 and
+                                 all(std < 50 for std in cluster_stds) and
+                                 abs(c0 - c1) > 200)
+            except Exception:
                 pass
         
         # Pattern classification logic (based on Seg2Tunnel categories)
@@ -1117,9 +1121,9 @@ def _get_sam_strategy(pattern_type: str) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python 3_enhancing_clean.py <tunnel_id>")
-        print("Example: python 3_enhancing_clean.py 1-4")
+        print("Usage: python 3_enhancing.py <tunnel_id>")
+        print("Example: python 3_enhancing.py 1-4")
         sys.exit(1)
-    
+
     enhance_point_cloud(sys.argv[1])
 

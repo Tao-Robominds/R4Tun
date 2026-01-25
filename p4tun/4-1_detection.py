@@ -38,22 +38,30 @@ def mm_to_px(mm: float, resolution: float = DEFAULT_RESOLUTION) -> float:
 # =============================================================================
 
 def load_parameters(tunnel_id: str, base_dir: str = "data") -> dict:
-    """Load parameters from JSON file."""
+    """
+    Load parameters from JSON. Priority: parameters/<tunnel_id> → data/<tunnel_id> → sample → {}.
+    """
     script_dir = os.path.dirname(__file__)
-    
-    params_path = os.path.join(script_dir, "parameters", tunnel_id, "parameters_detection.json")
+    param_file = "parameters_detection.json"
+
+    params_path = os.path.join(script_dir, "parameters", tunnel_id, param_file)
     if os.path.exists(params_path):
         print(f"Loading parameters from {params_path}")
         with open(params_path, 'r') as f:
             return json.load(f)
-    
-    # Try sample parameters
-    sample_path = os.path.join(script_dir, "parameters", "sample", "parameters_detection.json")
+
+    tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
+    if os.path.exists(tunnel_path):
+        print(f"Loading parameters from {tunnel_path}")
+        with open(tunnel_path, 'r') as f:
+            return json.load(f)
+
+    sample_path = os.path.join(script_dir, "parameters", "sample", param_file)
     if os.path.exists(sample_path):
         print(f"Loading sample parameters from {sample_path}")
         with open(sample_path, 'r') as f:
             return json.load(f)
-    
+
     print("Using hardcoded default parameters")
     return {}
 
@@ -101,8 +109,7 @@ def detect_lines(depth_map_outlier: np.ndarray, params: dict, resolution: float 
     
     # Hough vertical parameters
     hough_vert_threshold = get_param(params, 'hough_vertical', 'threshold', default=500)
-    vert_filter_rings = get_param(params, 'hough_vertical', 'filter_rings', default=5)
-    
+
     # Line processing parameters
     merge_distance_threshold = get_param(params, 'line_processing', 'merge_distance_threshold', default=3)
     
@@ -116,9 +123,11 @@ def detect_lines(depth_map_outlier: np.ndarray, params: dict, resolution: float 
     if len(depth_valid) > 0:
         depth_min, depth_max = depth_valid.min(), depth_valid.max()
         if depth_max > depth_min:
-            depth_normalized = ((depth_map_outlier - depth_min) / (depth_max - depth_min) * 255).astype(np.uint8)
-            depth_normalized[np.isnan(depth_map_outlier)] = 0
-            
+            out = np.zeros_like(depth_map_outlier, dtype=np.float64)
+            valid = ~np.isnan(depth_map_outlier)
+            out[valid] = (depth_map_outlier[valid] - depth_min) / (depth_max - depth_min) * 255
+            depth_normalized = out.astype(np.uint8)
+
             # Use Canny edge detection for better line detection
             canny_edges = cv2.Canny(depth_normalized, 50, 150)
             
@@ -294,26 +303,31 @@ def line_segment_vertical_intersection(vertical_x, segment):
     return None
 
 
-def merge_close_points(points, threshold=6):
-    """Merge points that are within threshold distance."""
+def merge_close_points(points: List[float], threshold: float = 6) -> List[float]:
+    """Merge Y-values that are within threshold distance (pixels)."""
     if len(points) == 0:
         return []
-    points = np.array(points)
-    if len(points) == 1:
-        return [points[0]]
-    
-    merged_points = []
-    while len(points) > 0:
-        p = points[0]
-        close_mask = np.abs(points - p) < threshold
-        merged_points.append(np.mean(points[close_mask]))
-        points = points[~close_mask]
-    return merged_points
+    pts = np.array(points, dtype=np.float64)
+    if len(pts) == 1:
+        return [float(pts[0])]
+
+    merged = []
+    while len(pts) > 0:
+        p = pts[0]
+        close_mask = np.abs(pts - p) < threshold
+        merged.append(float(np.mean(pts[close_mask])))
+        pts = pts[~close_mask]
+    return merged
 
 
-def calculate_k_positions(line_data: Dict, ring_centers: List[float], 
-                          k_height_mm: float, ab_height_mm: float,
-                          resolution: float) -> pd.DataFrame:
+def calculate_k_positions(
+    line_data: Dict,
+    ring_centers: List[float],
+    k_height_mm: float,
+    ab_height_mm: float,
+    resolution: float,
+    merge_close_threshold: float = 6,
+) -> pd.DataFrame:
     """
     Calculate K positions using sam4tun's midpoint logic.
     NO correction offset - just raw midpoint between oblique lines.
@@ -321,13 +335,12 @@ def calculate_k_positions(line_data: Dict, ring_centers: List[float],
     K_HEIGHT_PX = mm_to_px(k_height_mm, resolution)
     AB_HEIGHT_PX = mm_to_px(ab_height_mm, resolution)
     L = line_data['image_height']
-    
+
     positive_lines = line_data['positive_lines']
     negative_lines = line_data['negative_lines']
-    horizontal_lines = line_data['horizontal_lines']
-    
+
     adjusted_points = []
-    
+
     for vertical_x in ring_centers:
         # Find intersections with positive slope lines
         pos_intersections = []
@@ -335,16 +348,16 @@ def calculate_k_positions(line_data: Dict, ring_centers: List[float],
             y_int = line_segment_vertical_intersection(vertical_x, (x1, y1, x2, y2))
             if y_int is not None:
                 pos_intersections.append(y_int)
-        
+
         # Find intersections with negative slope lines
         neg_intersections = []
         for x1, y1, x2, y2 in negative_lines:
             y_int = line_segment_vertical_intersection(vertical_x, (x1, y1, x2, y2))
             if y_int is not None:
                 neg_intersections.append(y_int)
-        
-        merge_positive = merge_close_points(pos_intersections)
-        merge_negative = merge_close_points(neg_intersections)
+
+        merge_positive = merge_close_points(pos_intersections, threshold=merge_close_threshold)
+        merge_negative = merge_close_points(neg_intersections, threshold=merge_close_threshold)
         
         # Case 1: Both positive and negative slope intersections → midpoint
         if len(merge_positive) > 0 and len(merge_negative) > 0:
@@ -361,30 +374,35 @@ def calculate_k_positions(line_data: Dict, ring_centers: List[float],
             y = merge_negative[0] + 0.5 * K_HEIGHT_PX
             adjusted_points.append(('negative_slope', vertical_x, y))
         
-        # Case 4: Use alternation pattern based on previous point
+        # Case 4: No line intersections — use alternation pattern (geometry-based, no GT).
+        # Define K/AB bands as fractions of image height L so behaviour generalizes across tunnels.
         else:
             if adjusted_points:
                 last_y = adjusted_points[-1][2]
-                # Alternation offset = 2/3 * AB_height ≈ 431.87 pixels
-                alternation_offset = 2/3 * AB_HEIGHT_PX
-                
-                if 1035 <= last_y <= 1265:  # ~1150 ± 10%
+                alternation_offset = (2.0 / 3.0) * AB_HEIGHT_PX
+
+                low_center, low_hw = 0.25 * L, 0.10 * L
+                high_center, high_hw = 0.65 * L, 0.10 * L
+                low_lo, low_hi = low_center - low_hw, low_center + low_hw
+                high_lo, high_hi = high_center - high_hw, high_center + high_hw
+
+                if low_lo <= last_y <= low_hi:
                     assumed_y = last_y + alternation_offset
-                elif 1422 <= last_y <= 1738:  # ~1580 ± 10%
+                elif high_lo <= last_y <= high_hi:
                     assumed_y = last_y - alternation_offset
                 else:
-                    # Check two points back
                     if len(adjusted_points) > 1:
                         second_last_y = adjusted_points[-2][2]
-                        if 1035 <= second_last_y <= 1265:
+                        if low_lo <= second_last_y <= low_hi:
                             assumed_y = second_last_y
-                        elif 1422 <= second_last_y <= 1738:
+                        elif high_lo <= second_last_y <= high_hi:
                             assumed_y = second_last_y
                         else:
                             assumed_y = L / 2
                     else:
                         assumed_y = L / 2
-                
+
+                assumed_y = max(0.0, min(L, assumed_y))
                 adjusted_points.append(('assume', vertical_x, assumed_y))
             else:
                 adjusted_points.append(('default', vertical_x, L / 2))
@@ -457,7 +475,8 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     resolution = get_param(params, 'physical_constants', 'resolution', default=DEFAULT_RESOLUTION)
     k_height_mm = get_param(params, 'physical_constants', 'k_height_mm', default=DEFAULT_K_HEIGHT_MM)
     ab_height_mm = get_param(params, 'physical_constants', 'ab_height_mm', default=DEFAULT_AB_HEIGHT_MM)
-    
+    merge_close_threshold = get_param(params, 'line_processing', 'merge_close_threshold', default=6)
+
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     
     print(f"{'=' * 60}")
@@ -481,7 +500,10 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     print(f"  Found {len(ring_centers)} ring centers")
     
     print(f"\n[Step 3] Calculating K positions...")
-    k_positions = calculate_k_positions(line_data, ring_centers, k_height_mm, ab_height_mm, resolution)
+    k_positions = calculate_k_positions(
+        line_data, ring_centers, k_height_mm, ab_height_mm, resolution,
+        merge_close_threshold=merge_close_threshold,
+    )
     print(f"  Calculated {len(k_positions)} K positions")
     print(f"  Detection types: {k_positions['Type'].value_counts().to_dict()}")
     

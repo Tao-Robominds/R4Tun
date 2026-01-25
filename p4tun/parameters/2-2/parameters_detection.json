@@ -20,11 +20,11 @@
         "angle_tolerance": 1
     },
     "hough_vertical": {
-        "threshold": 700,
-        "filter_rings": 5
+        "threshold": 700
     },
     "line_processing": {
-        "merge_distance_threshold": 2
+        "merge_distance_threshold": 2,
+        "merge_close_threshold": 6
     },
     "physical_constants": {
         "resolution": 0.005,

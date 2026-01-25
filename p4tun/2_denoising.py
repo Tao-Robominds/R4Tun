@@ -95,9 +95,6 @@ def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
 # Default Constants
 # =============================================================================
 
-# --- Physical Constants ---
-DEFAULT_TUNNEL_DIAMETER = 5.5
-
 # --- Quality Parameters ---
 DEFAULT_RADIUS_MIN = 2.7
 DEFAULT_RADIUS_MAX = 2.8
@@ -399,9 +396,9 @@ def main(tunnel_id: str, base_dir: str = "data") -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python 2_denoising_clean.py <tunnel_id>")
-        print("Example: python 2_denoising_clean.py 1-4")
+        print("Usage: python 2_denoising.py <tunnel_id>")
+        print("Example: python 2_denoising.py 1-4")
         sys.exit(1)
-    
+
     main(sys.argv[1])
 
