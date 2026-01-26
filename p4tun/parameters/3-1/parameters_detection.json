@@ -1,21 +1,21 @@
 {
     "preprocessing": {
-        "binary_threshold": 107,
-        "dilation_kernel_size": 3,
+        "binary_threshold": 127,
+        "dilation_kernel_size": 2,
         "dilation_iterations": 2
     },
     "hough_oblique": {
-        "threshold": 37,
-        "min_length": 89,
-        "max_gap": 47,
-        "angle_positive_min": 5.238901721699753,
-        "angle_positive_max": 8.35606739010639,
-        "angle_negative_min": -8.35606739010639,
-        "angle_negative_max": -5.238901721699753
+        "threshold": 29,
+        "min_length": 46,
+        "max_gap": 52,
+        "angle_positive_min": 3.404587426226431,
+        "angle_positive_max": 9.836494312877669,
+        "angle_negative_min": -9.836494312877669,
+        "angle_negative_max": -3.404587426226431
     },
     "hough_horizontal": {
-        "threshold": 45,
-        "min_length": 108,
+        "threshold": 50,
+        "min_length": 100,
         "max_gap": 15,
         "angle_tolerance": 1
     },

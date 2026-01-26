@@ -1,16 +1,16 @@
 {
     "segment_geometry": {
-        "segment_width": 1150.0,
-        "k_height": 1028.5219426390458,
-        "ab_height": 3100.0,
+        "segment_width": 1100.0,
+        "k_height": 1112.4117469476253,
+        "ab_height": 3400.0,
         "angle_deg": 6.5
     },
     "image": {
         "resolution": 0.005
     },
     "processing": {
-        "padding": 106,
-        "crop_margin": 75,
+        "padding": 80,
+        "crop_margin": 45,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -19,9 +19,9 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 682.772839120277,
-            "middle_ring": 503.69320971049626,
-            "inner_ring": 315.7129970571831,
+            "outer_ring": 682.77,
+            "middle_ring": 503.69,
+            "inner_ring": 315.71,
             "center_ring": 318.6681903934646,
             "spacing_factors": {
                 "k_block_spacing": 310.91,
@@ -35,8 +35,8 @@
             }
         },
         "ab_blocks": {
-            "outer_ring": 722.6370684998656,
-            "middle_ring": 535.7440459607526,
+            "outer_ring": 671.2620648932005,
+            "middle_ring": 647.6919419683886,
             "inner_ring": 478.38834971712987,
             "center_ring": 280.0,
             "fine_spacing": 221.60931649348407,
@@ -56,30 +56,30 @@
         },
         "template_mask": {
             "k_block": {
-                "width": 637.5431376001816,
-                "height_pos": 655.1448406794865,
-                "height_neg": 650.0
+                "width": 705.6684018164915,
+                "height_pos": 655.0,
+                "height_neg": 655.0
             },
             "b1_block": {
-                "width": 595.4395378178028,
-                "height_top": 1614.550866115779,
+                "width": 680.0,
+                "height_top": 1591.8081685255838,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 595.4395378178028,
+                "width": 680.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1614.550866115779
+                "height_bottom": 1591.8081685255838
             },
             "a_blocks": {
-                "width": 595.4395378178028,
-                "height": 1614.550866115779
+                "width": 680.0,
+                "height": 1591.8081685255838
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.38831385488455195
+        "min_quality_threshold": 0.44424493514451613
     }
 }
