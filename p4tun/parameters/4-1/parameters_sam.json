@@ -1,21 +1,21 @@
 {
-    "description": "SAM-based tunnel segment segmentation parameters for Tunnel 4-1 (7-segment)",
+    "description": "SAM complex_staggered parameters for Tunnel 4-1 (optimizable for BO)",
     "segment_geometry": {
-        "segment_width": 1208.6751165663848,
-        "k_height": 1154.440849162262,
-        "ab_height": 3269.9695893522717,
-        "angle_deg": 7.051998364045087
+        "segment_width": 1150.0,
+        "k_height": 1200.0,
+        "ab_height": 3270.8397514850126,
+        "angle_deg": 8.470960484541228
     },
     "image": {
         "resolution": 0.005
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.3886918084659493
+        "min_quality_threshold": 0.3
     },
     "processing": {
-        "padding": 130,
-        "crop_margin": 38,
+        "padding": 150,
+        "crop_margin": 50,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -24,63 +24,54 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 651.5636406741194,
-            "middle_ring": 492.340148070637,
-            "inner_ring": 339.48815181755697,
-            "center_ring": 306.41393572462346,
-            "spacing_factors": {
-                "k_block_spacing": 310.91,
-                "vertical_spacing": [
-                    732.35,
-                    505.96,
-                    310.91,
-                    219.01,
-                    373.96
-                ]
-            }
+            "outer_ring": 700,
+            "middle_ring": 500,
+            "inner_ring": 348.16,
+            "center_ring": 325
         },
         "ab_blocks": {
-            "outer_ring": 651.4079822715084,
-            "middle_ring": 479.88424040888054,
-            "inner_ring": 521.134195274865,
-            "center_ring": 351.11579864780856,
-            "fine_spacing": 260.59599747810114,
-            "ultra_fine": 194.84106149593444,
-            "edge_ring": 365.10770255019446,
-            "edge_spacing": 391.4959675543781,
-            "vertical_levels": {
-                "level_1": 1839.013116448532,
-                "level_2": 1504.835202241461,
-                "level_3": 1235.7607314524112,
-                "level_4": 1061.5800154836186,
-                "level_5": 845.3588066894952,
-                "level_6": 563.2514592279247,
-                "level_7": 277.521378323925,
-                "center": 0
-            }
+            "outer_ring": 700,
+            "middle_ring": 511.06,
+            "inner_ring": 500,
+            "center_ring": 325,
+            "fine_spacing": 250,
+            "ultra_fine": 162.5
         },
         "template_mask": {
             "k_block": {
-                "width": 618.4610510186089,
-                "height_pos": 658.5740796186782,
-                "height_neg": 526.585374950758
+                "width": 622.7574733975453,
+                "height_pos": 550.0,
+                "height_neg": 650.0
             },
             "b1_block": {
-                "width": 672.1712095389104,
-                "height_top": 1654.8913824266083,
+                "width": 700.0,
+                "height_top": 1500.0,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 672.1712095389104,
+                "width": 700.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1654.8913824266083
+                "height_bottom": 1500.0
             },
             "a_blocks": {
-                "width": 672.1712095389104,
-                "height": 1654.8913824266083
+                "width": 700.0,
+                "height": 1500.0
             }
+        }
+    },
+    "complex_staggered": {
+        "_note": "Parameters specific to complex_staggered pattern processing",
+        "template_sizing": {
+            "k_block_width_factor": 1.0,
+            "k_block_height_factor": 1.0,
+            "ab_block_width_factor": 1.0,
+            "ab_block_height_factor": 1.0
+        },
+        "prompt_density": {
+            "k_block_points": "standard",
+            "ab_block_points": "standard"
         }
     }
 }

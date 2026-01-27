@@ -1,34 +1,78 @@
 {
     "preprocessing": {
-        "binary_threshold": 115,
+        "binary_threshold": 120,
         "dilation_kernel_size": 5,
-        "dilation_iterations": 3
+        "dilation_iterations": 2,
+        "use_morphological_closing": true,
+        "use_depth_gradients": true
     },
     "hough_oblique": {
-        "threshold": 30,
-        "min_length": 80,
-        "max_gap": 60,
+        "threshold": 40,
+        "min_length": 150,
+        "max_gap": 50,
         "angle_positive_min": 5.0,
         "angle_positive_max": 10.0,
         "angle_negative_min": -10.0,
         "angle_negative_max": -5.0
     },
     "hough_horizontal": {
-        "threshold": 30,
-        "min_length": 80,
-        "max_gap": 20,
-        "angle_tolerance": 2
+        "threshold": 40,
+        "min_length": 150,
+        "max_gap": 15,
+        "angle_tolerance": 1
     },
     "hough_vertical": {
-        "threshold": 400
+        "threshold": 300
     },
     "line_processing": {
-        "merge_distance_threshold": 10.0,
-        "merge_close_threshold": 6
+        "merge_distance_threshold": 10,
+        "merge_close_threshold": 15,
+        "oblique_min_y_span": 50,
+        "oblique_min_x_span": 50,
+        "use_line_clustering": true,
+        "use_vertical_clustering": true,
+        "use_horizontal_constraint": true
     },
     "physical_constants": {
         "resolution": 0.005,
         "k_height_mm": 1079.92,
         "ab_height_mm": 3239.77
+    },
+    "complex_staggered": {
+        "hough_re_detect": {
+            "threshold": 39,
+            "min_length": 100,
+            "max_gap": 64
+        },
+        "angle_range": {
+            "positive_min": 4.2295697596292605,
+            "positive_max": 14.517281814347836,
+            "negative_min": -11.968304455967209,
+            "negative_max": -3.759311430409903
+        },
+        "line_filtering": {
+            "min_y_span": 31,
+            "min_x_span": 21
+        },
+        "clustering": {
+            "eps_candidates": [
+                0.06,
+                0.07,
+                0.11,
+                0.15
+            ],
+            "min_clusters": 3,
+            "subdivision_threshold": 2.3487678803785537,
+            "max_subdivisions": 3
+        },
+        "confidence": {
+            "subdivision_base": 0.5,
+            "subdivision_factor": 0.05,
+            "cluster_base": 0.5,
+            "cluster_factor": 0.1,
+            "midpoint": 0.9,
+            "final_intersection": 0.8801833260865632,
+            "final_midpoint": 0.4875792090268397
+        }
     }
 }

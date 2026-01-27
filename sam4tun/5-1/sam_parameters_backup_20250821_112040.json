@@ -1,0 +1,21 @@
+{
+    "segment_per_ring": 6,
+    "segment_order": [
+        "K",
+        "B1",
+        "A1",
+        "A2",
+        "A3",
+        "B2"
+    ],
+    "segment_width": 1250,
+    "K_height": 1079.92,
+    "AB_height": 3239.77,
+    "angle": 7.52,
+    "use_original_label_distributions": true,
+    "processing": {
+        "resolution": 0.005,
+        "padding": 300,
+        "crop_margin": 50
+    }
+}

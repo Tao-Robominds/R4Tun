@@ -1,0 +1,94 @@
+{
+  "tunnel_id": "5-1",
+  "algorithm_1_results": {
+    "basic_statistics": {
+      "total_points": 1504524,
+      "ring_count": 13,
+      "coordinate_systems": [
+        "cartesian (x, y, z)",
+        "cylindrical (r, theta, h)"
+      ],
+      "available_attributes": [
+        "x",
+        "y",
+        "z",
+        "intensity",
+        "r",
+        "theta",
+        "h"
+      ]
+    },
+    "cartesian_coordinates": {
+      "x_range": [
+        -16.65893555,
+        -3.00805712
+      ],
+      "y_range": [
+        -3.05004907,
+        6.30981398
+      ],
+      "z_range": [
+        -1.29418898,
+        6.27563477
+      ],
+      "x_span": 13.650878429999999,
+      "y_span": 9.359863050000001,
+      "z_span": 7.569823749999999
+    },
+    "cylindrical_coordinates": {
+      "r_range": [
+        2.2647601449499795,
+        3.869561994284745
+      ],
+      "theta_range": [
+        0.0003143712574555,
+        17.278578174072614
+      ],
+      "h_range": [
+        18.979230880737305,
+        31.68678474426269
+      ],
+      "r_span": 1.6048018493347653,
+      "theta_span": 17.278263802815157,
+      "h_span": 12.707553863525387,
+      "theta_coverage_degrees": 989.9715932149686,
+      "diameter_estimation": {
+        "inner_diameter": 4.529520289899959,
+        "outer_diameter": 7.73912398856949,
+        "average_diameter": 7.2860699378739975,
+        "median_diameter": 7.497157748249765,
+        "ring_thickness": 1.6048018493347653,
+        "description": "Estimated tunnel/ring diameters based on radial distances"
+      }
+    },
+    "intensity_analysis": {
+      "min": -1729.0,
+      "max": 1200.0,
+      "mean": -1185.440993297548,
+      "median": -1177.0,
+      "std": 106.59275665581147,
+      "percentiles": {
+        "10th": -1303.0,
+        "25th": -1255.0,
+        "75th": -1119.0,
+        "90th": -1069.0
+      }
+    },
+    "point_density": {
+      "mean_nn_distance": 0.07778664196311748,
+      "median_nn_distance": 0.05938387162817199,
+      "min_nn_distance": 0.005393129288159274,
+      "max_nn_distance": 1.4996619908845226,
+      "std_nn_distance": 0.06899705230744692
+    },
+    "processing_notes": [
+      "Point density: Median NN distance = 0.0594",
+      "Spatial extent: X=13.65, Y=9.36, Z=7.57",
+      "Estimated diameters: Inner=4.53, Outer=7.74, Thickness=1.60",
+      "Cylindrical extent: R=1.60, \u03b8=990.0\u00b0, H=12.71",
+      "Ring structure: 13 rings detected"
+    ]
+  },
+  "source_file": "data/5-1/unwrapped.csv",
+  "analysis_timestamp": "2025-08-16T18:54:57.400350"
+}

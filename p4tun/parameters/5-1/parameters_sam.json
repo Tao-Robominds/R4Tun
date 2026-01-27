@@ -1,17 +1,54 @@
 {
-    "description": "SAM-based tunnel segment segmentation parameters for Tunnel 5-1 (7-segment)",
+    "description": "SAM complex_staggered BO parameters for Tunnel 5-1",
     "segment_geometry": {
-        "segment_width": 1300.0,
-        "k_height": 1079.92,
-        "ab_height": 3239.77,
-        "angle_deg": 7.52
+        "segment_width": 1167.872106892275,
+        "k_height": 950.0,
+        "ab_height": 3100.0,
+        "angle_deg": 7.26435106607326
     },
     "image": {
         "resolution": 0.005
     },
     "pattern_aware": {
-        "_note": "Pattern-aware prompting parameters",
         "use_quality_weighting": true,
         "min_quality_threshold": 0.3
+    },
+    "prompt_points": {
+        "template_mask": {
+            "k_block": {
+                "width": 750.0,
+                "height_pos": 550.0,
+                "height_neg": 650.0
+            },
+            "b1_block": {
+                "width": 550.0,
+                "height_top": 1500.0,
+                "height_bottom_pos": 1540.69,
+                "height_bottom_neg": 1699.08
+            },
+            "b2_block": {
+                "width": 550.0,
+                "height_top_pos": 1540.69,
+                "height_top_neg": 1699.08,
+                "height_bottom": 1500.0
+            },
+            "a_blocks": {
+                "width": 550.0,
+                "height": 1500.0
+            }
+        }
+    },
+    "complex_staggered": {
+        "_note": "Parameters specific to complex_staggered pattern processing",
+        "template_sizing": {
+            "k_block_width_factor": 0.8,
+            "k_block_height_factor": 1.2,
+            "ab_block_width_factor": 0.8797770070379852,
+            "ab_block_height_factor": 0.8
+        },
+        "prompt_density": {
+            "k_block_points": "standard",
+            "ab_block_points": "standard"
+        }
     }
 }

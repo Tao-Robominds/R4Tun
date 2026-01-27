@@ -1,0 +1,194 @@
+{
+  "tunnel_id": "5-1",
+  "sam_workflow_analysis": {
+    "prompt_distribution": {
+      "total_detection_points": 25,
+      "valid_detection_points": 25,
+      "sam_template_distribution": {
+        "spatial_bounds": {
+          "x_range": [
+            66.75,
+            2514.91796875
+          ],
+          "y_range": [
+            657.4009979578228,
+            2480.273576064116
+          ]
+        },
+        "coverage_area": 4462698.25683256,
+        "prompt_density": 5.601992014970776e-06,
+        "coverage_matrix": [
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            5.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            5.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            4.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            2.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            2.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "coverage_percentage": 20.408163265306122,
+        "coverage_uniformity": 0.3823288460499076,
+        "uncovered_regions": 39
+      },
+      "prompt_spacing_analysis": {
+        "mean_prompt_spacing": 118.69427097148355,
+        "median_prompt_spacing": 63.375013739901966,
+        "min_prompt_spacing": 22.593751358459247,
+        "max_prompt_spacing": 474.04310549615525,
+        "spacing_std": 120.47918431311298,
+        "template_spacing_ratio": 0.09495541677718684,
+        "potential_template_overlap": 1.0
+      },
+      "type_distribution": {
+        "midpoint": 17,
+        "negative_slope": 3,
+        "positive_slope": 3,
+        "default": 1,
+        "assume": 1
+      }
+    },
+    "prompt_effectiveness": {
+      "prompt_to_target_ratio": 2.001575640344079e-05,
+      "sam_coverage_analysis": {
+        "detection_bounds": {
+          "x_range": [
+            66.75,
+            2514.91796875
+          ],
+          "y_range": [
+            657.4009979578228,
+            2480.273576064116
+          ]
+        },
+        "enhanced_spatial_range": {
+          "h_range": [
+            18.979230880737305,
+            31.68678474426269
+          ],
+          "theta_range": [
+            0.0003143712574555,
+            17.278578174072614
+          ],
+          "r_range": [
+            2.8424213176106643,
+            3.861520541447903
+          ]
+        },
+        "estimated_template_coverage": 1.0,
+        "prompt_type_coverage": 1.0,
+        "total_template_area": 101250000.0,
+        "estimated_depth_map_area": 4462698.25683256
+      },
+      "segmentation_effectiveness": {
+        "prompt_type_distribution": {
+          "midpoint": 17,
+          "negative_slope": 3,
+          "positive_slope": 3,
+          "default": 1,
+          "assume": 1
+        },
+        "target_point_count": 1249016,
+        "points_per_prompt": 49960.64,
+        "expected_segmentation_load": "low"
+      },
+      "workflow_assessment": {
+        "coordinate_system_compatibility": "2D_prompts_to_3D_targets",
+        "projection_required": true,
+        "pixel_to_point_mapping_critical": true
+      }
+    },
+    "sam_optimization": {
+      "overall_sam_readiness_score": 0.5,
+      "template_analysis": {
+        "spacing_ratio": 0.09495541677718684,
+        "overlap_level": "high",
+        "overlap_score": 0.6,
+        "coverage_adequacy": "poor",
+        "coverage_score": 0.4
+      },
+      "recommended_sam_strategy": {
+        "strategy": "enhanced_preprocessing_required",
+        "confidence_level": "low",
+        "mask_threshold": 0.3,
+        "stability_threshold": 0.85
+      },
+      "template_optimization": {
+        "use_multi_scale_templates": true,
+        "template_size_optimization": "reduce",
+        "overlap_handling": "required",
+        "parallel_processing_suitable": false
+      },
+      "processing_recommendations": {
+        "batch_processing": true,
+        "sequential_processing": false,
+        "memory_optimization_needed": false,
+        "gpu_acceleration_beneficial": true
+      }
+    }
+  },
+  "processing_metadata": {
+    "tunnel_id": "5-1",
+    "analysis_type": "SAM Workflow Effectiveness Analysis",
+    "prompt_source": "Algorithm 4 - Depth Image Detection",
+    "target_data": "Algorithm 3 - Enhanced Point Cloud",
+    "workflow": "Detection Points \u2192 SAM Templates \u2192 2D Segmentation \u2192 3D Projection",
+    "output_directory": "data/5-1",
+    "timestamp": "2025-08-16T19:00:06.438875"
+  }
+}
