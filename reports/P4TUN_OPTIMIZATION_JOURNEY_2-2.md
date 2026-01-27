@@ -122,6 +122,329 @@ This report documents the complete optimization journey for tunnel 2-2, includin
 
 ---
 
+## Part 1.5: Key Parameters by Stage (Complete Reference)
+
+This section documents ALL tunable parameters for each pipeline stage, their roles, sensitivity levels, and recommended ranges based on 2-2 optimization.
+
+---
+
+### Stage 1: Unfolding Parameters (`parameters_unfolding.json`)
+
+```json
+{
+    "physical_constants": {
+        "ring_spacing": 1.2,        // Ring width in meters
+        "tunnel_diameter": 5.5      // Tunnel diameter in meters
+    },
+    "slicing": {
+        "slice_half_thickness": 0.005,    // Half-thickness of each cross-section slice
+        "max_distance_from_top": 4.5      // Max distance from top for filtering
+    },
+    "curve_fitting": {
+        "polynomial_degree": 3      // Degree for centerline polynomial fitting
+    },
+    "ransac_ellipse": {
+        "inlier_ratio": 0.75,       // Expected ratio of inliers for RANSAC
+        "confidence": 0.9,          // RANSAC confidence level
+        "min_samples": 5,           // Minimum samples for ellipse fitting
+        "inlier_threshold": 0.8     // Distance threshold for inliers
+    },
+    "arc_length": {
+        "samples_per_ring": 1210    // Angular resolution of unfolded image
+    },
+    "performance": {
+        "batch_size": 1000000,      // Batch size for parallel processing
+        "num_jobs": 12              // Number of parallel jobs
+    }
+}
+```
+
+| Parameter | Sensitivity | Role | Recommended Range |
+|-----------|-------------|------|-------------------|
+| `ring_spacing` | LOW | Physical constant, rarely needs tuning | Tunnel-specific |
+| `tunnel_diameter` | LOW | Physical constant | Tunnel-specific |
+| `samples_per_ring` | MEDIUM | Resolution vs speed tradeoff | 1100-1400 |
+| `ransac_ellipse.inlier_ratio` | HIGH | Affects centerline accuracy | 0.70-0.85 |
+| `ransac_ellipse.min_samples` | HIGH | Too high causes crashes | 3-10 |
+
+**BO Finding:** Unfolding tuning yielded 0% improvement - defaults were already optimal for 2-2.
+
+---
+
+### Stage 2: Denoising Parameters (`parameters_denoising.json`)
+
+```json
+{
+    "radius_filtering": {
+        "radius_min": 2.7,          // Inner radius bound (meters)
+        "radius_max": 2.8           // Outer radius bound (meters)
+    },
+    "grid_resolution": {
+        "theta_step": 0.5,          // Angular grid step (degrees)
+        "radial_step": 0.001        // Radial grid step (meters)
+    },
+    "gradient_detection": {
+        "gradient_threshold": 0.2,  // Threshold for edge detection
+        "gradient_epsilon": 1e-06   // Numerical stability epsilon
+    },
+    "cutoff_smoothing": {
+        "smoothing_window": 3,      // Window size for smoothing
+        "smoothing_offset": -0.003  // Offset for cutoff boundary
+    }
+}
+```
+
+| Parameter | Sensitivity | Role | Recommended Range |
+|-----------|-------------|------|-------------------|
+| `radius_min` | HIGH | Filters inner noise | ~(diameter/2 - 0.05) |
+| `radius_max` | HIGH | Filters outer noise | ~(diameter/2 + 0.05) |
+| `gradient_threshold` | MEDIUM | Lower = more aggressive | 0.1-0.4 |
+| `theta_step` | LOW | Angular resolution | 0.3-1.0 |
+| `smoothing_window` | LOW | Boundary smoothing | 2-5 |
+
+**BO Finding:** `gradient_threshold=0.1` (aggressive) performed best. Radius bounds are tunnel-specific.
+
+**Critical Constraint:** `radius_min < radius_max` must ALWAYS hold. BO search space should enforce this.
+
+---
+
+### Stage 3: Enhancing Parameters (`parameters_enhancing.json`)
+
+```json
+{
+    "physical_constants": {
+        "ring_spacing": 1.2         // Must match unfolding
+    },
+    "curvature": {
+        "curvature_neighbors": 20   // Neighbors for curvature calculation
+    },
+    "upsampling": {
+        "target_distances": [0.08, 0.04, 0.02],  // Multi-scale upsampling
+        "curvature_threshold": 0.0005,           // Curvature-based filtering
+        "upsampling_neighbors": 20,              // KNN for upsampling
+        "distance_tolerance_low": 0.9,           // Lower distance tolerance
+        "distance_tolerance_high": 2.0,          // Upper distance tolerance
+        "radius_filter_factor": 0.15,            // Radius-based filtering
+        "min_new_point_distance_factor": 0.2     // Minimum spacing for new points
+    },
+    "outlier_detection": {
+        "depth_threshold_low": 0.003,   // Lower depth threshold
+        "depth_threshold_high": 0.008,  // Upper depth threshold
+        "high_density_ring_start": 0,   // Ring range for high density
+        "high_density_ring_end": 5,
+        "outlier_neighbors": 20         // Neighbors for outlier detection
+    },
+    "outlier_interpolation": {
+        "interpolation_radius": 0.06,   // Radius for interpolation
+        "num_interpolations": 2,        // Number of interpolation passes
+        "duplicate_threshold": 0.02,    // Threshold for duplicate removal
+        "max_outlier_points": 5000      // Max points to interpolate
+    },
+    "depth_map": {
+        "resolution": 0.005,            // Depth map resolution (m/pixel)
+        "interpolation_window": 5       // Window for depth map interpolation
+    }
+}
+```
+
+| Parameter | Sensitivity | Role | Recommended Range |
+|-----------|-------------|------|-------------------|
+| `curvature_neighbors` | MEDIUM | Surface smoothness | 15-30 |
+| `target_distances` | LOW | Multi-scale upsampling | [0.08, 0.04, 0.02] |
+| `depth_map.resolution` | HIGH | Affects all downstream stages | 0.003-0.008 |
+| `outlier_detection.depth_threshold_*` | MEDIUM | Outlier sensitivity | 0.002-0.010 |
+
+**BO Finding:** Combined with denoising, preprocessing yielded only +0.1% improvement.
+
+---
+
+### Stage 4-1: Detection Parameters (`parameters_detection.json`)
+
+```json
+{
+    "preprocessing": {
+        "binary_threshold": 149,        // Threshold for binary edge detection
+        "dilation_kernel_size": 2,      // Kernel size for morphological dilation
+        "dilation_iterations": 1        // Number of dilation iterations
+    },
+    "hough_oblique": {
+        "threshold": 69,                // Hough accumulator threshold
+        "min_length": 99,               // Minimum line length
+        "max_gap": 60,                  // Maximum gap between line segments
+        "angle_positive_min": 5.509,    // Min angle for positive slope lines
+        "angle_positive_max": 8.652,    // Max angle for positive slope lines
+        "angle_negative_min": -8.652,   // Min angle for negative slope lines
+        "angle_negative_max": -5.509    // Max angle for negative slope lines
+    },
+    "hough_horizontal": {
+        "threshold": 66,                // Threshold for horizontal lines
+        "min_length": 122,              // Min length for horizontal lines
+        "max_gap": 14,                  // Max gap for horizontal lines
+        "angle_tolerance": 1            // Angle tolerance from horizontal
+    },
+    "hough_vertical": {
+        "threshold": 700                // Threshold for vertical lines (ring boundaries)
+    },
+    "line_processing": {
+        "merge_distance_threshold": 2,  // Distance to merge similar lines
+        "merge_close_threshold": 6      // Distance to merge close intersection points
+    },
+    "physical_constants": {
+        "resolution": 0.005,            // Must match depth map resolution
+        "k_height_mm": 1079.92,         // K-block height in mm
+        "ab_height_mm": 3239.77         // A/B-block total height in mm
+    }
+}
+```
+
+| Parameter | Sensitivity | Role | Recommended Range | Impact |
+|-----------|-------------|------|-------------------|--------|
+| `binary_threshold` | **HIGH** | Edge detection sensitivity | 120-180 | +2-3% mIoU |
+| `hough_oblique.threshold` | **HIGH** | Line detection confidence | 40-100 | +1-2% mIoU |
+| `angle_positive_min/max` | **HIGH** | K-line angle detection | 5-10° | +2-3% mIoU |
+| `hough_oblique.min_length` | MEDIUM | Filters short noise lines | 80-150 | <1% mIoU |
+| `hough_oblique.max_gap` | MEDIUM | Connects broken lines | 20-80 | <1% mIoU |
+| `hough_vertical.threshold` | MEDIUM | Ring boundary detection | 500-800 | <1% mIoU |
+| `merge_close_threshold` | LOW | Intersection point merging | 3-10 | <0.5% mIoU |
+
+**BO Finding:** Detection optimization provided **+6.3% mIoU** - the LARGEST single-stage improvement!
+
+**Key Insight:** `binary_threshold` and `angle_*` parameters are the most sensitive. Angle ranges should match the tunnel's actual oblique line angles (typically 5-10° for standard tunnels).
+
+---
+
+### Stage 4-2: SAM Segmentation Parameters (`parameters_sam.json`)
+
+```json
+{
+    "segment_geometry": {
+        "segment_width": 1157.47,       // Width of each segment in mm
+        "k_height": 1071.09,            // K-block height in mm
+        "ab_height": 3289.52,           // A/B-block total height in mm
+        "angle_deg": 6.978              // Oblique angle in degrees
+    },
+    "image": {
+        "resolution": 0.005             // Must match detection resolution
+    },
+    "processing": {
+        "padding": 111,                 // Padding around crops
+        "crop_margin": 57,              // Margin for cropping
+        "mask_eps": 0.001,              // Mask boundary epsilon
+        "y_bounds": [4200, 13100]       // Valid Y range in pixels
+    },
+    "prompt_points": {
+        "k_block": {
+            "outer_ring": 657.08,       // Outer prompt ring radius
+            "middle_ring": 514.1,       // Middle prompt ring radius
+            "inner_ring": 327.0,        // Inner prompt ring radius
+            "center_ring": 370.0,       // Center point radius
+            "spacing_factors": {
+                "k_block_spacing": 310.91,
+                "vertical_spacing": [732.35, 505.96, 310.91, 219.01, 373.96]
+            }
+        },
+        "ab_blocks": {
+            "outer_ring": 674.53,
+            "middle_ring": 519.91,
+            "inner_ring": 479.23,
+            "center_ring": 310.77,
+            "fine_spacing": 219.56,
+            "ultra_fine": 146.48,
+            "edge_ring": 340.19,
+            "edge_spacing": 312.25,
+            "vertical_levels": {
+                "level_1": 1779.9, "level_2": 1670.0, "level_3": 1399.92,
+                "level_4": 1193.6, "level_5": 812.61, "level_6": 584.85,
+                "level_7": 300.0, "center": 0
+            }
+        },
+        "template_mask": {
+            "k_block": {
+                "width": 700.0,         // K-block template half-width
+                "height_pos": 656.47,   // Height above anchor
+                "height_neg": 540.0     // Height below anchor
+            },
+            "b1_block": {
+                "width": 610.0,
+                "height_top": 1581.36,
+                "height_bottom_pos": 1540.69,
+                "height_bottom_neg": 1699.08
+            },
+            "b2_block": {
+                "width": 610.0,
+                "height_top_pos": 1540.69,
+                "height_top_neg": 1699.08,
+                "height_bottom": 1581.36
+            },
+            "a_blocks": {
+                "width": 610.0,
+                "height": 1581.36
+            }
+        }
+    },
+    "pattern_aware": {
+        "use_quality_weighting": true,
+        "min_quality_threshold": 0.267  // Quality threshold for prompts
+    }
+}
+```
+
+| Parameter Category | Key Parameters | Sensitivity | Role |
+|-------------------|----------------|-------------|------|
+| **segment_geometry** | `k_height`, `ab_height`, `angle_deg` | **VERY HIGH** | Positions ALL segments - DO NOT tune casually! |
+| **template_mask** | `k_block.width`, `height_pos`, `height_neg` | HIGH | Controls K-block mask size |
+| **template_mask** | `b1/b2/a_blocks.width` | MEDIUM | Controls other block mask sizes |
+| **prompt_points** | `outer_ring`, `middle_ring`, `inner_ring` | MEDIUM | Prompt point placement |
+| **prompt_points** | `vertical_levels.*` | HIGH | Vertical prompt positions for A/B blocks |
+| **processing** | `padding`, `crop_margin` | LOW | Image processing parameters |
+| **pattern_aware** | `min_quality_threshold` | MEDIUM | Filters low-quality prompts |
+
+**Critical Warning:** `segment_geometry` parameters affect WHERE segments are expected. Changing them shifts ALL segments and can cause catastrophic failures (0.765 → 0.673 mIoU). Only `template_mask` parameters are safe to tune iteratively.
+
+---
+
+### Parameter Sensitivity Summary
+
+| Stage | Most Sensitive Parameters | BO Impact | Tuning Priority |
+|-------|---------------------------|-----------|-----------------|
+| **Detection** | `binary_threshold`, `angle_*_min/max` | +6.3% | **1st (Highest)** |
+| **SAM** | `template_mask.*`, `vertical_levels.*` | +7.4% | **2nd** |
+| **Denoising** | `radius_min/max`, `gradient_threshold` | +0.1% | 3rd |
+| **Enhancing** | `depth_threshold_*`, `curvature_neighbors` | (combined) | 4th |
+| **Unfolding** | `samples_per_ring`, `ransac_ellipse.*` | +0.0% | 5th (Lowest) |
+
+---
+
+### Parameter Interdependencies
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PARAMETER FLOW                           │
+├─────────────────────────────────────────────────────────────┤
+│  Unfolding                                                  │
+│    └── samples_per_ring ──► Image width (affects all)      │
+│    └── ring_spacing ──────► Must match Denoising/Enhancing │
+│                                                             │
+│  Denoising                                                  │
+│    └── radius_min/max ────► tunnel_diameter / 2 ± margin   │
+│                                                             │
+│  Enhancing                                                  │
+│    └── depth_map.resolution ──► Must match Detection       │
+│                                                             │
+│  Detection                                                  │
+│    └── resolution ────────► Must match Enhancing           │
+│    └── k_height_mm ───────► Should match SAM k_height      │
+│    └── angle_*_min/max ───► Should match SAM angle_deg     │
+│                                                             │
+│  SAM                                                        │
+│    └── segment_geometry.* ──► NEVER tune without care      │
+│    └── template_mask.* ─────► Safe to tune iteratively     │
+│    └── resolution ──────────► Must match Detection         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Part 2: The Thought Process Experience
 
 ### Phase 1: K-block Refinement Exploration (Failed Experiment)

@@ -815,3 +815,375 @@ PHASE 4: OPTIMIZE PARAMETERS
 
 RESULT: 52% OA improvement through systematic analysis
 ```
+
+---
+
+## Part 4: Complete Parameter Reference by Stage
+
+This section provides a comprehensive list of all tunable parameters discovered during exploration, organized by pipeline stage.
+
+---
+
+### Stage 1: Unfolding Parameters
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `theta_offset` | float | 0.0 | [0, 2π] | HIGH | Starting angle for unwrapping; affects wraparound |
+| `theta_coverage` | float | 1.0 | [0.99, 1.01] | CRITICAL | Target coverage ratio; must be ~100% |
+| `resolution` | float | 0.005 | [0.003, 0.01] | MEDIUM | Meters per pixel; affects detail level |
+| `axis_fit_method` | enum | 'svd' | ['svd', 'ransac'] | LOW | Method for fitting tunnel centerline |
+| `min_radius` | float | 3.5 | [3.0, 4.0] | MEDIUM | Min radius for surface points (m) |
+
+**Critical Insight:** `theta_coverage` must be exactly ~100% to avoid wraparound issues.
+
+```yaml
+# Recommended values for Tunnel 4-1
+unfolding:
+  theta_coverage: 1.0        # Exactly 100%
+  resolution: 0.005          # 5mm per pixel
+  min_radius: 3.5            # Filter interior points
+```
+
+---
+
+### Stage 2: Denoising Parameters
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `outlier_threshold` | float | 0.1 | [0.05, 0.2] | MEDIUM | Distance threshold for outlier detection |
+| `neighbor_count` | int | 20 | [10, 50] | LOW | Number of neighbors for local analysis |
+| `std_multiplier` | float | 2.0 | [1.5, 3.0] | MEDIUM | Standard deviations for outlier cutoff |
+| `preserve_edges` | bool | True | - | HIGH | Whether to preserve segment boundaries |
+
+```yaml
+# Recommended values
+denoising:
+  outlier_threshold: 0.1
+  neighbor_count: 20
+  std_multiplier: 2.0
+  preserve_edges: true
+```
+
+---
+
+### Stage 3: Enhancing Parameters
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `contrast_factor` | float | 1.0 | [0.8, 1.5] | LOW | Intensity contrast enhancement |
+| `smoothing_sigma` | float | 1.0 | [0.5, 2.0] | LOW | Gaussian smoothing sigma |
+| `edge_enhancement` | float | 0.0 | [0.0, 1.0] | MEDIUM | Edge sharpening strength |
+
+```yaml
+# Recommended values
+enhancing:
+  contrast_factor: 1.0
+  smoothing_sigma: 1.0
+  edge_enhancement: 0.0    # Minimal enhancement needed
+```
+
+---
+
+### Stage 4-1: Detection Parameters
+
+#### 4-1a: Preprocessing Sub-stage
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `binary_threshold` | int | 120 | [50, 200] | HIGH | Threshold for binary conversion |
+| `kernel_size` | int | 5 | [3, 9] | MEDIUM | Morphological kernel size (odd) |
+| `dilation_iterations` | int | 2 | [1, 5] | MEDIUM | Number of dilation passes |
+
+#### 4-1b: Hough Transform Sub-stage
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `hough_threshold` | int | 40 | [20, 100] | HIGH | Vote threshold for line detection |
+| `min_line_length_ratio` | float | 0.1 | [0.05, 0.3] | MEDIUM | Min line length as ratio of width |
+| `max_line_gap` | int | 60 | [20, 100] | LOW | Max gap between line segments |
+| `angle_min` | float | 5.0 | [3, 8] | HIGH | Min angle for oblique lines (degrees) |
+| `angle_max` | float | 10.0 | [8, 15] | HIGH | Max angle for oblique lines (degrees) |
+
+#### 4-1c: Gradient Analysis Sub-stage
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `sigma_smooth` | float | 10.0 | [5, 20] | MEDIUM | Gaussian smoothing for intensity profile |
+| `sigma_gradient` | float | 5.0 | [3, 10] | MEDIUM | Smoothing for gradient computation |
+| `peak_distance` | int | 50 | [30, 100] | HIGH | Min distance between detected peaks |
+| `peak_prominence` | float | 1.0 | [0.5, 3.0] | MEDIUM | Min prominence for peak detection |
+| `k_max_width_px` | int | 280 | [200, 350] | HIGH | Max width for K-block candidates (pixels) |
+| `margin_ratio` | float | 0.08 | [0.05, 0.15] | LOW | Image margin to exclude from search |
+
+#### 4-1d: Detection Fusion Sub-stage
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `hough_gradient_agree_threshold` | int | 300 | [150, 500] | HIGH | Max distance for methods to "agree" |
+| `hough_single_threshold` | int | 350 | [200, 500] | MEDIUM | Threshold for single-slope Hough |
+
+```yaml
+# Complete detection configuration
+detection:
+  preprocessing:
+    binary_threshold: 120
+    kernel_size: 5
+    dilation_iterations: 2
+  
+  hough:
+    threshold: 40
+    min_line_length_ratio: 0.1
+    max_line_gap: 60
+    angle_min: 5.0
+    angle_max: 10.0
+  
+  gradient:
+    sigma_smooth: 10.0
+    sigma_gradient: 5.0
+    peak_distance: 50
+    peak_prominence: 1.0
+    k_max_width_px: 280
+    margin_ratio: 0.08
+  
+  fusion:
+    hough_gradient_agree_threshold: 300
+    hough_single_threshold: 350
+```
+
+---
+
+### Stage 4-2: SAM Segmentation Parameters
+
+#### 4-2a: Physical Dimensions
+
+| Parameter | Type | Default | Optimal | Range | Sensitivity | Description |
+|-----------|------|---------|---------|-------|-------------|-------------|
+| `K_height` | float | 1079.92 | **1200.0** | [1100, 1500] | MEDIUM | K-block height in mm |
+| `AB_height` | float | 3239.77 | **3600.0** | [3400, 3800] | **VERY HIGH** | A/B block height in mm |
+| `segment_width` | float | 1200.0 | **1400.0** | [1000, 1800] | MEDIUM | Segment width in mm |
+| `angle_deg` | float | 7.52 | 7.52 | [5, 10] | MEDIUM | Segment angle in degrees |
+
+#### 4-2b: Template Polygon Dimensions (K-block)
+
+| Parameter | Type | Default | Optimal | Range | Sensitivity | Description |
+|-----------|------|---------|---------|-------|-------------|-------------|
+| `K.half_width` | float | 625.0 | **700.0** | [550, 850] | HIGH | K-block template half-width (mm) |
+| `K.half_height_left` | float | 619.16 | **680.0** | [550, 750] | HIGH | K-block left side half-height (mm) |
+| `K.half_height_right` | float | 460.77 | **520.0** | [350, 600] | HIGH | K-block right side half-height (mm) |
+
+#### 4-2c: Template Polygon Dimensions (A/B-blocks)
+
+| Parameter | Type | Default | Optimal | Range | Sensitivity | Description |
+|-----------|------|---------|---------|-------|-------------|-------------|
+| `AB.half_width` | float | 625.0 | **700.0** | [550, 850] | HIGH | A/B-block template half-width (mm) |
+| `AB.half_height` | float | 1619.89 | **1800.0** | [1700, 1900] | **VERY HIGH** | A/B-block template half-height (mm) |
+| `B1_slant_factor` | float | 1.0 | 0.95 | [0.9, 1.0] | LOW | B1 slant adjustment |
+| `B2_slant_factor` | float | 1.0 | 1.05 | [1.0, 1.1] | LOW | B2 slant adjustment |
+
+#### 4-2d: Prompt Point Generation
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `coverage_ratio` | float | 0.95 | [0.85, 0.99] | MEDIUM | How far inside template to place points |
+| `boundary_points_ratio` | float | 0.7 | [0.5, 0.9] | LOW | Ratio of points on boundary vs interior |
+
+#### 4-2e: Cropping Parameters
+
+| Parameter | Type | Default | Range | Sensitivity | Description |
+|-----------|------|---------|-------|-------------|-------------|
+| `extra_margin` | int | 150 | [50, 300] | LOW | Extra pixels around crop region |
+| `delta_y_extra` | int | 50 | [0, 100] | LOW | Extra vertical margin |
+
+```yaml
+# Complete SAM configuration (optimal for 4-1)
+segmentation:
+  dimensions:
+    K_height: 1200.0           # OPTIMIZED from 1079.92
+    AB_height: 3600.0          # OPTIMIZED from 3239.77
+    segment_width: 1400.0      # OPTIMIZED from 1200.0
+    angle_deg: 7.52
+  
+  templates:
+    K:
+      half_width: 700.0        # OPTIMIZED from 625.0
+      half_height_left: 680.0  # OPTIMIZED from 619.16
+      half_height_right: 520.0 # OPTIMIZED from 460.77
+    AB:
+      half_width: 700.0        # OPTIMIZED from 625.0
+      half_height: 1800.0      # OPTIMIZED from 1619.89 (CRITICAL)
+    B1_slant_factor: 0.95
+    B2_slant_factor: 1.05
+  
+  prompt_points:
+    coverage_ratio: 0.95
+  
+  cropping:
+    extra_margin: 150
+    delta_y_extra: 50
+```
+
+---
+
+### Parameter Sensitivity Summary
+
+```
+PARAMETER IMPORTANCE HIERARCHY FOR BAYESIAN OPTIMIZATION
+═══════════════════════════════════════════════════════════════════════════════
+
+CRITICAL (Sensitivity > 0.07, narrow optimal range):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ segmentation.templates.AB.half_height    │ 0.083 │ [1700, 1900] │ OPTIMIZE │
+│ segmentation.dimensions.AB_height        │ 0.079 │ [3400, 3800] │ OPTIMIZE │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+HIGH (Sensitivity 0.03-0.07):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ detection.fusion.hough_gradient_agree    │ ~0.05 │ [200, 400]   │ OPTIMIZE │
+│ detection.hough.angle_min/max            │ ~0.04 │ [3-8]/[8-15] │ OPTIMIZE │
+│ segmentation.templates.K.half_width      │ ~0.04 │ [550, 850]   │ OPTIMIZE │
+│ segmentation.templates.AB.half_width     │ ~0.04 │ [550, 850]   │ OPTIMIZE │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+MEDIUM (Sensitivity 0.01-0.03):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ segmentation.dimensions.K_height         │ 0.017 │ [1100, 1500] │ TUNE     │
+│ detection.preprocessing.binary_threshold │ ~0.02 │ [80, 160]    │ TUNE     │
+│ detection.gradient.k_max_width_px        │ ~0.02 │ [220, 340]   │ TUNE     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+LOW (Sensitivity < 0.01, use defaults):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ detection.hough.max_line_gap             │ <0.01 │ [40, 80]     │ DEFAULT  │
+│ detection.gradient.margin_ratio          │ <0.01 │ [0.05, 0.15] │ DEFAULT  │
+│ segmentation.templates.B1/B2_slant       │ <0.01 │ [0.9, 1.1]   │ DEFAULT  │
+│ segmentation.cropping.extra_margin       │ <0.01 │ [50, 300]    │ DEFAULT  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Parameter Optimization Strategy
+
+**For Bayesian Optimization:**
+```python
+# Define search space focusing on high-sensitivity parameters
+search_space = {
+    # CRITICAL - Always include
+    'AB_half_height': Real(1700, 1900, prior='uniform'),
+    'AB_height': Real(3400, 3800, prior='uniform'),
+    
+    # HIGH - Include for fine-tuning
+    'K_half_width': Real(550, 850, prior='uniform'),
+    'AB_half_width': Real(550, 850, prior='uniform'),
+    'hough_gradient_agree': Integer(200, 400),
+    
+    # MEDIUM - Optional
+    'K_height': Real(1100, 1500, prior='uniform'),
+}
+
+# Expected improvement from optimization: 5-10% additional OA gain
+```
+
+**For Reinforcement Learning:**
+```python
+# State: Current metrics + parameter values
+# Action: Parameter adjustments (continuous)
+# Reward: Δ(OA) + 0.3*Δ(F1) + 0.3*Δ(mIoU)
+
+# Weight actions by sensitivity:
+action_weights = {
+    'AB_half_height': 5.0,   # High weight = larger adjustments allowed
+    'AB_height': 5.0,
+    'K_height': 2.0,         # Medium weight
+    'margin_ratio': 0.5,     # Low weight = small adjustments only
+}
+```
+
+---
+
+### Cross-Stage Parameter Dependencies
+
+```
+DEPENDENCY GRAPH
+═══════════════════════════════════════════════════════════════════════════════
+
+[Unfolding]
+    │
+    ├── theta_coverage ──────────► [Detection] k_max_width_px
+    │   (affects image height)     (must scale with coverage)
+    │
+    └── resolution ──────────────► [SAM] All mm dimensions
+        (affects pixel↔mm conversion)   (must use same resolution)
+
+[Denoising]
+    │
+    └── outlier_threshold ───────► [Detection] binary_threshold
+        (affects depth map density)    (may need adjustment)
+
+[Detection]
+    │
+    ├── hough.angle_min/max ─────► [SAM] angle_deg
+    │   (detected segment angle)       (template angle)
+    │
+    └── fusion.agree_threshold ──► [SAM] template sizes
+        (detection confidence)         (larger templates if uncertain)
+
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+### Quick Reference: Optimal Configuration for Tunnel 4-1
+
+```yaml
+# /sam4tun/config/tunnel_4-1_optimized.yaml
+# Final optimized parameters achieving OA=0.344
+
+tunnel_id: "4-1"
+segments_per_ring: 7
+resolution: 0.005
+
+detection:
+  preprocessing:
+    binary_threshold: 120
+    kernel_size: 5
+    dilation_iterations: 2
+  hough:
+    threshold: 40
+    min_line_length_ratio: 0.1
+    max_line_gap: 60
+    angle_min: 5.0
+    angle_max: 10.0
+  gradient:
+    sigma_smooth: 10.0
+    sigma_gradient: 5.0
+    peak_distance: 50
+    peak_prominence: 1.0
+    k_max_width_px: 280
+    margin_ratio: 0.08
+  fusion:
+    hough_gradient_agree_threshold: 300
+    hough_single_threshold: 350
+
+segmentation:
+  dimensions:
+    K_height: 1200.0       # ← OPTIMIZED (was 1079.92)
+    AB_height: 3600.0      # ← OPTIMIZED (was 3239.77)
+    segment_width: 1400.0  # ← OPTIMIZED (was 1200.0)
+    angle_deg: 7.52
+  templates:
+    K:
+      half_width: 700.0        # ← OPTIMIZED (was 625.0)
+      half_height_left: 680.0  # ← OPTIMIZED (was 619.16)
+      half_height_right: 520.0 # ← OPTIMIZED (was 460.77)
+    AB:
+      half_width: 700.0        # ← OPTIMIZED (was 625.0)
+      half_height: 1800.0      # ← OPTIMIZED (was 1619.89)
+    B1_slant_factor: 0.95
+    B2_slant_factor: 1.05
+  prompt_points:
+    coverage_ratio: 0.95
+  cropping:
+    extra_margin: 150
+    delta_y_extra: 50
+```

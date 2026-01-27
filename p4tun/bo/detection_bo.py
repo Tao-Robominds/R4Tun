@@ -51,7 +51,8 @@ DETECTION_SEARCH_SPACE = {
     'hough_horizontal_max_gap': Integer(5, 25, name='hough_horizontal_max_gap'),
     
     # Hough vertical line detection - lower threshold to detect more vertical lines
-    'hough_vertical_threshold': Integer(200, 600, name='hough_vertical_threshold'),
+    # Lowered range to help detect vertical lines in problematic columns 3 and 5
+    'hough_vertical_threshold': Integer(150, 500, name='hough_vertical_threshold'),
     
     # Line processing
     'merge_distance_threshold': Integer(2, 8, name='merge_distance_threshold'),
@@ -494,9 +495,26 @@ class DetectionObjective:
         # Add count penalty
         total_error_with_penalty = avg_error + count_penalty
         
+        # Extra penalty for missing problematic columns (tunnel-specific)
+        # Only apply for tunnel 1-4 which has known problematic columns
+        problem_penalty = 0.0
+        if self.tunnel_id == '1-4':
+            problem_x_positions = [584.38, 1065.10]  # From GT analysis for 1-4
+            for prob_x in problem_x_positions:
+                # Check if any detected position is close to this X
+                if len(detected_sorted) > 0:
+                    closest_x_dist = abs(detected_sorted['X'] - prob_x).min()
+                    if closest_x_dist > 100:  # More than 100px away
+                        problem_penalty += 200  # Heavy penalty for missing these columns
+                    elif closest_x_dist > 50:  # Between 50-100px away
+                        problem_penalty += 50   # Moderate penalty
+        
+        total_error_with_penalty += problem_penalty
+        
         # Convert to score (higher is better)
-        # Max error we'd consider reasonable is ~500 pixels
-        max_error = 500
+        # Max error we'd consider reasonable - increased for tunnels with larger errors
+        # Tunnel 4-1 has complex Y patterns, so allow larger errors
+        max_error = 1000 if self.tunnel_id == '4-1' else 500
         score = max(0, 1 - total_error_with_penalty / max_error)
         
         return score
@@ -554,6 +572,12 @@ def run_detection_bo(
     
     # Run optimization
     print(f"\nStarting optimization...")
+    # For tunnels with complex patterns (like 4-1), disable early stopping
+    # or use a more lenient threshold since initial scores may be 0
+    callbacks = []
+    if tunnel_id != '4-1':  # Only use early stopping for simpler tunnels
+        callbacks = [DeltaYStopper(delta=0.001, n_best=15)]
+    
     result = minimize_func(
         objective,
         objective.dimensions,
@@ -561,7 +585,7 @@ def run_detection_bo(
         n_initial_points=n_initial,
         random_state=42,
         verbose=False,
-        callback=[DeltaYStopper(delta=0.001, n_best=15)],
+        callback=callbacks,
     )
     
     # Results

@@ -1,19 +1,26 @@
 {
     "description": "SAM-based tunnel segment segmentation parameters for Tunnel 1-4 (6-segment)",
     "segment_per_ring": 6,
-    "segment_order": ["K", "B1", "A1", "A2", "A3", "B2"],
+    "segment_order": [
+        "K",
+        "B1",
+        "A1",
+        "A2",
+        "A3",
+        "B2"
+    ],
     "segment_geometry": {
-        "segment_width": 1200.0,
-        "k_height": 1079.92,
-        "ab_height": 3239.77,
-        "angle_deg": 7.52
+        "segment_width": 1150.0,
+        "k_height": 1150.0,
+        "ab_height": 3104.7674598264352,
+        "angle_deg": 6.5
     },
     "image": {
         "resolution": 0.005
     },
     "processing": {
-        "padding": 150,
-        "crop_margin": 50,
+        "padding": 100,
+        "crop_margin": 40,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -22,9 +29,9 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 700,
-            "middle_ring": 500,
-            "inner_ring": 348.16,
+            "outer_ring": 650.0,
+            "middle_ring": 477.00013140230607,
+            "inner_ring": 300.0,
             "center_ring": 325,
             "spacing_factors": {
                 "k_block_spacing": 310.91,
@@ -38,8 +45,8 @@
             }
         },
         "ab_blocks": {
-            "outer_ring": 700,
-            "middle_ring": 511.06,
+            "outer_ring": 711.582367473473,
+            "middle_ring": 489.12167402511704,
             "inner_ring": 500,
             "center_ring": 325,
             "fine_spacing": 250,
@@ -59,30 +66,30 @@
         },
         "template_mask": {
             "k_block": {
-                "width": 625,
-                "height_pos": 619.16,
-                "height_neg": 460.77
+                "width": 638.9990926073481,
+                "height_pos": 580.0,
+                "height_neg": 580.0
             },
             "b1_block": {
-                "width": 625,
-                "height_top": 1619.89,
+                "width": 680.0,
+                "height_top": 1577.2888883052988,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 625,
+                "width": 680.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1619.89
+                "height_bottom": 1577.2888883052988
             },
             "a_blocks": {
-                "width": 625,
-                "height": 1619.89
+                "width": 680.0,
+                "height": 1577.2888883052988
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.3
+        "min_quality_threshold": 0.49649078134506297
     }
 }
