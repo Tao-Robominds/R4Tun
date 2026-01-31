@@ -76,17 +76,22 @@ def generate_all_segments_from_gt(
     n_rings: int | None = None,
     out_name: str = "all_segments_gt.csv",
 ) -> pd.DataFrame:
-    """Generate all_segments.csv from ground truth segment labels."""
+    """Generate all_segments.csv from ground truth segment labels.
+    
+    Uses actual ring column from point cloud if available, otherwise
+    partitions by h coordinate.
+    """
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     final_path = os.path.join(tunnel_dir, "final.csv")
 
-    if n_rings is None:
-        n_rings = _read_ring_count(tunnel_dir)
-        if n_rings is None:
-            raise ValueError(f"Could not determine ring count for {tunnel_id}")
-
-    # Load data
-    df = pd.read_csv(final_path, usecols=["h", "theta", "segment"])
+    # Try to load with ring column first
+    try:
+        df = pd.read_csv(final_path, usecols=["h", "theta", "segment", "ring"])
+        has_ring_col = "ring" in df.columns and df["ring"].notna().any()
+    except:
+        df = pd.read_csv(final_path, usecols=["h", "theta", "segment"])
+        has_ring_col = False
+    
     df = df.dropna(subset=["segment"])
     
     # Filter to valid segments (1-7)
@@ -97,43 +102,72 @@ def generate_all_segments_from_gt(
 
     h_min, h_max, theta_min, theta_max, H, W = load_bounds_and_shape(tunnel_dir)
 
-    # Partition points by h (ring along tunnel)
-    h_vals = df["h"].values
-    order = np.argsort(h_vals)
-    n = len(order)
-    edges = np.linspace(0, n, n_rings + 1, dtype=int)
-
     rows = []
-    for ring_id in range(n_rings):
-        lo, hi = edges[ring_id], edges[ring_id + 1]
-        idx = order[lo:hi]
-        if len(idx) == 0:
-            continue
+    
+    if has_ring_col:
+        # Use actual ring labels from point cloud
+        df = df.dropna(subset=["ring"])
+        actual_rings = sorted(df["ring"].unique())
+        print(f"Using actual ring labels: {[int(r) for r in actual_rings]}")
         
-        ring_data = df.iloc[idx]
-        
-        # For each segment type, compute centroid
-        for segment_label, block_name in SEGMENT_TO_BLOCK.items():
-            segment_points = ring_data[ring_data["segment"] == segment_label]
+        for ring_idx, actual_ring in enumerate(actual_rings):
+            ring_data = df[df["ring"] == actual_ring]
             
-            if len(segment_points) == 0:
-                # Skip if no points for this segment in this ring
+            # For each segment type, compute centroid
+            for segment_label, block_name in SEGMENT_TO_BLOCK.items():
+                segment_points = ring_data[ring_data["segment"] == segment_label]
+                
+                if len(segment_points) == 0:
+                    continue
+                
+                h_mean = float(segment_points["h"].mean())
+                theta_mean = float(segment_points["theta"].mean())
+                x, y = to_pixel(h_mean, theta_mean, h_min, h_max, theta_min, theta_max, W, H)
+                
+                rows.append({
+                    "Ring": ring_idx,
+                    "Block": block_name,
+                    "X": x,
+                    "Y": y,
+                    "quality": 1.0
+                })
+    else:
+        # Fallback: partition by h coordinate
+        if n_rings is None:
+            n_rings = _read_ring_count(tunnel_dir)
+            if n_rings is None:
+                raise ValueError(f"Could not determine ring count for {tunnel_id}")
+        
+        h_vals = df["h"].values
+        order = np.argsort(h_vals)
+        n = len(order)
+        edges = np.linspace(0, n, n_rings + 1, dtype=int)
+
+        for ring_id in range(n_rings):
+            lo, hi = edges[ring_id], edges[ring_id + 1]
+            idx = order[lo:hi]
+            if len(idx) == 0:
                 continue
             
-            # Compute centroid
-            h_mean = float(segment_points["h"].mean())
-            theta_mean = float(segment_points["theta"].mean())
+            ring_data = df.iloc[idx]
             
-            # Map to pixel coordinates
-            x, y = to_pixel(h_mean, theta_mean, h_min, h_max, theta_min, theta_max, W, H)
-            
-            rows.append({
-                "Ring": ring_id,
-                "Block": block_name,
-                "X": x,
-                "Y": y,
-                "quality": 1.0  # Ground truth, so quality is perfect
-            })
+            for segment_label, block_name in SEGMENT_TO_BLOCK.items():
+                segment_points = ring_data[ring_data["segment"] == segment_label]
+                
+                if len(segment_points) == 0:
+                    continue
+                
+                h_mean = float(segment_points["h"].mean())
+                theta_mean = float(segment_points["theta"].mean())
+                x, y = to_pixel(h_mean, theta_mean, h_min, h_max, theta_min, theta_max, W, H)
+                
+                rows.append({
+                    "Ring": ring_id,
+                    "Block": block_name,
+                    "X": x,
+                    "Y": y,
+                    "quality": 1.0
+                })
 
     out = pd.DataFrame(rows)
     # Sort by Ring, then by Block order
