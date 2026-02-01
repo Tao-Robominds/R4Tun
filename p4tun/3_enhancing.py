@@ -773,22 +773,26 @@ def save_depth_map_image(
 # Main Pipeline
 # =============================================================================
 
-def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
+def enhance_from_df(
+    df: pd.DataFrame,
+    tunnel_dir: str,
+    params: Dict[str, Any],
+    allow_defaults: bool = True
+) -> pd.DataFrame:
     """
-    Execute the complete enhancement pipeline.
+    Run enhancement pipeline on in-memory denoised DataFrame.
     
     Args:
-        tunnel_id: Tunnel identifier.
-        base_dir: Base data directory.
+        df: Denoised DataFrame with columns h, theta, r, pred, and optionally intensity.
+        tunnel_dir: Directory for saving outputs (depth_map.png, enhanced.csv, etc.).
+        params: Enhancing parameters dict (e.g. from parameters_preprocessing["enhancing"]).
+        allow_defaults: Whether to use defaults for missing params.
+    
+    Returns:
+        Enhanced DataFrame (same as enhanced.csv).
     """
-    print(f"Processing tunnel: {tunnel_id}")
-    tunnel_dir = os.path.join(base_dir, tunnel_id)
+    df_valid = df[df['pred'] != 0].copy()
     
-    # Load parameters
-    params, params_loaded = load_parameters(tunnel_id, base_dir)
-    
-    # Extract parameters - use defaults ONLY if no file was loaded
-    allow_defaults = not params_loaded
     ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING, allow_default=allow_defaults)
     curvature_neighbors = get_param(params, 'curvature', 'curvature_neighbors', default=DEFAULT_CURVATURE_NEIGHBORS, allow_default=allow_defaults)
     target_distances = get_param(params, 'upsampling', 'target_distances', default=DEFAULT_UPSAMPLING_TARGET_DISTANCES, allow_default=allow_defaults)
@@ -810,16 +814,8 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     depth_map_resolution = get_param(params, 'depth_map', 'resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
     interpolation_window = get_param(params, 'depth_map', 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=allow_defaults)
     
-    # Load denoised data
-    df = pd.read_csv(os.path.join(tunnel_dir, "denoised.csv"))
-    df_valid = df[df['pred'] != 0].copy()
-    
-    # Step 1: Compute curvature
-    print("\n=== Step 1: Computing curvature ===")
     df_with_curvature = add_curvature_column(df_valid, k=curvature_neighbors)
     
-    # Step 2: Progressive upsampling
-    print("\n=== Step 2: Surface upsampling ===")
     df_upsampled = progressive_upsample(
         df_with_curvature,
         target_distances=target_distances,
@@ -831,8 +827,6 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
         distance_tolerance_high=distance_tolerance_high
     )
     
-    # Step 3: Outlier detection and enhancement
-    print("\n=== Step 3: Boundary enhancement ===")
     outlier_df, boundary_points = enhance_outlier_boundaries(
         df_with_curvature,
         depth_threshold_low=depth_threshold_low,
@@ -848,11 +842,7 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     )
     df_boundary = pd.concat([outlier_df, boundary_points], ignore_index=False)
     
-    # Update original predictions for outlier points
     df.loc[outlier_df.index, 'pred'] = 0
-    
-    # Step 4: Generate depth maps
-    print("\n=== Step 4: Generating depth maps ===")
     
     surface_data = {
         'index': df_upsampled.index,
@@ -874,14 +864,11 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
         resolution=depth_map_resolution, window_size=interpolation_window
     )
     
-    # Save pixel mapping
     with open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), 'wb') as f:
         pickle.dump(pixel_mapping, f)
     
-    # Save depth map image
     save_depth_map_image(depth_map, os.path.join(tunnel_dir, "depth_map.png"), resolution=depth_map_resolution)
     
-    # Generate outlier-only depth map
     outlier_data = {
         'x': df_boundary['h'],
         'y': df_boundary['theta'],
@@ -896,13 +883,9 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     )
     np.save(os.path.join(tunnel_dir, "depth_map_outlier.npy"), depth_map_outlier)
     
-    # Step 5: Merge enhanced points and save
-    print("\n=== Step 5: Saving results ===")
-    
     new_surface_points = df_upsampled[df_upsampled['pred'] == 8].copy()
     new_boundary_points = df_boundary[df_boundary['pred'] == 8].copy()
     
-    # Ensure all columns exist
     for col in df.columns:
         if col not in new_surface_points.columns:
             new_surface_points[col] = np.nan if col in ['x', 'y', 'z'] else None
@@ -914,21 +897,36 @@ def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
     
     df_enhanced.to_csv(os.path.join(tunnel_dir, "enhanced.csv"), index=False)
     
-    print(f"Added {len(all_new)} new enhanced points")
-    print(f"Total points in enhanced.csv: {len(df_enhanced)}")
-    
-    # Step 6: Pattern classification from enhanced depth map
-    print("\n=== Step 6: Pattern Classification ===")
     pattern_info = classify_tunnel_pattern(depth_map_outlier, tunnel_dir)
-    
-    # Save pattern classification
-    pattern_path = os.path.join(tunnel_dir, "pattern_type.json")
-    with open(pattern_path, 'w') as f:
+    with open(os.path.join(tunnel_dir, "pattern_type.json"), 'w') as f:
         json.dump(pattern_info, f, indent=2)
     
+    return df_enhanced
+
+
+def enhance_point_cloud(tunnel_id: str, base_dir: str = "data") -> None:
+    """
+    Execute the complete enhancement pipeline.
+    
+    Args:
+        tunnel_id: Tunnel identifier.
+        base_dir: Base data directory.
+    """
+    print(f"Processing tunnel: {tunnel_id}")
+    tunnel_dir = os.path.join(base_dir, tunnel_id)
+    
+    # Load parameters
+    params, params_loaded = load_parameters(tunnel_id, base_dir)
+    allow_defaults = not params_loaded
+    
+    # Load denoised data and run enhancement
+    df = pd.read_csv(os.path.join(tunnel_dir, "denoised.csv"))
+    df_enhanced = enhance_from_df(df, tunnel_dir, params, allow_defaults=allow_defaults)
+    
+    print(f"Total points in enhanced.csv: {len(df_enhanced)}")
+    pattern_info = json.load(open(os.path.join(tunnel_dir, "pattern_type.json")))
     print(f"Pattern classified as: {pattern_info['pattern_type']}")
     print(f"Confidence: {pattern_info['confidence']:.2f}")
-    print(f"Pattern info saved to: {pattern_path}")
 
 
 # =============================================================================

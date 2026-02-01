@@ -850,6 +850,68 @@ def transform_to_cylindrical(
 # Main Pipeline
 # =============================================================================
 
+def unfold_from_df(
+    df: pd.DataFrame,
+    params: Dict[str, Any],
+    allow_defaults: bool = True
+) -> Tuple[pd.DataFrame, int]:
+    """
+    Run unfolding pipeline on in-memory point cloud DataFrame.
+    
+    Args:
+        df: DataFrame with at least x, y, z; optionally intensity, segment, ring.
+        params: Unfolding parameters dict (e.g. from parameters_preprocessing["unfolding"]).
+        allow_defaults: Whether to use defaults for missing params.
+    
+    Returns:
+        Tuple of (df_unwrapped with r, theta, h columns, ring_count).
+    """
+    points_xyz = df[['x', 'y', 'z']].values
+    
+    ring_spacing = get_param(params, 'physical_constants', 'ring_spacing', default=DEFAULT_RING_SPACING, allow_default=allow_defaults)
+    tunnel_diameter = get_param(params, 'physical_constants', 'tunnel_diameter', default=DEFAULT_TUNNEL_DIAMETER, allow_default=allow_defaults)
+    slice_half_thickness = get_param(params, 'slicing', 'slice_half_thickness', default=DEFAULT_SLICE_HALF_THICKNESS, allow_default=allow_defaults)
+    max_distance_from_top = get_param(params, 'slicing', 'max_distance_from_top', default=DEFAULT_MAX_DISTANCE_FROM_TOP, allow_default=allow_defaults)
+    polynomial_degree = get_param(params, 'curve_fitting', 'polynomial_degree', default=DEFAULT_POLYNOMIAL_DEGREE, allow_default=allow_defaults)
+    ransac_inlier_ratio = get_param(params, 'ransac_ellipse', 'inlier_ratio', default=DEFAULT_RANSAC_INLIER_RATIO, allow_default=allow_defaults)
+    ransac_confidence = get_param(params, 'ransac_ellipse', 'confidence', default=DEFAULT_RANSAC_CONFIDENCE, allow_default=allow_defaults)
+    ransac_min_samples = get_param(params, 'ransac_ellipse', 'min_samples', default=DEFAULT_RANSAC_MIN_SAMPLES, allow_default=allow_defaults)
+    ransac_inlier_threshold = get_param(params, 'ransac_ellipse', 'inlier_threshold', default=DEFAULT_RANSAC_INLIER_THRESHOLD, allow_default=allow_defaults)
+    samples_per_ring = get_param(params, 'arc_length', 'samples_per_ring', default=DEFAULT_SAMPLES_PER_RING, allow_default=allow_defaults)
+    batch_size = get_param(params, 'performance', 'batch_size', default=DEFAULT_BATCH_SIZE, allow_default=allow_defaults)
+    num_jobs = get_param(params, 'performance', 'num_jobs', default=DEFAULT_NUM_JOBS, allow_default=allow_defaults)
+    
+    center1, center2 = compute_tunnel_direction(points_xyz[:, :2])
+    origins, planes, sliced_clouds = generate_slicing_planes(
+        center1, center2, points_xyz, delta=slice_half_thickness, ring_spacing=ring_spacing
+    )
+    ring_count = len(sliced_clouds)
+    
+    centers_3d = fit_ellipse_centers(
+        sliced_clouds, origins, planes,
+        max_distance=max_distance_from_top,
+        inlier_ratio=ransac_inlier_ratio,
+        confidence=ransac_confidence,
+        min_samples=ransac_min_samples,
+        inlier_threshold=ransac_inlier_threshold
+    )
+    
+    x_params, y_params, z_params = fit_centerline_curve(centers_3d, degree=polynomial_degree)
+    
+    cylindrical = transform_to_cylindrical(
+        points_xyz, x_params, y_params, z_params, ring_count,
+        diameter=tunnel_diameter, samples_per_ring=samples_per_ring,
+        batch_size=batch_size, num_jobs=num_jobs
+    )
+    
+    df_out = df.copy()
+    df_out['r'] = cylindrical[:, 0]
+    df_out['theta'] = cylindrical[:, 1]
+    df_out['h'] = cylindrical[:, 2]
+    
+    return df_out, ring_count
+
+
 def unfold_tunnel(tunnel_id: str, base_dir: str = "data") -> None:
     """
     Execute the complete tunnel unfolding pipeline.
