@@ -1,0 +1,30 @@
+{
+  "tunnel_id": "4-1",
+  "stage": "sam",
+  "target_miou": 0.5,
+  "predicted_miou": 0.7014742331296683,
+  "predicted_std": 0.009068824308252703,
+  "params": {
+    "segment_width": 1155.7559,
+    "padding": 128,
+    "crop_margin": 46,
+    "k_outer_ring": 693.607,
+    "k_middle_ring": 463.0341,
+    "k_inner_ring": 378.0945,
+    "k_center_ring": 341.1133,
+    "ab_outer_ring": 688.0576,
+    "ab_middle_ring": 512.1395,
+    "ab_inner_ring": 472.0321,
+    "ab_center_ring": 363.3978,
+    "ab_fine_spacing": 202.0952,
+    "ab_ultra_fine": 172.3798,
+    "ab_edge_ring": 381.4999,
+    "ab_edge_spacing": 364.4556,
+    "k_mask_width": 657.2276,
+    "k_mask_height_pos": 633.6465,
+    "k_mask_height_neg": 444.7227,
+    "ab_mask_width": 671.3873,
+    "ab_mask_height": 1573.5189,
+    "min_quality_threshold": 0.1444
+  }
+}
