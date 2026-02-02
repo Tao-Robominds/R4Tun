@@ -9,6 +9,7 @@
 | Cross-tunnel validation | Medium | Medium | Verify generalization |
 | More training data | Medium | High | More robust predictor |
 | Error analysis by failure mode | High | Medium | Better guardrails |
+| **Per-stage impact across all tunnels** | **High** | **High** | **Accurate stage prioritization** |
 
 ---
 
@@ -194,6 +195,71 @@ done
 
 ---
 
+## Gap 6: Per-Stage Impact Across All Tunnels
+
+### Current State
+- Per-stage impact percentages (Detection +6.3%, SAM +4-7%, etc.) are based **only on tunnel 2-2**
+- These were measured in a specific optimization order: SAM → Detection → SAM → Preprocessing → Unfolding
+- Other tunnels (1-4, 3-1, 4-1, 5-1) may have different per-stage impacts
+
+### Problem
+- The current numbers may not generalize
+- Different tunnels have different characteristics (simple vs complex staggered patterns)
+- Optimization order affects measured incremental impact
+
+### Recommended Experiment
+
+Run systematic per-stage BO optimization on **all tunnels** with consistent methodology:
+
+```python
+# For each tunnel, optimize each stage independently from a common baseline
+tunnels = ['1-4', '2-2', '3-1', '4-1', '5-1']
+stages = ['detection', 'sam', 'preprocessing', 'unfolding']
+
+results = {}
+for tunnel in tunnels:
+    # Start from default parameters
+    baseline_miou = evaluate_with_defaults(tunnel)
+    
+    results[tunnel] = {'baseline': baseline_miou}
+    
+    for stage in stages:
+        # Reset to defaults, then optimize only this stage
+        reset_to_defaults(tunnel)
+        best_miou = run_bo(tunnel, stage=stage, n_iter=30)
+        
+        results[tunnel][stage] = {
+            'best_miou': best_miou,
+            'absolute_gain': best_miou - baseline_miou,
+            'relative_gain': (best_miou - baseline_miou) / baseline_miou * 100,
+        }
+```
+
+### Expected Output
+
+| Tunnel | Detection Impact | SAM Impact | Preprocessing Impact | Unfolding Impact |
+|--------|------------------|------------|----------------------|------------------|
+| 1-4 | +X.X% | +X.X% | +X.X% | +X.X% |
+| 2-2 | +6.3% | +7.4% | +0.1% | +0.0% |
+| 3-1 | +X.X% | +X.X% | +X.X% | +X.X% |
+| 4-1 | +X.X% | +X.X% | +X.X% | +X.X% |
+| 5-1 | +X.X% | +X.X% | +X.X% | +X.X% |
+| **Average** | **+X.X%** | **+X.X%** | **+X.X%** | **+X.X%** |
+
+### Methodology Notes
+
+1. **Independent optimization**: Each stage optimized independently from the same baseline (not sequentially)
+2. **Same iteration budget**: 30 iterations per stage per tunnel
+3. **Report both absolute and relative gains**
+4. **Separate simple (1-4, 2-2, 3-1) from complex (4-1, 5-1) patterns**
+
+### Why This Matters
+- Provides accurate guidance for where to focus optimization effort
+- Current numbers may over-estimate Detection impact or under-estimate SAM impact for other tunnels
+- Critical for prioritizing engineering resources
+
+---
+
 ## Recommendations Summary
 
 ### Immediate (Before Production)
@@ -204,15 +270,16 @@ done
 
 ### Short-term (Next Sprint)
 
-4. **Run full ablation study** on current features
-5. **Cross-tunnel validation** to verify generalization
-6. **Collect 10 more samples per tunnel** with diverse params
+4. **Run per-stage impact experiment** across all tunnels (see Gap 6)
+5. **Run full ablation study** on current features
+6. **Cross-tunnel validation** to verify generalization
+7. **Collect 10 more samples per tunnel** with diverse params
 
 ### Long-term (Future Roadmap)
 
-7. **Neural network predictor** if more data collected
-8. **Active learning** to efficiently sample informative configs
-9. **Multi-objective optimization** (mIoU + speed + robustness)
+8. **Neural network predictor** if more data collected
+9. **Active learning** to efficiently sample informative configs
+10. **Multi-objective optimization** (mIoU + speed + robustness)
 
 ---
 
@@ -222,6 +289,7 @@ done
 |------------|--------|--------|----------|
 | Reflection triggers | Low | High | **P0** |
 | Error analysis | Medium | High | **P1** |
+| **Per-stage impact (all tunnels)** | **High** | **High** | **P1** |
 | Preprocessing guardrails | Low | Medium | P2 |
 | Full ablation | Medium | Medium | P2 |
 | Cross-tunnel validation | Medium | Medium | P2 |
@@ -229,4 +297,5 @@ done
 
 ---
 
-*Generated: 2026-02-02*
+*Generated: 2026-02-02*  
+*Updated: 2026-02-02 - Added Gap 6 (per-stage impact across all tunnels)*

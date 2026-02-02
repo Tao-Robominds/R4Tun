@@ -267,10 +267,12 @@ def build_training_dataset(histories: List[Dict]) -> Tuple[pd.DataFrame, Dict]:
     
     # Add tunnel context features
     tunnel_context = {
+        # Simple patterns: 6 segments
         '1-4': {'pattern_hint': 'simple_staggered', 'expected_rings': 10, 'segments_per_ring': 6},
         '2-2': {'pattern_hint': 'simple_staggered', 'expected_rings': 10, 'segments_per_ring': 6},
         '3-1': {'pattern_hint': 'continuous', 'expected_rings': 6, 'segments_per_ring': 6},
-        '4-1': {'pattern_hint': 'simple_staggered', 'expected_rings': 10, 'segments_per_ring': 6},
+        # Complex patterns: 7 segments
+        '4-1': {'pattern_hint': 'complex_staggered', 'expected_rings': 10, 'segments_per_ring': 7},
         '5-1': {'pattern_hint': 'complex_staggered', 'expected_rings': 7, 'segments_per_ring': 7},
     }
     

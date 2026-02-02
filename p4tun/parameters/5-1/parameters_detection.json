@@ -1,79 +1,19 @@
 {
   "preprocessing": {
-    "binary_threshold": 140,
-    "dilation_kernel_size": 3,
-    "dilation_iterations": 4,
-    "use_morphological_closing": true,
-    "use_depth_gradients": true
+    "binary_threshold": 127,
+    "dilation_kernel_size": 5,
+    "dilation_iterations": 2
   },
   "hough_oblique": {
-    "threshold": 25,
-    "min_length": 40,
-    "max_gap": 80,
-    "angle_positive_min": 5.1352614958083045,
-    "angle_positive_max": 11.214342413159647,
-    "angle_negative_min": -11.214342413159647,
-    "angle_negative_max": -5.1352614958083045
+    "threshold": 50,
+    "minLineLength": 100,
+    "maxLineGap": 50
   },
   "hough_horizontal": {
-    "threshold": 30,
-    "min_length": 129,
-    "max_gap": 5,
-    "angle_tolerance": 1
+    "threshold": 50
   },
-  "hough_vertical": {
-    "threshold": 447
-  },
-  "line_processing": {
-    "merge_distance_threshold": 8,
-    "merge_close_threshold": 12,
-    "oblique_min_y_span": 50,
-    "oblique_min_x_span": 50,
-    "use_line_clustering": true,
-    "use_vertical_clustering": true,
-    "use_horizontal_constraint": true
-  },
-  "physical_constants": {
-    "resolution": 0.005,
-    "k_height_mm": 1079.92,
-    "ab_height_mm": 3239.77
-  },
-  "complex_staggered": {
-    "hough_re_detect": {
-      "threshold": 20,
-      "min_length": 89,
-      "max_gap": 70
-    },
-    "angle_range": {
-      "positive_min": 5.008283993611989,
-      "positive_max": 14.029061557662267,
-      "negative_min": -10.628907294437045,
-      "negative_max": -5.17675342266867
-    },
-    "line_filtering": {
-      "min_y_span": 40,
-      "min_x_span": 37
-    },
-    "clustering": {
-      "eps_candidates": [
-        0.02,
-        0.14,
-        0.15,
-        0.21,
-        0.28
-      ],
-      "min_clusters": 3,
-      "subdivision_threshold": 1.3809150078361374,
-      "max_subdivisions": 2
-    },
-    "confidence": {
-      "subdivision_base": 0.5,
-      "subdivision_factor": 0.05,
-      "cluster_base": 0.5,
-      "cluster_factor": 0.1,
-      "midpoint": 0.5,
-      "final_intersection": 0.7148214026703716,
-      "final_midpoint": 0.4
-    }
+  "angles": {
+    "positive_min": 2,
+    "positive_max": 15
   }
 }

@@ -1,34 +1,19 @@
 {
   "preprocessing": {
-    "binary_threshold": 150,
+    "binary_threshold": 100,
     "dilation_kernel_size": 2,
     "dilation_iterations": 1
   },
   "hough_oblique": {
     "threshold": 30,
-    "min_length": 150,
-    "max_gap": 60,
-    "angle_positive_min": 7.0,
-    "angle_positive_max": 8.0,
-    "angle_negative_min": -8.0,
-    "angle_negative_max": -7.0
+    "minLineLength": 80,
+    "maxLineGap": 42
   },
   "hough_horizontal": {
-    "threshold": 70,
-    "min_length": 130,
-    "max_gap": 20,
-    "angle_tolerance": 1
+    "threshold": 62
   },
-  "hough_vertical": {
-    "threshold": 700,
-    "filter_rings": 5
-  },
-  "line_processing": {
-    "merge_distance_threshold": 2
-  },
-  "physical_constants": {
-    "resolution": 0.005,
-    "k_height_mm": 1079.92,
-    "ab_height_mm": 3239.77
+  "angles": {
+    "positive_min": 5.688481863987205,
+    "positive_max": 10.0
   }
 }
