@@ -1,16 +1,16 @@
 {
     "segment_geometry": {
-        "segment_width": 1238.7854651445234,
+        "segment_width": 1150.0,
         "k_height": 1000.0,
-        "ab_height": 3376.8513805512093,
-        "angle_deg": 7.599063045537644
+        "ab_height": 3100.0,
+        "angle_deg": 6.5
     },
     "image": {
         "resolution": 0.005
     },
     "processing": {
-        "padding": 167,
-        "crop_margin": 80,
+        "padding": 100,
+        "crop_margin": 30,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -19,10 +19,10 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 657.7494652436818,
-            "middle_ring": 500.0,
-            "inner_ring": 348.16,
-            "center_ring": 325.0,
+            "outer_ring": 650.0,
+            "middle_ring": 450.0,
+            "inner_ring": 300.0,
+            "center_ring": 280.0,
             "spacing_factors": {
                 "k_block_spacing": 310.91,
                 "vertical_spacing": [
@@ -36,33 +36,33 @@
         },
         "ab_blocks": {
             "outer_ring": 650.0,
-            "middle_ring": 511.06,
-            "inner_ring": 500.0,
-            "center_ring": 325.0,
-            "fine_spacing": 250.0,
-            "ultra_fine": 162.5,
-            "edge_ring": 348.16,
-            "edge_spacing": 350.0,
+            "middle_ring": 460.0,
+            "inner_ring": 450.0,
+            "center_ring": 280.0,
+            "fine_spacing": 200.0,
+            "ultra_fine": 130.0,
+            "edge_ring": 300.0,
+            "edge_spacing": 300.0,
             "vertical_levels": {
-                "level_1": 1710.0827747980793,
-                "level_2": 1575.4520943177615,
-                "level_3": 1257.700140071747,
-                "level_4": 1156.079028524763,
-                "level_5": 873.9530999674616,
+                "level_1": 1550.0,
+                "level_2": 1370.0,
+                "level_3": 1210.0,
+                "level_4": 980.0,
+                "level_5": 735.0,
                 "level_6": 490.0,
-                "level_7": 300.0,
+                "level_7": 245.0,
                 "center": 0
             }
         },
         "template_mask": {
             "k_block": {
                 "width": 580.0,
-                "height_pos": 720.0,
-                "height_neg": 581.9691888507134
+                "height_pos": 580.0,
+                "height_neg": 450.0
             },
             "b1_block": {
                 "width": 575.0,
-                "height_top": 1624.6647451321849,
+                "height_top": 1570.0,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
@@ -70,16 +70,16 @@
                 "width": 575.0,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1624.6647451321849
+                "height_bottom": 1570.0
             },
             "a_blocks": {
                 "width": 575.0,
-                "height": 1624.6647451321849
+                "height": 1570.0
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.5
+        "min_quality_threshold": 0.1
     }
 }

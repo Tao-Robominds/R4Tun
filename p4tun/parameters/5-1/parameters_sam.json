@@ -1,54 +1,54 @@
 {
-    "description": "SAM complex_staggered BO parameters for Tunnel 5-1",
-    "segment_geometry": {
-        "segment_width": 1166.5,
-        "k_height": 950.0,
-        "ab_height": 3100.0,
-        "angle_deg": 7.288866593734656
-    },
-    "image": {
-        "resolution": 0.005
-    },
-    "pattern_aware": {
-        "use_quality_weighting": true,
-        "min_quality_threshold": 0.3
-    },
-    "prompt_points": {
-        "template_mask": {
-            "k_block": {
-                "width": 563.2380525390691,
-                "height_pos": 706.6101542435606,
-                "height_neg": 582.5225909865225
-            },
-            "b1_block": {
-                "width": 550.0,
-                "height_top": 1500.0,
-                "height_bottom_pos": 1540.69,
-                "height_bottom_neg": 1699.08
-            },
-            "b2_block": {
-                "width": 550.0,
-                "height_top_pos": 1540.69,
-                "height_top_neg": 1699.08,
-                "height_bottom": 1500.0
-            },
-            "a_blocks": {
-                "width": 550.0,
-                "height": 1567.2
-            }
-        }
-    },
-    "complex_staggered": {
-        "_note": "Parameters specific to complex_staggered pattern processing",
-        "template_sizing": {
-            "k_block_width_factor": 1.2,
-            "k_block_height_factor": 1.2,
-            "ab_block_width_factor": 0.9679519340623355,
-            "ab_block_height_factor": 1.2
-        },
-        "prompt_density": {
-            "k_block_points": "sparse",
-            "ab_block_points": "sparse"
-        }
+  "description": "SAM complex_staggered BO parameters for Tunnel 5-1",
+  "segment_geometry": {
+    "segment_width": 1322.7638483100934,
+    "k_height": 1113.6213392772743,
+    "ab_height": 3262.2675688032623,
+    "angle_deg": 7.277697809895329
+  },
+  "image": {
+    "resolution": 0.005
+  },
+  "pattern_aware": {
+    "use_quality_weighting": true,
+    "min_quality_threshold": 0.3
+  },
+  "prompt_points": {
+    "template_mask": {
+      "k_block": {
+        "width": 583.1130463165057,
+        "height_pos": 638.5365206939068,
+        "height_neg": 411.64524419108534
+      },
+      "b1_block": {
+        "width": 679.4367752001651,
+        "height_top": 1500.0,
+        "height_bottom_pos": 1540.69,
+        "height_bottom_neg": 1699.08
+      },
+      "b2_block": {
+        "width": 679.4367752001651,
+        "height_top_pos": 1540.69,
+        "height_top_neg": 1699.08,
+        "height_bottom": 1500.0
+      },
+      "a_blocks": {
+        "width": 679.4367752001651,
+        "height": 1573.9650719360902
+      }
     }
+  },
+  "complex_staggered": {
+    "_note": "Parameters specific to complex_staggered pattern processing",
+    "template_sizing": {
+      "k_block_width_factor": 0.8576408675076937,
+      "k_block_height_factor": 1.0612838088736736,
+      "ab_block_width_factor": 1.042232950904221,
+      "ab_block_height_factor": 0.8941539253874371
+    },
+    "prompt_density": {
+      "k_block_points": "dense",
+      "ab_block_points": "sparse"
+    }
+  }
 }

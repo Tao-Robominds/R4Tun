@@ -1,16 +1,16 @@
 {
     "segment_geometry": {
-        "segment_width": 1173.8518119314012,
-        "k_height": 1104.340484173114,
-        "ab_height": 3186.5052860320684,
-        "angle_deg": 6.56927274912035
+        "segment_width": 1176.6781014275284,
+        "k_height": 1156.2583929332245,
+        "ab_height": 3215.090363729105,
+        "angle_deg": 6.566101465801097
     },
     "image": {
         "resolution": 0.005
     },
     "processing": {
-        "padding": 140,
-        "crop_margin": 78,
+        "padding": 135,
+        "crop_margin": 62,
         "mask_eps": 0.001,
         "y_bounds": [
             4200,
@@ -19,7 +19,7 @@
     },
     "prompt_points": {
         "k_block": {
-            "outer_ring": 680.6818941723931,
+            "outer_ring": 718.0705451554767,
             "middle_ring": 500.0,
             "inner_ring": 348.16,
             "center_ring": 325.0,
@@ -35,7 +35,7 @@
             }
         },
         "ab_blocks": {
-            "outer_ring": 658.8151439866082,
+            "outer_ring": 709.2696723879394,
             "middle_ring": 511.06,
             "inner_ring": 500.0,
             "center_ring": 325.0,
@@ -44,42 +44,42 @@
             "edge_ring": 348.16,
             "edge_spacing": 350.0,
             "vertical_levels": {
-                "level_1": 1674.2223744161824,
-                "level_2": 1563.0429776462029,
-                "level_3": 1429.9030867738013,
-                "level_4": 1184.5131875493478,
-                "level_5": 781.9723688449913,
-                "level_6": 569.7984441341514,
-                "level_7": 289.42347617287663,
+                "level_1": 1827.5868368945903,
+                "level_2": 1609.5035374953654,
+                "level_3": 1250.693736870666,
+                "level_4": 1091.8037308829582,
+                "level_5": 849.8091131204956,
+                "level_6": 584.4194685295092,
+                "level_7": 262.92773978610364,
                 "center": 0
             }
         },
         "template_mask": {
             "k_block": {
-                "width": 689.1762183170966,
-                "height_pos": 622.3246259796465,
-                "height_neg": 624.682854540262
+                "width": 610.8337466591768,
+                "height_pos": 679.5609345413225,
+                "height_neg": 611.9002092279432
             },
             "b1_block": {
-                "width": 626.1815352812997,
-                "height_top": 1625.9271476432568,
+                "width": 609.8665987291729,
+                "height_top": 1579.617655109142,
                 "height_bottom_pos": 1540.69,
                 "height_bottom_neg": 1699.08
             },
             "b2_block": {
-                "width": 626.1815352812997,
+                "width": 609.8665987291729,
                 "height_top_pos": 1540.69,
                 "height_top_neg": 1699.08,
-                "height_bottom": 1625.9271476432568
+                "height_bottom": 1579.617655109142
             },
             "a_blocks": {
-                "width": 626.1815352812997,
-                "height": 1625.9271476432568
+                "width": 609.8665987291729,
+                "height": 1579.617655109142
             }
         }
     },
     "pattern_aware": {
         "use_quality_weighting": true,
-        "min_quality_threshold": 0.3646236274007616
+        "min_quality_threshold": 0.4762093057958417
     }
-}}
+}
