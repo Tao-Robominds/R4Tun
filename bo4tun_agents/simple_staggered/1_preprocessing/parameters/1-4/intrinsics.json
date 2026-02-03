@@ -1,7 +1,7 @@
 {
-  "pre_theta_coverage_pct": 99.99446256288691,
-  "pre_point_retention_pct": 73.10420901730843,
-  "pre_depth_map_valid_pixels": 14328,
+  "pre_theta_coverage_pct": 99.9944625628869,
+  "pre_point_retention_pct": 72.92060796916677,
+  "pre_depth_map_valid_pixels": 15198,
   "pre_ready_for_detection": true,
   "pre_guardrail_violations": []
 }

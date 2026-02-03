@@ -14,22 +14,47 @@ Preprocessing is the **lowest impact stage** for mIoU improvement (+0.1% from BO
 
 ## Parameter Classification
 
-### Physical Constants (Engineering Specs)
+### CRITICAL Sensitivity (Tunnel Geometry)
 
-| Parameter | Description | How to Obtain |
-|-----------|-------------|---------------|
-| `ring_spacing` | Ring width in meters | Tunnel construction drawings |
-| `tunnel_diameter` | Tunnel diameter in meters | Tunnel specifications |
+These parameters are **MOST CRITICAL** for preprocessing success. The `extract_characteristics.py` script can produce inaccurate measurements, so these require empirical tuning based on intrinsics feedback.
+
+| Parameter | Description | Initial Source | Tuning Range |
+|-----------|-------------|----------------|--------------|
+| `tunnel_diameter` | Tunnel diameter in meters | Tunnel specs OR `2 × cross_section_radius_m` | ±0.5m from initial |
+| `ring_spacing` | Ring width in meters | Tunnel construction drawings | ±0.2m from initial |
+
+**Derived Parameters:**
 
 | Parameter | Formula |
 |-----------|---------|
-| `radius_min` | `tunnel_diameter / 2 - margin` (typically 0.05m margin) |
-| `radius_max` | `tunnel_diameter / 2 + margin` (typically 0.05m margin) |
+| `radius_min` | `tunnel_diameter / 2 - margin` (typically 0.05-0.1m margin) |
+| `radius_max` | `tunnel_diameter / 2 + margin` (typically 0.05-0.1m margin) |
 
-**Critical:** `radius_min < radius_max` must ALWAYS hold.
+**Critical Constraints:**
+- `radius_min < radius_max` must ALWAYS hold
+- If `pre_point_retention_pct` drops dramatically (<30%), the radius bounds are likely wrong
 
+#### Tuning Strategy for tunnel_diameter / radius bounds
 
-#### HIGH Sensitivity
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| `pre_point_retention_pct` < 30% | radius bounds too tight | **Increase** `tunnel_diameter` by 0.1-0.2m |
+| `pre_point_retention_pct` > 98% | radius bounds too loose (noise not filtered) | **Decrease** `tunnel_diameter` by 0.1m |
+| Depth map looks distorted | Wrong tunnel geometry | Try opposite direction |
+
+**Example from experience:**
+- Characteristics measured `cross_section_radius_m = 2.52m` → calculated `tunnel_diameter = 5.04m`
+- Result: `pre_point_retention_pct = 1.4%` (FAILURE - too tight!)
+- Fix: Increased to `tunnel_diameter = 5.54m` → `pre_point_retention_pct = 72.9%` (SUCCESS)
+
+#### Tuning Strategy for ring_spacing
+
+| Symptom | Cause | Action |
+|---------|-------|--------|
+| Wrong number of rings detected | ring_spacing mismatch | Adjust by ±0.1m increments |
+| Unfolding artifacts | Geometry mismatch | Try opposite direction |
+
+### HIGH Sensitivity
 
 | Parameter | BO Range | Notes |
 |-----------|----------|-------|
@@ -59,11 +84,14 @@ These parameters showed minimal impact in BO - use fixed defaults:
 
 ## Tuning Strategy
 
-1. **Set physical constants first** - `ring_spacing`, `tunnel_diameter`
-2. **Calculate radius bounds** - `radius_min/max` from diameter
-3. **Start with aggressive denoising** - `gradient_threshold=0.1` 
-4. **Keep defaults for rest** - preprocessing has minimal impact
-5. **Only tune if detection fails** - preprocessing rarely the bottleneck
+1. **Start with initial geometry estimates** - `ring_spacing`, `tunnel_diameter` from specs or characteristics
+2. **Calculate radius bounds** - `radius_min/max` from diameter with appropriate margin
+3. **Run preprocessing and check intrinsics** - especially `pre_point_retention_pct`
+4. **If retention is bad (<30% or >98%)** - adjust `tunnel_diameter` in opposite direction
+5. **Iterate until intrinsics pass** - target 70-90% retention, 8k-35k valid pixels
+6. **Then tune other parameters** - `gradient_threshold`, `depth_map_resolution` only if needed
+
+**Key Insight:** The characteristics extraction can be inaccurate due to point cloud offset from true tunnel center. Always validate with intrinsics feedback and be prepared to override calculated values.
 
 ## Cross-Stage Dependencies
 
