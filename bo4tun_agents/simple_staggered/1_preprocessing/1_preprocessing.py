@@ -168,7 +168,7 @@ FIXED_INTERPOLATION_RADIUS = 0.06
 FIXED_NUM_INTERPOLATIONS = 2
 FIXED_DUPLICATE_THRESHOLD = 0.02
 FIXED_MAX_OUTLIER_POINTS = 5000
-FIXED_INTERPOLATION_WINDOW = 9
+DEFAULT_INTERPOLATION_WINDOW = 9  # Tunable: affects gap filling in main depth_map (BO range: 3-7)
 
 
 # =============================================================================
@@ -1111,7 +1111,8 @@ def generate_depth_map(
     data_boundary: Dict,
     resolution: float,
     record_mapping: bool = True,
-    outlier_mode: bool = False
+    outlier_mode: bool = False,
+    window_size: int = None
 ) -> Tuple[np.ndarray, List[Dict]]:
     """
     Project point cloud data to 2D depth map.
@@ -1171,10 +1172,11 @@ def generate_depth_map(
     if record_mapping and not outlier_mode:
         print(f"Mapped {len(mapping)} points to pixels")
     
-    # Interpolate gaps
-    if FIXED_INTERPOLATION_WINDOW > 1:
+    # Interpolate gaps (use provided window_size or default)
+    effective_window = window_size if window_size is not None else DEFAULT_INTERPOLATION_WINDOW
+    if effective_window > 1:
         valid_points = []
-        half_w = FIXED_INTERPOLATION_WINDOW // 2
+        half_w = effective_window // 2
         
         for i in tqdm(range(half_w, height - half_w), desc="Finding gaps to fill"):
             for j in range(half_w, width - half_w):
@@ -1303,7 +1305,8 @@ def enhance_point_cloud(
     ring_spacing: float,
     target_distances: List[float],
     curvature_neighbors: int,
-    depth_map_resolution: float
+    depth_map_resolution: float,
+    interpolation_window: int = DEFAULT_INTERPOLATION_WINDOW
 ) -> pd.DataFrame:
     """
     Execute Stage 3: Enhancing.
@@ -1312,6 +1315,7 @@ def enhance_point_cloud(
     - target_distances: Controls upsampling density (HIGH impact)
     - curvature_neighbors: Affects surface smoothness (MEDIUM impact)
     - depth_map_resolution: Affects all downstream stages (HIGH impact)
+    - interpolation_window: Gap filling window for main depth_map (LOW impact)
     """
     df_valid = df[df['pred'] != 0].copy()
     
@@ -1347,7 +1351,8 @@ def enhance_point_cloud(
     }
     
     depth_map, pixel_mapping = generate_depth_map(
-        surface_data, boundary_data, resolution=depth_map_resolution
+        surface_data, boundary_data, resolution=depth_map_resolution,
+        window_size=interpolation_window  # Tunable for main depth_map
     )
     
     with open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), 'wb') as f:
@@ -1366,7 +1371,8 @@ def enhance_point_cloud(
     
     depth_map_outlier, _ = generate_depth_map(
         surface_data, outlier_data,
-        resolution=depth_map_resolution, record_mapping=False, outlier_mode=True
+        resolution=depth_map_resolution, record_mapping=False, outlier_mode=True,
+        window_size=1  # No gap interpolation for outlier depth map (matches original p4tun)
     )
     np.save(os.path.join(tunnel_dir, "depth_map_outlier.npy"), depth_map_outlier)
     
@@ -1432,6 +1438,7 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     target_distances = get_param(params, 'target_distances', default=DEFAULT_TARGET_DISTANCES, allow_default=allow_defaults)
     curvature_neighbors = get_param(params, 'curvature_neighbors', default=DEFAULT_CURVATURE_NEIGHBORS, allow_default=allow_defaults)
     depth_map_resolution = get_param(params, 'depth_map_resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
+    interpolation_window = get_param(params, 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=True)  # Always allow default (LOW impact)
     
     print("\nCritical parameters:")
     print(f"  ring_spacing:       {ring_spacing}")
@@ -1442,6 +1449,7 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     print(f"  target_distances:   {target_distances}")
     print(f"  curvature_neighbors: {curvature_neighbors}")
     print(f"  depth_map_resolution: {depth_map_resolution}")
+    print(f"  interpolation_window: {interpolation_window} (LOW impact)")
     
     # ---- Stage 1: Unfolding ----
     print("\n[Stage 1] Unfolding...")
@@ -1472,7 +1480,8 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
         ring_spacing=ring_spacing,
         target_distances=target_distances,
         curvature_neighbors=curvature_neighbors,
-        depth_map_resolution=depth_map_resolution
+        depth_map_resolution=depth_map_resolution,
+        interpolation_window=interpolation_window
     )
     
     print(f"\n{'=' * 60}")

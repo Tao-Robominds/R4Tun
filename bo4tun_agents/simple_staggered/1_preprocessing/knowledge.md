@@ -54,12 +54,15 @@ These are **calculated from physical constants**:
 
 These parameters showed minimal impact in BO - use fixed defaults:
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `theta_step` | 0.5 | Angular resolution for denoising |
-| `radial_step` | 0.001 | Radial resolution for denoising |
-| `smoothing_window` | 3 | Boundary smoothing |
-| Unfolding params | Various | All showed <0.17 score variance |
+| Parameter | Default | BO Range | Notes |
+|-----------|---------|----------|-------|
+| `interpolation_window` | 9 | 3-7 | Gap filling window for main depth_map visualization. BO found 6 optimal for 2-2. Does NOT affect detection (depth_map_outlier always uses window=1) |
+| `theta_step` | 0.5 | - | Angular resolution for denoising |
+| `radial_step` | 0.001 | - | Radial resolution for denoising |
+| `smoothing_window` | 3 | - | Boundary smoothing |
+| Unfolding params | Various | - | All showed <0.17 score variance |
+
+**Important:** `interpolation_window` affects only the main `depth_map.png` (visualization), NOT `depth_map_outlier.npy` (detection input). The outlier depth map always uses `window_size=1` (no gap filling) which is critical for detection to work correctly.
 
 ## Tuning Strategy
 

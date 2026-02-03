@@ -42,9 +42,26 @@ Physical constants are **NOT defined in detection** - they are automatically rea
 | Constant | Source | Calculation |
 |----------|--------|-------------|
 | `tunnel_diameter` | preprocessing params | Direct read |
+| `ring_spacing` | preprocessing params | Direct read |
 | `resolution` | preprocessing params (`depth_map_resolution`) | Direct read |
 | `k_height_mm` | calculated | π × tunnel_diameter × 1000 / 16 |
 | `ab_height_mm` | calculated | 3 × k_height_mm |
+
+## Preprocessing Parameters Affecting Detection
+
+Detection uses `depth_map_outlier.npy` from preprocessing. Key preprocessing considerations:
+
+| Parameter | In Preprocessing | Effect on Detection |
+|-----------|------------------|---------------------|
+| `depth_map_resolution` | Tunable | Directly affects pixel-to-mm conversion in detection |
+| `interpolation_window` | Tunable (LOW impact) | **Only affects visualization** (`depth_map.png`), NOT detection input |
+
+**Critical:** The `depth_map_outlier.npy` (detection input) is ALWAYS generated with `window_size=1` (no gap interpolation). This ensures:
+- Sparse boundary points for clear line detection
+- No filled-in gaps that would confuse Hough transform
+- Consistent behavior regardless of `interpolation_window` setting
+
+If detection suddenly produces many false K-points (n_detected > 30) and the depth_map looks "filled in", check that preprocessing is generating `depth_map_outlier.npy` correctly with sparse pixels (~15k-20k valid pixels, not ~400k).
 
 ## Why Runs Fail (score=0)
 
