@@ -46,9 +46,3 @@ Each metric has a threshold for pass/fail decision.
   "pre_guardrail_violations": []
 }
 ```
-
-## Usage
-
-```bash
-python bo4tun_agents/simple_staggered/1_preprocessing/states/extract_intrinsics.py 1-4 [--output path]
-```

@@ -40,9 +40,3 @@ Critical characteristics that differentiate tunnels and inform preprocessing par
   "density_cv": 0.43
 }
 ```
-
-## Usage
-
-```bash
-python bo4tun_agents/simple_staggered/1_preprocessing/states/extract_raw_characteristics.py 1-4 [--output path]
-```

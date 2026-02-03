@@ -16,16 +16,10 @@ Preprocessing is the **lowest impact stage** for mIoU improvement (+0.1% from BO
 
 ### Physical Constants (Engineering Specs)
 
-These are **not tuned** - they come from tunnel specifications:
-
 | Parameter | Description | How to Obtain |
 |-----------|-------------|---------------|
 | `ring_spacing` | Ring width in meters | Tunnel construction drawings |
 | `tunnel_diameter` | Tunnel diameter in meters | Tunnel specifications |
-
-### Derived Parameters (Calculated)
-
-These are **calculated from physical constants**:
 
 | Parameter | Formula |
 |-----------|---------|
@@ -34,7 +28,6 @@ These are **calculated from physical constants**:
 
 **Critical:** `radius_min < radius_max` must ALWAYS hold.
 
-### Tunable Parameters
 
 #### HIGH Sensitivity
 
@@ -66,7 +59,7 @@ These parameters showed minimal impact in BO - use fixed defaults:
 
 ## Tuning Strategy
 
-1. **Set physical constants first** - `ring_spacing`, `tunnel_diameter` from specs
+1. **Set physical constants first** - `ring_spacing`, `tunnel_diameter`
 2. **Calculate radius bounds** - `radius_min/max` from diameter
 3. **Start with aggressive denoising** - `gradient_threshold=0.1` 
 4. **Keep defaults for rest** - preprocessing has minimal impact
@@ -80,12 +73,3 @@ Preprocessing outputs used by Detection:
 ├── depth_map_resolution → resolution for pixel↔mm conversion
 └── depth_map_outlier.npy → input for line detection
 ```
-
-## Why Preprocessing Has Low Impact
-
-BO experiments showed that once basic preprocessing is correct:
-- Unfolding parameters have near-zero impact on final mIoU
-- Denoising contributes only ~0.1% improvement
-- Detection stage parameters have 60x more impact (+6.3%)
-
-Focus tuning effort on Detection and SAM stages instead.
