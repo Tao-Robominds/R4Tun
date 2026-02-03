@@ -1,0 +1,13 @@
+{
+    "binary_threshold": 101,
+    "dilation_kernel_size": 3,
+    "dilation_iterations": 2,
+    "hough_oblique_threshold": 47,
+    "hough_oblique_min_length": 67,
+    "hough_oblique_max_gap": 32,
+    "angle_positive_min": 5.883,
+    "angle_positive_max": 8.242,
+    "angle_negative_min": -8.242,
+    "angle_negative_max": -5.883,
+    "hough_vertical_threshold": 574
+}
