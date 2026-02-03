@@ -1,19 +1,12 @@
 {
   "preprocessing": {
-    "binary_threshold": 121,
-    "dilation_kernel_size": 3,
-    "dilation_iterations": 1
+    "binary_threshold": 119,
+    "dilation_kernel_size": 5,
+    "dilation_iterations": 2
   },
   "hough_oblique": {
-    "threshold": 59,
-    "minLineLength": 140,
-    "maxLineGap": 49
-  },
-  "hough_horizontal": {
-    "threshold": 44
-  },
-  "angles": {
-    "positive_min": 5.0,
-    "positive_max": 8.867651382510479
+    "threshold": 73,
+    "min_length": 128,
+    "max_gap": 44
   }
 }
