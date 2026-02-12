@@ -416,7 +416,6 @@ class PreprocessingObjective:
             'radius_min': float(self.best_params['radius_min']),
             'radius_max': float(self.best_params['radius_max']),
             'gradient_threshold': float(self.best_params['gradient_threshold']),
-            'target_distances': get_param(existing_params, 'target_distances', default=DEFAULT_TARGET_DISTANCES, allow_default=True),
         }
         
         params_file = os.path.join(self.params_dir, 'parameters_preprocessing.json')
