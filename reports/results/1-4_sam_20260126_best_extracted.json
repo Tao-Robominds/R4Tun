@@ -1,0 +1,24 @@
+{
+  "tunnel_id": "1-4",
+  "stage": "sam",
+  "best_score": 0.748,
+  "best_params": {
+    "segment_width": 1150.0,
+    "k_height": 1150.0,
+    "ab_height": 3104.7674598264352,
+    "angle_deg": 6.5,
+    "padding": 100,
+    "crop_margin": 40,
+    "k_outer_ring": 650.0,
+    "k_middle_ring": 477.00013140230607,
+    "k_inner_ring": 300.0,
+    "ab_outer_ring": 711.582367473473,
+    "ab_middle_ring": 489.12167402511704,
+    "k_mask_width": 638.9990926073481,
+    "k_mask_height": 580.0,
+    "ab_mask_width": 680.0,
+    "ab_mask_height": 1577.2888883052988,
+    "min_quality_threshold": 0.49649078134506297
+  },
+  "evaluation": 17
+}

@@ -1,0 +1,22 @@
+{
+  "tunnel_id": "5-1",
+  "best_score": -0.0,
+  "best_params": {
+    "segment_width": 1309.3085973720467,
+    "k_height": 995.858697466541,
+    "ab_height": 3411.8764001091076,
+    "angle_deg": 7.7905504738394615,
+    "k_mask_width": 639.1665505707183,
+    "k_mask_height_pos": 569.9949831636006,
+    "k_mask_height_neg": 514.8122229914668,
+    "ab_mask_width": 600.0562916708533,
+    "ab_mask_height": 1535.7167044804853,
+    "k_block_width_factor": 1.0603553891795412,
+    "k_block_height_factor": 0.8225646316108401,
+    "ab_block_width_factor": 1.08879950890673,
+    "ab_block_height_factor": 1.1754210836063002,
+    "k_block_points": "standard",
+    "ab_block_points": "sparse"
+  },
+  "history": []
+}

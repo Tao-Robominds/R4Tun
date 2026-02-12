@@ -1,7 +1,7 @@
 {
     "segment_width": 1150.0,
     "angle_deg": 6.5,
-    "k_mask_width": 639.0,
+    "k_mask_width": 700.0,
     "k_mask_height_pos": 580.0,
     "k_mask_height_neg": 580.0,
     "ab_mask_width": 680.0,

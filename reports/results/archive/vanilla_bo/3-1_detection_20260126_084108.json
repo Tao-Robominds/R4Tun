@@ -1,0 +1,130 @@
+{
+  "tunnel_id": "3-1",
+  "stage": "detection",
+  "best_score": 0.824126945122887,
+  "best_params": {
+    "binary_threshold": 115.0,
+    "dilation_kernel_size": 2.0,
+    "dilation_iterations": 4.0,
+    "hough_oblique_threshold": 59.0,
+    "hough_oblique_min_length": 91.0,
+    "hough_oblique_max_gap": 44.0,
+    "angle_positive_min": 3.5877212314317006,
+    "angle_positive_max": 7.890926270578304,
+    "hough_horizontal_threshold": 45.0,
+    "hough_horizontal_min_length": 119.0,
+    "hough_horizontal_max_gap": 12.0,
+    "hough_vertical_threshold": 744.0,
+    "merge_distance_threshold": 5.0,
+    "merge_close_threshold": 7.0
+  },
+  "n_calls": 5,
+  "history": [
+    {
+      "eval": 1,
+      "params": {
+        "binary_threshold": 136.0,
+        "dilation_kernel_size": 3.0,
+        "dilation_iterations": 3.0,
+        "hough_oblique_threshold": 56.0,
+        "hough_oblique_min_length": 95.0,
+        "hough_oblique_max_gap": 26.0,
+        "angle_positive_min": 4.836995567863469,
+        "angle_positive_max": 8.66854305569511,
+        "hough_horizontal_threshold": 37.0,
+        "hough_horizontal_min_length": 119.0,
+        "hough_horizontal_max_gap": 6.0,
+        "hough_vertical_threshold": 661.0,
+        "merge_distance_threshold": 8.0,
+        "merge_close_threshold": 4.0
+      },
+      "score": 0.5531144678111584,
+      "n_detected": 9
+    },
+    {
+      "eval": 2,
+      "params": {
+        "binary_threshold": 149.0,
+        "dilation_kernel_size": 4.0,
+        "dilation_iterations": 3.0,
+        "hough_oblique_threshold": 20.0,
+        "hough_oblique_min_length": 52.0,
+        "hough_oblique_max_gap": 51.0,
+        "angle_positive_min": 4.599443886861023,
+        "angle_positive_max": 7.233328316068077,
+        "hough_horizontal_threshold": 79.0,
+        "hough_horizontal_min_length": 81.0,
+        "hough_horizontal_max_gap": 7.0,
+        "hough_vertical_threshold": 609.0,
+        "merge_distance_threshold": 4.0,
+        "merge_close_threshold": 12.0
+      },
+      "score": 0,
+      "n_detected": 28
+    },
+    {
+      "eval": 3,
+      "params": {
+        "binary_threshold": 113.0,
+        "dilation_kernel_size": 5.0,
+        "dilation_iterations": 3.0,
+        "hough_oblique_threshold": 47.0,
+        "hough_oblique_min_length": 51.0,
+        "hough_oblique_max_gap": 77.0,
+        "angle_positive_min": 5.253152871382158,
+        "angle_positive_max": 8.927082512699581,
+        "hough_horizontal_threshold": 31.0,
+        "hough_horizontal_min_length": 81.0,
+        "hough_horizontal_max_gap": 11.0,
+        "hough_vertical_threshold": 642.0,
+        "merge_distance_threshold": 6.0,
+        "merge_close_threshold": 11.0
+      },
+      "score": 0,
+      "n_detected": 17
+    },
+    {
+      "eval": 4,
+      "params": {
+        "binary_threshold": 115.0,
+        "dilation_kernel_size": 2.0,
+        "dilation_iterations": 4.0,
+        "hough_oblique_threshold": 59.0,
+        "hough_oblique_min_length": 91.0,
+        "hough_oblique_max_gap": 44.0,
+        "angle_positive_min": 3.5877212314317006,
+        "angle_positive_max": 7.890926270578304,
+        "hough_horizontal_threshold": 45.0,
+        "hough_horizontal_min_length": 119.0,
+        "hough_horizontal_max_gap": 12.0,
+        "hough_vertical_threshold": 744.0,
+        "merge_distance_threshold": 5.0,
+        "merge_close_threshold": 7.0
+      },
+      "score": 0.824126945122887,
+      "n_detected": 6
+    },
+    {
+      "eval": 5,
+      "params": {
+        "binary_threshold": 114.0,
+        "dilation_kernel_size": 3.0,
+        "dilation_iterations": 4.0,
+        "hough_oblique_threshold": 30.0,
+        "hough_oblique_min_length": 97.0,
+        "hough_oblique_max_gap": 78.0,
+        "angle_positive_min": 5.07897243297133,
+        "angle_positive_max": 7.821246037919068,
+        "hough_horizontal_threshold": 76.0,
+        "hough_horizontal_min_length": 119.0,
+        "hough_horizontal_max_gap": 25.0,
+        "hough_vertical_threshold": 710.0,
+        "merge_distance_threshold": 3.0,
+        "merge_close_threshold": 7.0
+      },
+      "score": 0,
+      "n_detected": 22
+    }
+  ],
+  "timestamp": "20260126_084108"
+}
