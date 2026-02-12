@@ -1,7 +1,7 @@
 {
-    "ring_spacing": 1.2,
+    "ring_spacing": 1.4,
     "tunnel_diameter": 5.5,
-    "radius_min": 2.62,
-    "radius_max": 2.80,
-    "gradient_threshold": 0.1
+    "radius_min": 2.612718514221595,
+    "radius_max": 3.0562619519054484,
+    "gradient_threshold": 0.5
 }

@@ -1,0 +1,27 @@
+{
+  "schema_version": "r4tun.stageA.v1",
+  "trial": {
+    "trial_id": "preproc_3-1_004",
+    "timestamp_utc": "2026-02-12T14:20:47Z",
+    "tunnel_id": "3-1",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "ring_spacing": 1.3754210836063,
+    "radius_min": 2.475214160606279,
+    "radius_max": 3.0228581788050852,
+    "gradient_threshold": 0.3278666793324725
+  },
+  "trace": {
+    "warnings": [
+      "Error: RANSAC could not find a valid consensus set. All `max_trials` iterations were skipped because each randomly chosen sub-sample failed the passing criteria. See estimator attributes for diagnostics (n_skips*)."
+    ]
+  },
+  "bo": {
+    "objective_name": "retention_f2",
+    "objective_value": 0.0,
+    "eval_index": 4,
+    "runtime_sec": 1.2770187854766846,
+    "is_feasible": false
+  }
+}

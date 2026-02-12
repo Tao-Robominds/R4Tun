@@ -1,15 +1,7 @@
 {
-    "_description": "Tunnel 3-1 preprocessing parameters (6-segment, simple staggered)",
-    "_note": "CRITICAL parameters only. radius_min/max adjusted for this tunnel.",
-
-    "ring_spacing": 1.215,
+    "ring_spacing": 1.16974258306134,
     "tunnel_diameter": 5.5,
-
-    "radius_min": 2.8,
-    "radius_max": 3.0,
-    "gradient_threshold": 0.15,
-
-    "target_distances": [0.08, 0.04, 0.02],
-    "curvature_neighbors": 20,
-    "depth_map_resolution": 0.005
+    "radius_min": 2.5688870592873907,
+    "radius_max": 3.0250000000000004,
+    "gradient_threshold": 0.48199408605169713
 }

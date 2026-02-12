@@ -1,17 +1,17 @@
-# Preprocessing Bayesian Optimization Report — Tunnel 1-4
+# Preprocessing Bayesian Optimization Report — Multi-Tunnel
 
 **Date**: 2026-02-12  
 **Branch**: `bayesian`  
-**Pipeline**: `agents/simple_staggered`  
-**Tunnel**: 1-4 (simple staggered, 6 segments per ring)
+**Pipelines**: `agents/simple_staggered`, `agents/continuous`, `agents/complex_staggered`  
+**Tunnels**: 1-4, 2-2, 3-1, 4-1, 5-1
 
 ---
 
 ## 1. Session Overview
 
-This report covers the entire workflow performed in a single chat session, including
+This report covers the entire workflow performed across multiple chat sessions, including
 architectural refactoring, pipeline validation, and Bayesian Optimization of
-preprocessing parameters for tunnel 1-4.
+preprocessing parameters for all 5 tunnels (1-4, 2-2, 3-1, 4-1, 5-1).
 
 ### Timeline
 
@@ -340,14 +340,200 @@ BO will clarify which ring count produces better K-position accuracy.
 
 ---
 
-## 8. Next Steps
+## 8. Multi-Tunnel Extension
+
+### 8.1 Radius Extraction Method Improvement
+
+**Problem**: The original single-plane percentile method (80th percentile of radial distances from a global PCA-fitted center) overestimated radius for curved tunnels:
+- Tunnel 3-1: Extracted 3.44m vs. known 2.75m (25% error)
+- Tunnel 5-1: Extracted 4.08m vs. known 3.75m (9% error)
+
+**Root Cause**: Projecting all points from a curved tunnel onto a single plane inflates the apparent radius because distant points along the curve project farther from the center.
+
+**Solution**: Implemented **slice-and-fit method** in `extract_characteristics.py`:
+1. PCA to find tunnel axis
+2. Divide points into thin slices (~0.5m) along the axis
+3. For each slice: project to local cross-section, fit circle (Kása method), record radius
+4. Return **median** of per-slice radii (robust to outlier slices)
+
+**Status**: Method implemented but still overestimates for highly curved tunnels. For now, using known `tunnel_diameter / 2` from `p4tun/parameters/` as fallback for 3-1, 4-1, 5-1. Future work: refine slice method or use spline-fitted centerline.
+
+### 8.2 Auto-Adaptive Search Space
+
+**Enhancement**: Modified `get_preprocessing_dimensions()` to accept `tunnel_id` and `agent_type`, loading `characteristics.json` to set radius bounds dynamically:
+
+```python
+radius = characteristics['cross_section_radius_m']
+radius_min: [radius * 0.90, radius]  # 10% below
+radius_max: [radius, radius * 1.10]  # 10% above
+```
+
+This ensures each tunnel's search space is appropriately scaled to its geometry, avoiding wasted evaluations in irrelevant parameter regions.
+
+### 8.3 Filesystem Organization
+
+**Initial Problem**: After copying preprocessing to `continuous` and `complex_staggered`, all parameter directories and logs were duplicated, creating confusion.
+
+**Solution**: Cleaned up and organized by tunnel type:
+- **simple_staggered**: Tunnels 1-4, 2-2 only
+- **continuous**: Tunnel 3-1 only
+- **complex_staggered**: Tunnels 4-1, 5-1 only
+
+**Log Organization**:
+- Fixed `PreprocessingObjective.__init__` to use `agent_type` for logs directory
+- Moved misplaced logs to correct agent directories
+- All future BO runs write logs to agent-specific locations
+
+---
+
+## 9. Multi-Tunnel BO Results
+
+### 9.1 Final F2 Scores Summary
+
+| Tunnel | Agent Type | Best F2 Score | BO Runs | Status |
+|--------|------------|--------------|---------|--------|
+| **1-4** | simple_staggered | **0.9811** | 20 | ✅ Optimized |
+| **2-2** | simple_staggered | **0.9760** | 30 | ✅ Optimized |
+| **3-1** | continuous | **0.9603** | 30 | ✅ Optimized |
+| **4-1** | complex_staggered | **0.9379** | 50 | ✅ Optimized |
+| **5-1** | complex_staggered | **0.9545** | 50 | ✅ Optimized |
+
+**Summary Statistics**:
+- **Best performing**: 1-4 (F2=0.9811)
+- **Lowest performing**: 4-1 (F2=0.9379)
+- **Average F2**: 0.9620
+- **All scores ≥ 0.93**, indicating good preprocessing quality across all tunnel types
+
+### 9.2 Tunnel 2-2 (simple_staggered)
+
+**Configuration**: 30 runs, 5 initial random, warm-started from 1-4 optimal parameters
+
+**Best Result**:
+- **F2 Score**: 0.9760
+- **Parameters**:
+  - `ring_spacing`: 1.4000
+  - `radius_min`: 2.6127
+  - `radius_max`: 3.0563
+  - `gradient_threshold`: 0.5000
+
+**Observations**: Similar to 1-4, benefits from higher `ring_spacing` (1.4) and permissive `gradient_threshold` (0.5). Radius bounds slightly wider than 1-4, reflecting its slightly larger cross-section (2.78m vs 2.77m).
+
+### 9.3 Tunnel 3-1 (continuous)
+
+**Configuration**: 30 runs, 5 initial random, warm-started from 1-4 optimal parameters
+
+**Best Result**:
+- **F2 Score**: 0.9603
+- **Parameters**:
+  - `ring_spacing`: 1.1697
+  - `radius_min`: 2.5689
+  - `radius_max`: 3.0250
+  - `gradient_threshold`: 0.4820
+
+**Observations**: Lower F2 than simple_staggered tunnels. Continuous assembly type may have different point distribution characteristics. Optimal `ring_spacing` (1.17) is lower than 1-4/2-2, suggesting different ring spacing in the physical tunnel.
+
+### 9.4 Tunnel 4-1 (complex_staggered)
+
+**Configuration**: 50 runs, 8 initial random, warm-started from 1-4 optimal parameters
+
+**Best Result**:
+- **F2 Score**: 0.9379
+- **Parameters**:
+  - `ring_spacing`: 1.2560
+  - `radius_min`: 3.5150
+  - `radius_max`: 3.9073
+  - `gradient_threshold`: 0.4565
+
+**Observations**: Lowest F2 among all tunnels. Complex_staggered with 7 segments per ring may have more challenging geometry. Larger radius (3.75m) requires wider search space. More BO runs (50) needed to find good parameters.
+
+### 9.5 Tunnel 5-1 (complex_staggered)
+
+**Configuration**: 50 runs, 8 initial random, warm-started from 1-4 optimal parameters
+
+**Best Result**:
+- **F2 Score**: 0.9545
+- **Parameters**:
+  - `ring_spacing`: 1.4000
+  - `radius_min`: 3.5257
+  - `radius_max`: 4.0511
+  - `gradient_threshold`: 0.4482
+
+**Observations**: Better than 4-1 despite same assembly type. Optimal `ring_spacing` at upper bound (1.4), suggesting this tunnel has wider ring spacing. Similar `gradient_threshold` to 4-1 (~0.45).
+
+---
+
+## 10. Cross-Tunnel Insights
+
+### 10.1 Parameter Patterns by Tunnel Type
+
+**simple_staggered (1-4, 2-2)**:
+- Higher F2 scores (0.976-0.981)
+- Optimal `ring_spacing`: 1.31-1.40
+- Optimal `gradient_threshold`: 0.46-0.50 (more permissive)
+- Smaller radius (2.75-2.78m)
+
+**continuous (3-1)**:
+- Moderate F2 (0.960)
+- Optimal `ring_spacing`: 1.17 (lower)
+- Optimal `gradient_threshold`: 0.48
+- Similar radius to simple_staggered (2.75m)
+
+**complex_staggered (4-1, 5-1)**:
+- Lower F2 scores (0.938-0.955)
+- Optimal `ring_spacing`: 1.26-1.40 (variable)
+- Optimal `gradient_threshold`: 0.45-0.46
+- Larger radius (3.75m)
+
+### 10.2 Radius Bounds Scaling
+
+The 10% rule for radius bounds (`[radius × 0.90, radius]` and `[radius, radius × 1.10]`) works well across all tunnel sizes:
+- Small tunnels (2.75m): bounds [2.48, 3.03]
+- Large tunnels (3.75m): bounds [3.38, 4.13]
+
+This ensures the search space is appropriately scaled without wasting evaluations.
+
+### 10.3 Warm-Start Effectiveness
+
+Warm-starting from 1-4 optimal parameters helped all tunnels:
+- **2-2**: Quickly found good parameters (F2=0.9760 in 30 runs)
+- **3-1**: Found good parameters despite different assembly type
+- **4-1, 5-1**: Required more exploration (50 runs) but still benefited from warm-start
+
+The 1-4 parameters serve as a good initialization point, especially for `ring_spacing` and `gradient_threshold`.
+
+---
+
+## 11. Current State
+
+### 11.1 Active Parameters by Tunnel
+
+All tunnels now have optimized `parameters_preprocessing.json` files in their respective agent directories:
+- `agents/simple_staggered/1_preprocessing/parameters/{1-4,2-2}/`
+- `agents/continuous/1_preprocessing/parameters/3-1/`
+- `agents/complex_staggered/1_preprocessing/parameters/{4-1,5-1}/`
+
+### 11.2 Log Files Organization
+
+- **simple_staggered**: `preproc_1-4_*.json` (20 files), `preproc_2-2_*.json` (30 files)
+- **continuous**: `preproc_3-1_*.json` (30 files)
+- **complex_staggered**: `preproc_4-1_*.json` (50 files), `preproc_5-1_*.json` (50 files)
+
+Total: 180 BO trial logs across all tunnels.
+
+---
+
+## 12. Next Steps
 
 1. **Detection BO**: Optimize detection parameters (including the newly moved
    `target_distances`, `curvature_neighbors`, `depth_map_resolution`,
    `interpolation_window`) using K-position accuracy as the ground truth.
+   Run for each tunnel type separately.
 
 2. **SAM BO**: Optimize SAM segmentation parameters using mIoU as the ground truth.
+   Run for each tunnel type separately.
 
 3. **End-to-end validation**: After all three stages are individually optimized,
-   run the full pipeline and evaluate final mIoU against the current baseline
-   (OA 0.645, mIoU 0.333).
+   run the full pipeline for all tunnels and evaluate final mIoU against baselines.
+
+4. **Radius extraction refinement**: Improve slice-and-fit method or implement
+   spline-fitted centerline approach to eliminate need for manual diameter fallback.

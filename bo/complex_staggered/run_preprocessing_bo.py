@@ -25,12 +25,19 @@ from skopt import gp_minimize
 from skopt.space import Real, Integer
 
 # Add project root to path
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+# BO script is now in: bo/{agent_type}/
+# Project root is 3 levels up
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Extract agent_type from directory name
+# Script is in bo/{agent_type}/, so parent.name gives agent_type
+DEFAULT_AGENT_TYPE = Path(__file__).parent.name
+
 # Import preprocessing functions
-preprocessing_dir = os.path.join(PROJECT_ROOT, 'agents', 'simple_staggered', '1_preprocessing')
-sys.path.insert(0, preprocessing_dir)
+# Preprocessing script is in: agents/{agent_type}/1_preprocessing/
+preprocessing_dir = PROJECT_ROOT / 'agents' / DEFAULT_AGENT_TYPE / '1_preprocessing'
+sys.path.insert(0, str(preprocessing_dir))
 
 spec = importlib.util.spec_from_file_location(
     "preprocessing",
@@ -51,18 +58,45 @@ DEFAULT_TUNNEL_DIAMETER = preprocessing_module.DEFAULT_TUNNEL_DIAMETER
 # Search Space Definition
 # =============================================================================
 
-def get_preprocessing_dimensions() -> Tuple[List, List[str]]:
+def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_staggered') -> Tuple[List, List[str]]:
     """
     Define search space for preprocessing parameters (4 total).
+    Radius bounds are auto-set from tunnel characteristics (10% rule).
+    
+    Args:
+        tunnel_id: Tunnel identifier (e.g., '1-4', '2-2')
+        agent_type: Agent type ('simple_staggered', 'continuous', 'complex_staggered')
     
     Returns:
         Tuple of (dimensions list, parameter names list)
     """
+    # Load characteristics.json to get cross_section_radius
+    params_dir = os.path.join(
+        PROJECT_ROOT, 'agents', agent_type, '1_preprocessing',
+        'parameters', tunnel_id
+    )
+    chars_file = os.path.join(params_dir, 'characteristics.json')
+    
+    if os.path.exists(chars_file):
+        with open(chars_file, 'r') as f:
+            chars = json.load(f)
+        radius = chars.get('cross_section_radius_m', 2.77)  # fallback to 1-4 default
+    else:
+        # Fallback if characteristics.json doesn't exist
+        radius = 2.77
+        print(f"Warning: characteristics.json not found for {tunnel_id}, using default radius=2.77")
+    
+    # Set radius bounds: 10% below and above
+    radius_min_low = radius * 0.90
+    radius_min_high = radius
+    radius_max_low = radius
+    radius_max_high = radius * 1.10
+    
     dimensions = [
-        Real(1.0, 1.4, name='ring_spacing'),             # Ring spacing in meters
-        Real(2.60, 2.77, name='radius_min'),              # Inner radius filter
-        Real(2.77, 2.95, name='radius_max'),              # Outer radius filter
-        Real(0.05, 0.5, name='gradient_threshold'),       # Surface cutoff aggressiveness
+        Real(1.0, 1.4, name='ring_spacing'),             # Ring spacing in meters (universal)
+        Real(radius_min_low, radius_min_high, name='radius_min'),  # Inner radius filter (tunnel-specific)
+        Real(radius_max_low, radius_max_high, name='radius_max'),  # Outer radius filter (tunnel-specific)
+        Real(0.05, 0.5, name='gradient_threshold'),       # Surface cutoff aggressiveness (universal)
     ]
     
     param_names = [
@@ -186,15 +220,17 @@ class PreprocessingObjective:
         data_dir: str = 'data',
         verbose: bool = True,
         eval_offset: int = 0,
+        agent_type: str = DEFAULT_AGENT_TYPE,
     ):
         self.tunnel_id = tunnel_id
         self.data_dir = data_dir
         self.verbose = verbose
+        self.agent_type = agent_type
         
         self.tunnel_dir = os.path.join(data_dir, tunnel_id)
         self.params_dir = os.path.join(
             PROJECT_ROOT,
-            'agents', 'simple_staggered', '1_preprocessing',
+            'agents', agent_type, '1_preprocessing',
             'parameters', tunnel_id
         )
         os.makedirs(self.params_dir, exist_ok=True)
@@ -207,8 +243,8 @@ class PreprocessingObjective:
         df_raw = load_point_cloud(raw_file)
         self.num_points_input = len(df_raw)
         
-        # Get search space
-        self.dimensions, self.param_names = get_preprocessing_dimensions()
+        # Get search space (auto-adaptive based on tunnel characteristics)
+        self.dimensions, self.param_names = get_preprocessing_dimensions(tunnel_id, agent_type)
         
         # Tracking — eval_offset allows continuing numbering from previous runs
         self.eval_offset = eval_offset
@@ -218,7 +254,7 @@ class PreprocessingObjective:
         self.history = []
         self.logs_dir = os.path.join(
             PROJECT_ROOT,
-            'agents', 'simple_staggered', '1_preprocessing', 'bo', 'logs'
+            'bo', agent_type, 'logs'
         )
         os.makedirs(self.logs_dir, exist_ok=True)
         
@@ -496,17 +532,19 @@ def run_preprocessing_bo(
     n_calls: int = 30,
     n_initial_points: int = 5,
     verbose: bool = True,
+    agent_type: str = DEFAULT_AGENT_TYPE,
 ) -> Dict:
     """Run Bayesian Optimization for preprocessing parameters."""
     
     print(f"\n{'='*70}")
-    print(f"PREPROCESSING BAYESIAN OPTIMIZATION - Tunnel {tunnel_id}")
+    print(f"PREPROCESSING BAYESIAN OPTIMIZATION - Tunnel {tunnel_id} ({agent_type})")
     print(f"{'='*70}")
     
     logs_dir = os.path.join(
         PROJECT_ROOT,
-        'agents', 'simple_staggered', '1_preprocessing', 'bo', 'logs'
+        'bo', agent_type, 'logs'
     )
+    os.makedirs(logs_dir, exist_ok=True)
     
     # Determine eval offset from existing logs
     eval_offset = find_max_trial_index(logs_dir, tunnel_id)
@@ -517,6 +555,7 @@ def run_preprocessing_bo(
         data_dir=data_dir,
         verbose=verbose,
         eval_offset=eval_offset,
+        agent_type=agent_type,
     )
     
     print(f"\nSearch space: {len(objective.param_names)} parameters")
@@ -584,6 +623,9 @@ if __name__ == "__main__":
     parser.add_argument('--n-calls', type=int, default=30, help='Total evaluations')
     parser.add_argument('--n-initial', type=int, default=5, help='Initial random points')
     parser.add_argument('--verbose', action='store_true', default=True, help='Verbose output')
+    parser.add_argument('--agent-type', type=str, default='simple_staggered',
+                       choices=['simple_staggered', 'continuous', 'complex_staggered'],
+                       help='Agent type (default: simple_staggered)')
     
     args = parser.parse_args()
     
@@ -593,4 +635,5 @@ if __name__ == "__main__":
         n_calls=args.n_calls,
         n_initial_points=args.n_initial,
         verbose=args.verbose,
+        agent_type=args.agent_type,
     )

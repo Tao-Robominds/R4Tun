@@ -119,24 +119,77 @@ def fit_circle_2d(points_2d: np.ndarray) -> tuple[float, float, float]:
     return cx, cy, float(R)
 
 
-def extract_cross_section_radius(points: np.ndarray, radius_percentile: float = 80.0) -> float:
+def extract_cross_section_radius(
+    points: np.ndarray, 
+    slice_thickness: float = 0.5,
+    min_points_per_slice: int = 50,
+) -> float:
     """
-    Tunnel radius from geometry: PCA → cross-section plane → circle fit for center,
-    then use a percentile of radial distances from that center.
-
-    The algebraic circle fit alone underestimates when points do not reach the wall
-    uniformly. Using the 80th percentile of distances from the fitted center recovers
-    the true tunnel radius (ground truth 2.75 m for tunnel 1-4). Overridable via
-    --radius-percentile.
+    Tunnel radius from geometry using slice-and-fit method (robust to tunnel curvature).
+    
+    Method:
+    1. PCA to find tunnel axis
+    2. Divide points into thin slices along the axis
+    3. For each slice, project to local cross-section and fit circle
+    4. Return median of per-slice radii
+    
+    This avoids the bias from projecting all points onto a single plane, which
+    inflates radius for curved tunnels.
+    
+    Args:
+        points: (N, 3) point cloud
+        slice_thickness: Thickness of each slice in meters (default 0.5)
+        min_points_per_slice: Minimum points required to fit a circle (default 50)
+    
+    Returns:
+        Median radius across all valid slices
     """
     center, axis = fit_tunnel_axis(points)
-    plane_2d = project_to_cross_section_plane(points, center, axis)
-    cx, cy, _ = fit_circle_2d(plane_2d)
-    # Radial distance of each point to the fitted center
-    dx = plane_2d[:, 0] - cx
-    dy = plane_2d[:, 1] - cy
-    radii = np.sqrt(dx * dx + dy * dy)
-    return float(np.percentile(radii, radius_percentile))
+    
+    # Project points onto axis to get along-axis positions
+    d = points - center
+    along_axis = d @ axis  # (N,) array of signed distances along axis
+    
+    # Create slices
+    min_pos = float(np.min(along_axis))
+    max_pos = float(np.max(along_axis))
+    num_slices = max(1, int(np.ceil((max_pos - min_pos) / slice_thickness)))
+    
+    slice_radii = []
+    
+    for i in range(num_slices):
+        slice_start = min_pos + i * slice_thickness
+        slice_end = min_pos + (i + 1) * slice_thickness
+        
+        # Find points in this slice
+        mask = (along_axis >= slice_start) & (along_axis < slice_end)
+        if i == num_slices - 1:  # Include last point in final slice
+            mask |= (along_axis == max_pos)
+        
+        slice_points = points[mask]
+        
+        if len(slice_points) < min_points_per_slice:
+            continue
+        
+        # Project slice points to local cross-section plane
+        # Use slice center as the plane origin
+        slice_center = np.mean(slice_points, axis=0)
+        plane_2d = project_to_cross_section_plane(slice_points, slice_center, axis)
+        
+        # Fit circle to this slice
+        cx, cy, R = fit_circle_2d(plane_2d)
+        
+        if R > 0.1:  # Filter out degenerate fits (radius too small)
+            slice_radii.append(R)
+    
+    if len(slice_radii) == 0:
+        # Fallback: use old method if no valid slices
+        plane_2d = project_to_cross_section_plane(points, center, axis)
+        cx, cy, R = fit_circle_2d(plane_2d)
+        return float(R)
+    
+    # Return median radius (robust to outlier slices)
+    return float(np.median(slice_radii))
 
 
 # -----------------------------------------------------------------------------
@@ -197,16 +250,17 @@ def extract_raw_characteristics(
     filepath: str,
     max_points: int = 200_000,
     rng_seed: int = 42,
-    radius_percentile: float = 80.0,
+    slice_thickness: float = 0.5,
 ) -> dict:
     """
     Extract cross_section_radius_m, median_nn_distance_m, density_cv from geometry only.
+    Uses slice-and-fit method for robust radius estimation.
     """
     rng = np.random.default_rng(rng_seed)
     points = load_point_cloud(filepath)
     points_sub = subsample(points, max_points, rng)
 
-    radius = extract_cross_section_radius(points_sub, radius_percentile=radius_percentile)
+    radius = extract_cross_section_radius(points_sub, slice_thickness=slice_thickness)
     nn_dist = extract_median_nn_distance(points_sub, k=5)
     density_cv = extract_density_cv(points_sub, k=20, sample_size=5000, rng=rng)
 
@@ -233,10 +287,10 @@ def main() -> None:
     parser.add_argument("--max-points", type=int, default=200_000, help="Max points for computation")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
-        "--radius-percentile",
+        "--slice-thickness",
         type=float,
-        default=80.0,
-        help="Percentile of radial distances from fitted center for cross_section_radius_m (default 80; matches ground truth 2.75 m for tunnel 1-4)",
+        default=0.5,
+        help="Thickness of slices for radius estimation in meters (default 0.5)",
     )
     args = parser.parse_args()
 
@@ -249,7 +303,7 @@ def main() -> None:
         filepath,
         max_points=args.max_points,
         rng_seed=args.seed,
-        radius_percentile=args.radius_percentile,
+        slice_thickness=args.slice_thickness,
     )
 
     out_path = args.output or os.path.join(args.data_dir, args.tunnel_id, "raw_characteristics.json")

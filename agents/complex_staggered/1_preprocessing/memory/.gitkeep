@@ -1,0 +1,3 @@
+# This directory stores experience logs from preprocessing tuning sessions.
+# Each file records parameter changes, intrinsics before/after, and analysis.
+# Format: {timestamp}_{tunnel_id}_{outcome}_{changed_params}.md
