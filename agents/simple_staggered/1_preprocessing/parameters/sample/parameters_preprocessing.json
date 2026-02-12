@@ -3,9 +3,5 @@
     "tunnel_diameter": 5.5,
     "radius_min": 2.70,
     "radius_max": 2.80,
-    "gradient_threshold": 0.2,
-    "target_distances": [0.08, 0.04, 0.02],
-    "curvature_neighbors": 20,
-    "depth_map_resolution": 0.005,
-    "interpolation_window": 9
+    "gradient_threshold": 0.2
 }

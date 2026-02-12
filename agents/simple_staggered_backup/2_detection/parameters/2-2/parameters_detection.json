@@ -1,8 +1,4 @@
 {
-    "target_distances": [0.09, 0.06, 0.02],
-    "curvature_neighbors": 16,
-    "depth_map_resolution": 0.005,
-    "interpolation_window": 6,
     "dilation_iterations": 1,
     "dilation_kernel_size": 2,
     "hough_vertical_threshold": 700,

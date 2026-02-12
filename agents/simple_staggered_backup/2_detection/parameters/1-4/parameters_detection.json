@@ -1,12 +1,4 @@
 {
-    "target_distances": [
-        0.08,
-        0.04,
-        0.02
-    ],
-    "curvature_neighbors": 10,
-    "depth_map_resolution": 0.008,
-    "interpolation_window": 9,
     "binary_threshold": 149,
     "dilation_kernel_size": 2,
     "dilation_iterations": 1,
