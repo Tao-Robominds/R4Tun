@@ -871,11 +871,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  crop_margin:      {crop_margin}")
     print(f"  min_quality_threshold: {min_quality_threshold}")
     
-    print(f"\nComplex staggered differences:")
-    print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
-    print(f"  Wrap-around:      ENABLED")
-    print(f"  Point update:     pred=0 AND pred=7")
-    
     # Load input data
     print("\n[Step 1] Loading data...")
     detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
@@ -893,6 +888,11 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  Detected K positions: {len(initial_prompt_points)}")
     print(f"  Ring count: {ring_count}")
     print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
+    
+    print(f"\nComplex staggered differences:")
+    print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
+    print(f"  Wrap-around:      ENABLED")
+    print(f"  Point update:     pred=0 AND pred=7")
     
     # Calculate y_bounds from image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
