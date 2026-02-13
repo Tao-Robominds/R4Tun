@@ -1,0 +1,65 @@
+{
+  "schema_version": "r4tun.detection.v1",
+  "trial": {
+    "trial_id": "detect_1-4_144",
+    "timestamp_utc": "2026-02-12T21:57:39Z",
+    "tunnel_id": "1-4",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "target_distances": [
+      0.08270086119200312,
+      0.04135043059600156,
+      0.02
+    ],
+    "curvature_neighbors": 10,
+    "depth_map_resolution": 0.00509879967833981,
+    "interpolation_window": 15,
+    "binary_threshold": 88,
+    "dilation_kernel_size": 2,
+    "dilation_iterations": 1,
+    "hough_oblique_threshold": 111,
+    "hough_oblique_min_length": 120,
+    "hough_oblique_max_gap": 20,
+    "angle_positive_min": 5.42704913994154,
+    "angle_positive_max": 11.356082534180832,
+    "angle_negative_min": -11.356082534180832,
+    "angle_negative_max": -5.42704913994154,
+    "hough_vertical_threshold": 544
+  },
+  "outputs": {
+    "num_detected": 9,
+    "num_gt": 10,
+    "confusion": {
+      "tp": 8,
+      "fp": 1,
+      "fn": 2
+    },
+    "metrics": {
+      "precision": 0.8888888888888888,
+      "recall": 0.8,
+      "f1": 0.8421052631578948,
+      "position_bonus": 0.4067599263499815,
+      "weighted_f1": 0.5923199689894659,
+      "mean_distance_px": 59.32400736500185
+    },
+    "matched_distances_px": [
+      22.139004044615895,
+      15.852834263091838,
+      33.89512856106167,
+      56.4609605097752,
+      78.73414667229841,
+      94.08984882078724,
+      95.4351360291344,
+      77.98500001925015
+    ]
+  },
+  "bo": {
+    "objective_name": "kposition_weighted_f1",
+    "objective_value": 0.5923199689894659,
+    "eval_index": 144,
+    "runtime_sec": 69.56679916381836,
+    "is_feasible": true,
+    "cached_enhancing": false
+  }
+}

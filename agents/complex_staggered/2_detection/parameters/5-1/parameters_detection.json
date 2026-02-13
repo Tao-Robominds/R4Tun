@@ -1,0 +1,21 @@
+{
+  "target_distances": [
+    0.08079722923035461,
+    0.040398614615177304,
+    0.02
+  ],
+  "curvature_neighbors": 9,
+  "depth_map_resolution": 0.009212317422539225,
+  "interpolation_window": 5,
+  "binary_threshold": 86,
+  "dilation_kernel_size": 2,
+  "dilation_iterations": 3,
+  "hough_oblique_threshold": 61,
+  "hough_oblique_min_length": 52,
+  "hough_oblique_max_gap": 58,
+  "angle_positive_min": 5.526143005882134,
+  "angle_positive_max": 11.203182183478543,
+  "angle_negative_min": -11.203182183478543,
+  "angle_negative_max": -5.526143005882134,
+  "hough_vertical_threshold": 381
+}

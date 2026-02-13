@@ -1,0 +1,43 @@
+{
+  "schema_version": "r4tun.detection.v1",
+  "trial": {
+    "trial_id": "detect_4-1_001",
+    "timestamp_utc": "2026-02-13T02:33:08Z",
+    "tunnel_id": "4-1",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "target_distances": [
+      0.10457837001909386,
+      0.05228918500954693,
+      0.02
+    ],
+    "curvature_neighbors": 27,
+    "depth_map_resolution": 0.009655000144869415,
+    "interpolation_window": 13,
+    "binary_threshold": 100,
+    "dilation_kernel_size": 4,
+    "dilation_iterations": 2,
+    "hough_oblique_threshold": 102,
+    "hough_oblique_min_length": 126,
+    "hough_oblique_max_gap": 30,
+    "angle_positive_min": 5.377746675897601,
+    "angle_positive_max": 9.001688750125599,
+    "angle_negative_min": -9.001688750125599,
+    "angle_negative_max": -5.377746675897601,
+    "hough_vertical_threshold": 330
+  },
+  "trace": {
+    "warnings": [
+      "Error: 'float' object cannot be interpreted as an integer"
+    ]
+  },
+  "bo": {
+    "objective_name": "kposition_weighted_f1",
+    "objective_value": 0.0,
+    "eval_index": 9,
+    "runtime_sec": 131.5017921924591,
+    "is_feasible": false,
+    "cached_enhancing": false
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "description": "Round 1 config for 5-1, narrowed around warm-up from reports/results (F1=0.8554)",
+  "fixed_params": {},
+  "narrowed_bounds": {
+    "binary_threshold": [
+      61,
+      103
+    ],
+    "dilation_kernel_size": [
+      2,
+      4
+    ],
+    "dilation_iterations": [
+      3,
+      5
+    ],
+    "hough_oblique_threshold": [
+      36,
+      62
+    ],
+    "hough_oblique_min_length": [
+      44,
+      74
+    ],
+    "hough_oblique_max_gap": [
+      48,
+      80
+    ],
+    "angle_min": [
+      3.752,
+      6.253
+    ],
+    "angle_max": [
+      7.525,
+      12.541
+    ],
+    "curvature_neighbors": [
+      8,
+      30
+    ],
+    "depth_map_resolution": [
+      0.003,
+      0.01
+    ],
+    "interpolation_window": [
+      3,
+      15
+    ],
+    "target_distance_1": [
+      0.05,
+      0.12
+    ],
+    "hough_vertical_threshold": [
+      375,
+      625
+    ]
+  }
+}

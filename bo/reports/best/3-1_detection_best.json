@@ -1,0 +1,35 @@
+{
+  "tunnel_id": "3-1",
+  "agent_type": "continuous",
+  "stage": "detection",
+  "best_weighted_f1": 0.5812497253660596,
+  "trial_id": "detect_3-1_065",
+  "parameters": {
+    "target_distances": [
+      0.09709069546057084,
+      0.04854534773028542,
+      0.02
+    ],
+    "curvature_neighbors": 21,
+    "depth_map_resolution": 0.009904261794691876,
+    "interpolation_window": 14,
+    "binary_threshold": 167,
+    "dilation_kernel_size": 3,
+    "dilation_iterations": 3,
+    "hough_oblique_threshold": 75,
+    "hough_oblique_min_length": 121,
+    "hough_oblique_max_gap": 96,
+    "angle_positive_min": 3.276005212638587,
+    "angle_positive_max": 11.133592689832923,
+    "angle_negative_min": -11.133592689832923,
+    "angle_negative_max": -3.276005212638587,
+    "hough_vertical_threshold": 750
+  },
+  "metrics": {
+    "f1": 0.7272727272727272,
+    "precision": 0.6666666666666666,
+    "recall": 0.8,
+    "position_bonus": 0.5984367447566639,
+    "mean_distance_px": 40.15632552433361
+  }
+}

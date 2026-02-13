@@ -1,0 +1,55 @@
+{
+  "description": "Round 2 config for 4-1, based on 78-trial Round 1 analysis",
+  "fixed_params": {
+    "dilation_kernel_size": 1,
+    "hough_oblique_min_length": 90,
+    "angle_positive_max": 10.761,
+    "hough_vertical_threshold": 447
+  },
+  "narrowed_bounds": {
+    "curvature_neighbors": [
+      14.65,
+      24.85
+    ],
+    "depth_map_resolution": [
+      0.004895670383489196,
+      0.008796998567534148
+    ],
+    "interpolation_window": [
+      6.3,
+      14.7
+    ],
+    "target_distance_1": [
+      0.056591316646210935,
+      0.07478536229167643
+    ],
+    "binary_threshold": [
+      102.55,
+      119.95
+    ],
+    "hough_oblique_threshold": [
+      38.05,
+      55.45
+    ],
+    "hough_oblique_min_length": [
+      87.95,
+      100.55
+    ],
+    "hough_oblique_max_gap": [
+      70.0,
+      100.0
+    ],
+    "angle_min": [
+      5.673116251308598,
+      7.52891876009588
+    ],
+    "angle_max": [
+      10.455233032019445,
+      11.066119933187304
+    ],
+    "hough_vertical_threshold": [
+      407.75,
+      482.75
+    ]
+  }
+}

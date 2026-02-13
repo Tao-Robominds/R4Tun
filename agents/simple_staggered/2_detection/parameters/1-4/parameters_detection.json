@@ -1,21 +1,21 @@
 {
-    "target_distances": [
-        0.08,
-        0.04,
-        0.02
-    ],
-    "curvature_neighbors": 10,
-    "depth_map_resolution": 0.008,
-    "interpolation_window": 9,
-    "binary_threshold": 149,
-    "dilation_kernel_size": 2,
-    "dilation_iterations": 1,
-    "hough_oblique_threshold": 69,
-    "hough_oblique_min_length": 99,
-    "hough_oblique_max_gap": 60,
-    "angle_positive_min": 5.509,
-    "angle_positive_max": 8.652,
-    "angle_negative_min": -8.652,
-    "angle_negative_max": -5.509,
-    "hough_vertical_threshold": 574
+  "target_distances": [
+    0.05942171425336516,
+    0.02971085712668258,
+    0.02
+  ],
+  "curvature_neighbors": 12,
+  "depth_map_resolution": 0.005104898036102161,
+  "interpolation_window": 15,
+  "binary_threshold": 84,
+  "dilation_kernel_size": 2,
+  "dilation_iterations": 1,
+  "hough_oblique_threshold": 67,
+  "hough_oblique_min_length": 62,
+  "hough_oblique_max_gap": 42,
+  "angle_positive_min": 5.9415580815747,
+  "angle_positive_max": 9.983514024173747,
+  "angle_negative_min": -9.983514024173747,
+  "angle_negative_max": -5.9415580815747,
+  "hough_vertical_threshold": 547
 }

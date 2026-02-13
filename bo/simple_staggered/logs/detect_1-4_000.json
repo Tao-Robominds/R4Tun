@@ -1,0 +1,38 @@
+{
+  "schema_version": "r4tun.detection.v1",
+  "trial": {
+    "trial_id": "detect_1-4_000",
+    "timestamp_utc": "2026-02-12T18:51:45Z",
+    "tunnel_id": "1-4",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "target_distances": [
+      0.08,
+      0.04,
+      0.02
+    ],
+    "curvature_neighbors": 20,
+    "depth_map_resolution": 0.005,
+    "interpolation_window": 9,
+    "binary_threshold": 119,
+    "dilation_kernel_size": 5,
+    "dilation_iterations": 2,
+    "hough_oblique_threshold": 73,
+    "hough_oblique_min_length": 128,
+    "hough_oblique_max_gap": 44,
+    "angle_positive_min": 6.0,
+    "angle_positive_max": 9.0,
+    "angle_negative_min": -9.0,
+    "angle_negative_max": -6.0,
+    "hough_vertical_threshold": 500
+  },
+  "bo": {
+    "objective_name": "kposition_weighted_f1",
+    "objective_value": 0.6,
+    "eval_index": 0,
+    "runtime_sec": 0.0,
+    "is_feasible": true,
+    "cached_enhancing": false
+  }
+}

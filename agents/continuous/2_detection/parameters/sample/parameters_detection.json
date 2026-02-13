@@ -1,0 +1,17 @@
+{
+    "target_distances": [0.08, 0.04, 0.02],
+    "curvature_neighbors": 20,
+    "depth_map_resolution": 0.005,
+    "interpolation_window": 9,
+    "dilation_iterations": 2,
+    "dilation_kernel_size": 3,
+    "hough_vertical_threshold": 500,
+    "angle_positive_max": 8.0,
+    "binary_threshold": 127,
+    "hough_oblique_threshold": 50,
+    "angle_positive_min": 6.0,
+    "angle_negative_min": -8.0,
+    "angle_negative_max": -6.0,
+    "hough_oblique_min_length": 67,
+    "hough_oblique_max_gap": 32
+}

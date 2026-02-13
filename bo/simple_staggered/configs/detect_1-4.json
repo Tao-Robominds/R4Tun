@@ -1,0 +1,20 @@
+{
+  "description": "Round 2 config for 1-4, based on 80-trial Round 1 analysis",
+  "fixed_params": {
+    "dilation_kernel_size": 2,
+    "dilation_iterations": 1
+  },
+  "narrowed_bounds": {
+    "curvature_neighbors": [6, 20],
+    "depth_map_resolution": [0.004, 0.007],
+    "interpolation_window": [9, 15],
+    "target_distance_1": [0.05, 0.12],
+    "binary_threshold": [80, 180],
+    "hough_oblique_threshold": [50, 130],
+    "hough_oblique_min_length": [50, 150],
+    "hough_oblique_max_gap": [20, 60],
+    "angle_min": [4.0, 7.0],
+    "angle_max": [8.0, 12.0],
+    "hough_vertical_threshold": [300, 600]
+  }
+}
