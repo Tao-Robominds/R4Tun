@@ -1,11 +1,11 @@
 """
 Bayesian Optimization for Detection Parameters with K-Position F1 Objective
 
-Optimizes detection parameters (enhancing + line detection) to maximize
+Optimizes detection parameters (line detection only) to maximize
 K-Position Weighted F1 score against ground truth K positions.
 
-Uses forest_minimize (Random Forest surrogate) for high-dimensional search space (13 params).
-Implements depth map caching to avoid re-running enhancing when only detection params change.
+Uses forest_minimize (Random Forest surrogate) for 14D detection-only search space.
+Detection reads depth_map_outlier.npy from preprocessing stage (no enhancing step).
 """
 
 import os
@@ -15,7 +15,6 @@ import glob
 import time
 import argparse
 import importlib.util
-import hashlib
 from datetime import datetime, timezone
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
@@ -34,7 +33,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 # Extract agent_type from directory name
 # Script is in bo/{agent_type}/, so parent.name gives agent_type
-DEFAULT_AGENT_TYPE = Path(__file__).parent.name if Path(__file__).parent.name != "bo" else "simple_staggered"
+DEFAULT_AGENT_TYPE = Path(__file__).parent.name
 
 # Import detection functions
 # Detection script is in: agents/{agent_type}/2_detection/
@@ -62,31 +61,27 @@ def get_detection_dimensions(
     agent_type: str = DEFAULT_AGENT_TYPE
 ) -> Tuple[List, List[str], Dict]:
     """
-    Define search space for detection parameters.
+    Define search space for detection parameters (detection-only, 14D).
     
     Loads per-tunnel config from bo/{agent_type}/configs/detect_{tunnel_id}.json if it exists.
     If config exists:
         - Excludes parameters listed in fixed_params from search space
         - Overrides bounds from narrowed_bounds
-    If no config: returns full 13D default space.
+    If no config: returns full 14D default space.
     
-    Note: Negative angles are derived symmetrically from positive angles,
-    reducing from 15 raw params to 13 tunable (or fewer if some are fixed).
+    Note: Negative angles are derived symmetrically from positive angles.
+    Enhancing parameters (target_distances, curvature_neighbors, depth_map_resolution, interpolation_window)
+    are NOT in this search space - they belong to preprocessing BO.
     
     Args:
         tunnel_id: Tunnel identifier (e.g., '1-4')
-        agent_type: Agent type (e.g., 'simple_staggered')
+        agent_type: Agent type (e.g., 'continuous')
     
     Returns:
         Tuple of (dimensions list, parameter names list, fixed_params dict)
     """
-    # Default bounds (full 13D space)
-    # Continuous tunnels need higher hough_vertical_threshold to avoid false positives
+    # Default bounds (14D detection-only space)
     default_bounds = {
-        'curvature_neighbors': (8, 30),
-        'depth_map_resolution': (0.003, 0.010),
-        'interpolation_window': (3, 15),
-        'target_distance_1': (0.05, 0.12),
         'binary_threshold': (80, 200),
         'dilation_kernel_size': (2, 5),
         'dilation_iterations': (1, 4),
@@ -95,7 +90,12 @@ def get_detection_dimensions(
         'hough_oblique_max_gap': (20, 80),
         'angle_min': (4.0, 7.0),
         'angle_max': (7.5, 12.0),
-        'hough_vertical_threshold': (400, 1000),  # Higher for continuous (fewer vertical lines)
+        'hough_vertical_threshold': (200, 800),
+        'hough_horizontal_threshold': (20, 100),
+        'hough_horizontal_min_length': (50, 150),
+        'hough_horizontal_max_gap': (3, 30),
+        'horizontal_angle_tolerance': (0.5, 3.0),
+        'merge_distance_threshold': (1, 10),
     }
     
     # Load per-tunnel config if it exists
@@ -119,10 +119,6 @@ def get_detection_dimensions(
     param_names = []
     
     param_defs = [
-        ('curvature_neighbors', Integer, bounds['curvature_neighbors']),
-        ('depth_map_resolution', Real, bounds['depth_map_resolution']),
-        ('interpolation_window', Integer, bounds['interpolation_window']),
-        ('target_distance_1', Real, bounds['target_distance_1']),
         ('binary_threshold', Integer, bounds['binary_threshold']),
         ('dilation_kernel_size', Integer, bounds['dilation_kernel_size']),
         ('dilation_iterations', Integer, bounds['dilation_iterations']),
@@ -132,6 +128,11 @@ def get_detection_dimensions(
         ('angle_min', Real, bounds['angle_min']),
         ('angle_max', Real, bounds['angle_max']),
         ('hough_vertical_threshold', Integer, bounds['hough_vertical_threshold']),
+        ('hough_horizontal_threshold', Integer, bounds['hough_horizontal_threshold']),
+        ('hough_horizontal_min_length', Integer, bounds['hough_horizontal_min_length']),
+        ('hough_horizontal_max_gap', Integer, bounds['hough_horizontal_max_gap']),
+        ('horizontal_angle_tolerance', Real, bounds['horizontal_angle_tolerance']),
+        ('merge_distance_threshold', Real, bounds['merge_distance_threshold']),
     ]
     
     for name, param_type, (low, high) in param_defs:
@@ -144,10 +145,9 @@ def get_detection_dimensions(
 
 def params_to_detection_json(params: List, param_names: List[str], fixed_params: Dict = None) -> Dict:
     """
-    Convert BO parameters to detection JSON structure.
+    Convert BO parameters to detection JSON structure (detection-only, no enhancing).
     
     Derives negative angles symmetrically from positive angles.
-    Constructs target_distances as [td1, td1*0.5, 0.02].
     Merges fixed_params into output (fixed params are not in param_names/params).
     
     Args:
@@ -156,7 +156,7 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
         fixed_params: Dict of fixed parameter values (not in BO search space)
     
     Returns:
-        Complete detection parameters dict with all 15 fields
+        Detection parameters dict (no enhancing parameters)
     """
     if fixed_params is None:
         fixed_params = {}
@@ -166,19 +166,11 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
     # Merge fixed params into param_dict (fixed params take precedence)
     param_dict.update(fixed_params)
     
-    # Construct target_distances from single param
-    td1 = param_dict['target_distance_1']
-    target_distances = [td1, td1 * 0.5, 0.02]
-    
     # Derive negative angles from positive
     angle_min = param_dict['angle_min']
     angle_max = param_dict['angle_max']
     
     return {
-        'target_distances': target_distances,
-        'curvature_neighbors': int(param_dict['curvature_neighbors']),
-        'depth_map_resolution': float(param_dict['depth_map_resolution']),
-        'interpolation_window': int(param_dict['interpolation_window']),
         'binary_threshold': int(param_dict['binary_threshold']),
         'dilation_kernel_size': int(param_dict['dilation_kernel_size']),
         'dilation_iterations': int(param_dict['dilation_iterations']),
@@ -190,6 +182,11 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
         'angle_negative_min': -float(angle_max),  # Symmetric
         'angle_negative_max': -float(angle_min),  # Symmetric
         'hough_vertical_threshold': int(param_dict['hough_vertical_threshold']),
+        'hough_horizontal_threshold': int(param_dict.get('hough_horizontal_threshold', 50)),
+        'hough_horizontal_min_length': int(param_dict.get('hough_horizontal_min_length', 100)),
+        'hough_horizontal_max_gap': int(param_dict.get('hough_horizontal_max_gap', 10)),
+        'horizontal_angle_tolerance': float(param_dict.get('horizontal_angle_tolerance', 1.0)),
+        'merge_distance_threshold': float(param_dict.get('merge_distance_threshold', 3.0)),
     }
 
 
@@ -200,7 +197,7 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
 def compute_kposition_f1(
     detected: pd.DataFrame,
     gt: pd.DataFrame,
-    threshold: float = 100.0
+    threshold: float = 150.0
 ) -> Dict:
     """
     Compute K-Position Weighted F1 score using Hungarian matching.
@@ -312,7 +309,7 @@ def compute_kposition_f1(
 class DetectionObjective:
     """
     Objective function that evaluates detection parameters using K-Position F1 score.
-    Implements depth map caching to avoid re-running enhancing when only detection params change.
+    Detection reads depth_map_outlier.npy from preprocessing (no enhancing step).
     """
     
     def __init__(
@@ -382,9 +379,13 @@ class DetectionObjective:
         )
         os.makedirs(self.logs_dir, exist_ok=True)
         
-        # Depth map caching
-        self.cached_depth_map_hash = None
-        self.cached_enhancing_params = None
+        # Verify depth_map_outlier.npy exists (from preprocessing)
+        depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
+        if not os.path.exists(depth_map_file):
+            raise FileNotFoundError(
+                f"depth_map_outlier.npy not found at {depth_map_file}. "
+                f"Run preprocessing first to generate depth maps."
+            )
         
         if verbose:
             print(f"Detection BO for tunnel {tunnel_id}")
@@ -396,32 +397,12 @@ class DetectionObjective:
                 print(f"Fixed parameters: {list(self.fixed_params.keys())}")
             print(f"Eval numbering starts at: {self.eval_offset + 1}")
             print(f"Logs directory: {self.logs_dir}")
+            print(f"Using depth_map_outlier.npy from preprocessing stage")
     
     @property
     def global_eval_index(self) -> int:
         """Current global eval index (offset + local count)."""
         return self.eval_offset + self.eval_count
-    
-    def _get_enhancing_params_hash(self, param_dict: Dict) -> str:
-        """Compute hash of enhancing parameters for caching."""
-        enhancing_params = {
-            'curvature_neighbors': param_dict['curvature_neighbors'],
-            'depth_map_resolution': param_dict['depth_map_resolution'],
-            'interpolation_window': param_dict['interpolation_window'],
-            'target_distances': param_dict['target_distances'],
-        }
-        param_str = json.dumps(enhancing_params, sort_keys=True)
-        return hashlib.md5(param_str.encode()).hexdigest()
-    
-    def _should_skip_enhancing(self, param_dict: Dict) -> bool:
-        """Check if we can skip enhancing (reuse cached depth map)."""
-        enhancing_hash = self._get_enhancing_params_hash(param_dict)
-        depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
-        
-        if (self.cached_depth_map_hash == enhancing_hash and 
-            os.path.exists(depth_map_file)):
-            return True
-        return False
     
     def __call__(self, params: List) -> float:
         """
@@ -440,34 +421,26 @@ class DetectionObjective:
             # Convert params to dict (merge with fixed params)
             param_dict = params_to_detection_json(params, self.param_names, self.fixed_params)
             
-            # Check if we can skip enhancing
-            skip_enhancing = self._should_skip_enhancing(param_dict)
-            
             # Save parameters
             params_file = os.path.join(self.params_dir, 'parameters_detection.json')
             with open(params_file, 'w') as f:
                 json.dump(param_dict, f, indent=4)
             
             # Run detection (suppress output)
+            # Detection now just loads depth_map_outlier.npy and runs line detection
             import io
             from contextlib import redirect_stdout, redirect_stderr
             
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 detected_positions = run_detection(self.tunnel_id, self.data_dir)
             
-            # Update cache if enhancing was run
-            if not skip_enhancing:
-                enhancing_hash = self._get_enhancing_params_hash(param_dict)
-                self.cached_depth_map_hash = enhancing_hash
-                self.cached_enhancing_params = {
-                    k: param_dict[k] for k in ['curvature_neighbors', 'depth_map_resolution',
-                                                'interpolation_window', 'target_distances']
-                }
-            
-            # Convert GT from cylindrical (h, theta) to pixel coordinates using current depth map
+            # Convert GT from cylindrical (h, theta) to pixel coordinates using depth map from preprocessing
             depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
             if not os.path.exists(depth_map_file):
-                raise FileNotFoundError(f"depth_map_outlier.npy not found after detection run: {depth_map_file}")
+                raise FileNotFoundError(
+                    f"depth_map_outlier.npy not found at {depth_map_file}. "
+                    f"Run preprocessing first to generate depth maps."
+                )
             
             depth_map = np.load(depth_map_file)
             H, W = depth_map.shape
@@ -503,7 +476,7 @@ class DetectionObjective:
                 results,
                 len(detected_positions),
                 runtime,
-                skip_enhancing,
+                False,  # No caching (always False now)
             )
             
             # Record history
@@ -546,7 +519,7 @@ class DetectionObjective:
         results: Optional[Dict],
         num_detected: int,
         runtime: float,
-        cached: bool,
+        cached: bool,  # Kept for backward compatibility but always False
         error: Optional[str] = None,
     ):
         """Log trial to JSON file."""
@@ -702,21 +675,22 @@ def load_best_from_logs(
         return None
     
     # Build param list in dimension order, EXCLUDING fixed params
-    # Map from full param names to extraction logic
+    # Map from full param names to extraction logic (detection-only, no enhancing)
     param_extractors = {
-        'curvature_neighbors': lambda p: p.get('curvature_neighbors', 10),
-        'depth_map_resolution': lambda p: p.get('depth_map_resolution', 0.008),
-        'interpolation_window': lambda p: p.get('interpolation_window', 9),
-        'target_distance_1': lambda p: p.get('target_distances', [0.08, 0.04, 0.02])[0],
-        'binary_threshold': lambda p: p.get('binary_threshold', 149),
-        'dilation_kernel_size': lambda p: p.get('dilation_kernel_size', 2),
+        'binary_threshold': lambda p: p.get('binary_threshold', 127),
+        'dilation_kernel_size': lambda p: p.get('dilation_kernel_size', 3),
         'dilation_iterations': lambda p: p.get('dilation_iterations', 1),
-        'hough_oblique_threshold': lambda p: p.get('hough_oblique_threshold', 69),
-        'hough_oblique_min_length': lambda p: p.get('hough_oblique_min_length', 99),
-        'hough_oblique_max_gap': lambda p: p.get('hough_oblique_max_gap', 60),
-        'angle_min': lambda p: p.get('angle_positive_min', 5.509),
-        'angle_max': lambda p: p.get('angle_positive_max', 8.652),
-        'hough_vertical_threshold': lambda p: p.get('hough_vertical_threshold', 574),
+        'hough_oblique_threshold': lambda p: p.get('hough_oblique_threshold', 50),
+        'hough_oblique_min_length': lambda p: p.get('hough_oblique_min_length', 100),
+        'hough_oblique_max_gap': lambda p: p.get('hough_oblique_max_gap', 40),
+        'angle_min': lambda p: p.get('angle_positive_min', 6.0),
+        'angle_max': lambda p: p.get('angle_positive_max', 9.0),
+        'hough_vertical_threshold': lambda p: p.get('hough_vertical_threshold', 500),
+        'hough_horizontal_threshold': lambda p: p.get('hough_horizontal_threshold', 50),
+        'hough_horizontal_min_length': lambda p: p.get('hough_horizontal_min_length', 100),
+        'hough_horizontal_max_gap': lambda p: p.get('hough_horizontal_max_gap', 10),
+        'horizontal_angle_tolerance': lambda p: p.get('horizontal_angle_tolerance', 1.0),
+        'merge_distance_threshold': lambda p: p.get('merge_distance_threshold', 3.0),
     }
     
     # Get current search space param names (to know what to include)
@@ -772,7 +746,7 @@ def run_detection_bo(
     
     print(f"\nSearch space: {len(objective.param_names)} parameters")
     print(f"N calls: {n_calls}, N initial: {n_initial_points}")
-    print(f"Objective: K-Position Weighted F1 (threshold=100px)")
+    print(f"Objective: K-Position Weighted F1 (threshold=150px)")
     print(f"Algorithm: forest_minimize (Random Forest surrogate)")
     
     # Warm-start from best previous trial or current parameters file
@@ -853,9 +827,9 @@ if __name__ == "__main__":
     parser.add_argument('--n-calls', type=int, default=80, help='Total evaluations')
     parser.add_argument('--n-initial', type=int, default=15, help='Initial random points')
     parser.add_argument('--verbose', action='store_true', default=True, help='Verbose output')
-    parser.add_argument('--agent-type', type=str, default=DEFAULT_AGENT_TYPE,
-                       choices=['simple_staggered', 'continuous', 'complex_staggered'],
-                       help=f'Agent type (default: {DEFAULT_AGENT_TYPE})')
+    parser.add_argument('--agent-type', type=str, default='continuous',
+                       choices=['continuous', 'continuous', 'complex_staggered'],
+                       help='Agent type (default: continuous)')
     
     args = parser.parse_args()
     

@@ -1,16 +1,18 @@
 """
-Consolidated Preprocessing Pipeline: Unfolding + Denoising
+Consolidated Preprocessing Pipeline: Unfolding + Denoising + Enhancing
 
-This module combines unfolding and denoising stages into a single script with only
+This module combines all preprocessing stages into a single script with only
 CRITICAL parameters exposed for Bayesian Optimization experiments.
 
 Based on P4TUN optimization reports:
 - Unfolding: +0.0% improvement from BO (defaults already optimal)
 - Denoising: gradient_threshold is highly sensitive (0.1 best for 2-2)
+- Enhancing: Combined preprocessing yielded only +0.1% improvement
 
-Critical Parameters (4 total):
+Critical Parameters (8 total):
 - Unfolding: ring_spacing, tunnel_diameter (physical constants)
 - Denoising: radius_min, radius_max, gradient_threshold
+- Enhancing: depth_map_resolution, target_distances, curvature_neighbors, interpolation_window
 
 All non-critical parameters use fixed defaults that performed well across tunnels.
 """
@@ -20,6 +22,8 @@ import sys
 import json
 import math
 import random
+import time
+import pickle
 from typing import Tuple, List, Dict, Any
 from collections import defaultdict
 
@@ -30,9 +34,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 from numba import njit, prange
-from scipy.spatial import ConvexHull, KDTree
-from scipy.interpolate import interp1d
+from scipy.spatial import ConvexHull, KDTree, cKDTree
+from scipy.interpolate import interp1d, griddata
 from scipy.ndimage import uniform_filter1d
+from scipy.cluster.vq import kmeans2
 from shapely.geometry import Polygon
 from sklearn.linear_model import RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
@@ -53,9 +58,9 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
     Load parameters from parameters_preprocessing.json.
     
     Priority:
-        1. bo4tun_agents/simple_staggered/1_preprocessing/parameters/<tunnel_id>/parameters_preprocessing.json
+        1. agents/{agent_type}/1_preprocessing/parameters/<tunnel_id>/parameters_preprocessing.json
         2. data/<tunnel_id>/parameters_preprocessing.json
-        3. bo4tun_agents/simple_staggered/1_preprocessing/parameters/sample/parameters_preprocessing.json
+        3. agents/{agent_type}/1_preprocessing/parameters/sample/parameters_preprocessing.json
         4. Hardcoded defaults (if no file found)
     
     Returns:
@@ -117,6 +122,12 @@ DEFAULT_RADIUS_MIN = 2.7
 DEFAULT_RADIUS_MAX = 2.8
 DEFAULT_GRADIENT_THRESHOLD = 0.2
 
+# Enhancing - Critical for downstream detection
+DEFAULT_TARGET_DISTANCES = [0.08, 0.04, 0.02]
+DEFAULT_CURVATURE_NEIGHBORS = 20
+DEFAULT_DEPTH_MAP_RESOLUTION = 0.005
+DEFAULT_INTERPOLATION_WINDOW = 9
+
 
 # =============================================================================
 # FIXED PARAMETERS (non-critical, use proven defaults)
@@ -141,6 +152,23 @@ FIXED_RADIAL_STEP = 0.001
 FIXED_GRADIENT_EPSILON = 1e-6
 FIXED_SMOOTHING_WINDOW = 3
 FIXED_SMOOTHING_OFFSET = -0.003
+
+# Enhancing fixed parameters
+FIXED_CURVATURE_THRESHOLD = 0.0005
+FIXED_UPSAMPLING_NEIGHBORS = 20
+FIXED_DISTANCE_TOLERANCE_LOW = 0.9
+FIXED_DISTANCE_TOLERANCE_HIGH = 2.0
+FIXED_RADIUS_FILTER_FACTOR = 0.15
+FIXED_MIN_NEW_POINT_DISTANCE_FACTOR = 0.2
+FIXED_DEPTH_THRESHOLD_LOW = 0.003
+FIXED_DEPTH_THRESHOLD_HIGH = 0.008
+FIXED_HIGH_DENSITY_RING_START = 0
+FIXED_HIGH_DENSITY_RING_END = 5
+FIXED_OUTLIER_NEIGHBORS = 20
+FIXED_INTERPOLATION_RADIUS = 0.06
+FIXED_NUM_INTERPOLATIONS = 2
+FIXED_DUPLICATE_THRESHOLD = 0.02
+FIXED_MAX_OUTLIER_POINTS = 5000
 
 
 # =============================================================================
@@ -784,18 +812,607 @@ def denoise_point_cloud(
 
 
 # =============================================================================
+# STAGE 3: ENHANCING
+# =============================================================================
+
+@njit(parallel=True)
+def compute_curvatures_numba(
+    points: np.ndarray,
+    neighbor_indices: np.ndarray
+) -> np.ndarray:
+    """Compute surface curvature for each point using PCA of local neighborhood."""
+    n_points = len(points)
+    curvatures = np.zeros(n_points)
+    
+    for i in prange(n_points):
+        neighbors = points[neighbor_indices[i, 1:]]
+        cov_matrix = np.cov(neighbors.T)
+        eigenvalues = np.linalg.eigvalsh(cov_matrix)
+        curvatures[i] = eigenvalues[0] / np.sum(eigenvalues)
+    
+    return curvatures
+
+
+def add_curvature_column(df: pd.DataFrame, curvature_neighbors: int) -> pd.DataFrame:
+    """Add curvature values to DataFrame."""
+    points = df[['x', 'y', 'z']].values
+    tree = KDTree(points)
+    _, indices = tree.query(points, k=curvature_neighbors + 1)
+    
+    curvatures = compute_curvatures_numba(points, indices)
+    
+    df = df.copy()
+    df['curvature'] = curvatures
+    return df
+
+
+@njit(parallel=False)
+def compute_midpoints(
+    points: np.ndarray,
+    neighbor_indices: np.ndarray,
+    distances: np.ndarray,
+    target_distance: float
+) -> np.ndarray:
+    """Compute midpoints between neighboring point pairs."""
+    n_points = len(points)
+    max_new = n_points * (neighbor_indices.shape[1] - 1)
+    new_points = np.zeros((max_new, 5), dtype=np.float64)
+    count = 0
+    
+    dist_min = FIXED_DISTANCE_TOLERANCE_LOW * target_distance
+    dist_max = FIXED_DISTANCE_TOLERANCE_HIGH * target_distance
+    
+    for i in range(n_points):
+        for j in range(1, neighbor_indices.shape[1]):
+            dist = distances[i, j]
+            idx = neighbor_indices[i, j]
+
+            curvature_diff = abs(points[i, 3] - points[idx, 3])
+            if dist_min <= dist <= dist_max and curvature_diff <= FIXED_CURVATURE_THRESHOLD:
+                mid_h = (points[i, 0] + points[idx, 0]) / 2
+                mid_theta = (points[i, 1] + points[idx, 1]) / 2
+                mid_r = (points[i, 2] + points[idx, 2]) / 2
+                mid_curv = (points[i, 3] + points[idx, 3]) / 2
+                mid_intensity = (points[i, 4] + points[idx, 4]) / 2
+
+                new_points[count] = np.array([mid_h, mid_theta, mid_r, mid_curv, mid_intensity])
+                count += 1
+
+    return new_points[:count]
+
+
+@njit(parallel=False)
+def filter_clustered_points(
+    neighbors_array: np.ndarray,
+    valid_mask: np.ndarray,
+    num_points: int
+) -> np.ndarray:
+    """Filter out clustered points, keeping only one per cluster."""
+    keep_indices = np.zeros(num_points, dtype=np.int32)
+    removed = np.zeros(num_points, dtype=np.int32)
+    count = 0
+    
+    for i in range(num_points):
+        if removed[i] == 0:
+            keep_indices[count] = i
+            count += 1
+            for j in range(neighbors_array.shape[1]):
+                neighbor_idx = neighbors_array[i, j]
+                if valid_mask[i, j] and removed[neighbor_idx] == 0:
+                    removed[neighbor_idx] = 1
+
+    return keep_indices[:count]
+
+
+def upsample_surface(df: pd.DataFrame, target_distance: float) -> pd.DataFrame:
+    """Upsample surface by inserting midpoints between neighboring points."""
+    start_time = time.time()
+    
+    print('Building spatial index...')
+    points = df[['h', 'theta', 'r', 'curvature', 'intensity']].values
+    coords_2d = points[:, :2]
+    tree = cKDTree(coords_2d)
+    
+    distances, indices = tree.query(coords_2d, k=min(FIXED_UPSAMPLING_NEIGHBORS + 1, len(points)))
+    
+    print('Computing midpoints...')
+    new_points = compute_midpoints(points, indices, distances, target_distance)
+    
+    print('Filtering excess points...')
+    if len(new_points) > 0:
+        distances_to_existing, _ = tree.query(new_points[:, :2], k=1)
+        min_dist = FIXED_MIN_NEW_POINT_DISTANCE_FACTOR * target_distance
+        valid_new = new_points[distances_to_existing >= min_dist]
+    else:
+        valid_new = new_points
+    
+    new_df = pd.DataFrame(valid_new, columns=['h', 'theta', 'r', 'curvature', 'intensity'])
+    new_df = new_df[(new_df != 0).any(axis=1)]
+    new_df['pred'] = 8
+    
+    if len(new_df) > 0:
+        new_coords = new_df[['h', 'theta']].values
+        new_tree = cKDTree(new_coords)
+        r_dist = FIXED_RADIUS_FILTER_FACTOR * target_distance
+        
+        neighbors_list = new_tree.query_ball_point(new_coords, r=r_dist)
+        max_neighbors = max(len(n) for n in neighbors_list)
+        neighbors_array = np.full((len(new_coords), max_neighbors), -1, dtype=np.int32)
+        valid_mask = np.zeros((len(new_coords), max_neighbors), dtype=np.bool_)
+        
+        for i, neighbors in enumerate(neighbors_list):
+            neighbors_array[i, :len(neighbors)] = neighbors
+            valid_mask[i, :len(neighbors)] = True
+        
+        keep_indices = filter_clustered_points(neighbors_array, valid_mask, len(new_coords))
+        new_df = new_df.iloc[keep_indices].reset_index(drop=True)
+    
+    elapsed = time.time() - start_time
+    print(f"Upsampling completed in {elapsed:.2f}s, added {len(new_df)} points (target: {target_distance})")
+    
+    return new_df
+
+
+def progressive_upsample(df: pd.DataFrame, target_distances: List[float]) -> pd.DataFrame:
+    """
+    Progressively upsample surface at multiple resolutions.
+    
+    CRITICAL PARAMETER:
+    - target_distances: Controls upsampling density (HIGH impact)
+    """
+    result_df = df.copy()
+    
+    for target_dist in target_distances:
+        new_points = upsample_surface(result_df, target_distance=target_dist)
+        result_df = pd.concat([result_df, new_points], ignore_index=False)
+    
+    return result_df
+
+
+@njit(parallel=True)
+def detect_outlier_points(
+    points: np.ndarray,
+    radial_values: np.ndarray,
+    neighbor_indices: np.ndarray,
+    h_min: float,
+    ring_spacing: float
+) -> np.ndarray:
+    """Detect outlier points with significant local depth variation."""
+    n_points = len(points)
+    outlier_mask = np.zeros(n_points, dtype=np.bool_)
+
+    for i in prange(n_points):
+        neighbors = neighbor_indices[i, 1:]
+        if len(neighbors) < FIXED_OUTLIER_NEIGHBORS:
+            continue
+        
+        neighbor_depths = radial_values[neighbors]
+        avg_diff = points[i, 2] - np.mean(neighbor_depths)
+        
+        h_coord = points[i, 0]
+        in_high_density = (h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_START <= h_coord <= 
+                          h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_END)
+        
+        threshold = FIXED_DEPTH_THRESHOLD_HIGH if in_high_density else FIXED_DEPTH_THRESHOLD_LOW
+        
+        if avg_diff > threshold:
+            outlier_mask[i] = True
+    
+    return outlier_mask
+
+
+@njit(parallel=False)
+def interpolate_between_outliers(
+    outlier_indices: np.ndarray,
+    points: np.ndarray,
+    resolution: float
+) -> np.ndarray:
+    """Interpolate new points between pairs of outlier points."""
+    n_outliers = len(outlier_indices)
+    max_new = n_outliers * n_outliers * FIXED_NUM_INTERPOLATIONS
+    new_points = np.zeros((max_new, 4))
+    count = 0
+    
+    for i in range(n_outliers):
+        idx1 = outlier_indices[i]
+        p1 = points[idx1]
+
+        for j in range(i + 1, n_outliers):
+            idx2 = outlier_indices[j]
+            p2 = points[idx2]
+            
+            dist = np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+            if not (resolution < dist < FIXED_INTERPOLATION_RADIUS):
+                continue
+            
+            for k in range(1, FIXED_NUM_INTERPOLATIONS + 1):
+                t = k / (FIXED_NUM_INTERPOLATIONS + 1)
+                new_h = (1 - t) * p1[0] + t * p2[0]
+                new_theta = (1 - t) * p1[1] + t * p2[1]
+                new_r = (1 - t) * p1[2] + t * p2[2]
+                new_intensity = (1 - t) * p1[3] + t * p2[3]
+                
+                is_duplicate = False
+                if count > 0:
+                    for m in range(count):
+                        d = np.sqrt((new_points[m, 0] - new_h)**2 + 
+                                   (new_points[m, 1] - new_theta)**2)
+                        if d < FIXED_DUPLICATE_THRESHOLD:
+                            is_duplicate = True
+                            break
+                
+                if not is_duplicate:
+                    new_points[count] = np.array([new_h, new_theta, new_r, new_intensity])
+                    count += 1
+    
+    return new_points[:count]
+
+
+def enhance_outlier_boundaries(
+    df: pd.DataFrame,
+    depth_map_resolution: float,
+    ring_spacing: float
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Detect outlier points and interpolate around them."""
+    start_time = time.time()
+    
+    print('Building spatial index...')
+    points = df[['h', 'theta', 'r', 'intensity']].values
+    coords_2d = points[:, :2]
+    tree = cKDTree(coords_2d)
+    
+    _, indices = tree.query(coords_2d, k=FIXED_OUTLIER_NEIGHBORS + 1)
+    h_min = np.min(points[:, 0])
+    
+    print('Detecting outlier points...')
+    outlier_mask = detect_outlier_points(
+        points[:, :3], points[:, 2], indices, h_min, ring_spacing
+    )
+    
+    outlier_indices = np.where(outlier_mask)[0]
+    print(f"Found {len(outlier_indices)} outlier points")
+    
+    outlier_df = df.iloc[outlier_indices].copy()
+    
+    # Filter out high-density region for interpolation
+    print("Filtering high-density region...")
+    h_low = h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_START
+    h_high = h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_END
+    
+    filtered_indices = []
+    for idx in outlier_indices:
+        h = points[idx, 0]
+        if not (h_low <= h <= h_high):
+            filtered_indices.append(idx)
+    
+    filtered_indices = np.array(filtered_indices, dtype=np.int64)
+    
+    if len(filtered_indices) > FIXED_MAX_OUTLIER_POINTS:
+        print(f"Warning: Limiting to {FIXED_MAX_OUTLIER_POINTS} outlier points")
+        np.random.seed(42)
+        filtered_indices = np.random.choice(filtered_indices, FIXED_MAX_OUTLIER_POINTS, replace=False)
+    
+    print(f"Interpolating around {len(filtered_indices)} outlier points...")
+    new_points = interpolate_between_outliers(
+        filtered_indices, points, depth_map_resolution
+    )
+    
+    new_df = pd.DataFrame(new_points, columns=['h', 'theta', 'r', 'intensity'])
+    new_df['pred'] = 8
+    
+    elapsed = time.time() - start_time
+    print(f"Outlier enhancement completed in {elapsed:.2f}s, added {len(new_df)} points")
+    
+    return outlier_df, new_df
+
+
+def generate_depth_map(
+    data_surface: Dict,
+    data_boundary: Dict,
+    resolution: float,
+    record_mapping: bool = True,
+    outlier_mode: bool = False,
+    window_size: int = None
+) -> Tuple[np.ndarray, List[Dict]]:
+    """
+    Project point cloud data to 2D depth map.
+    
+    CRITICAL PARAMETER:
+    - resolution: Affects all downstream detection/SAM (HIGH impact)
+    """
+    def to_arrays(data):
+        if isinstance(data, pd.DataFrame):
+            return data[['x', 'y', 'z', 'pred']].values.T
+        return np.array([data['x'], data['y'], data['z'], data['pred']])
+    
+    surface_index = data_surface.get('index')
+    surface = to_arrays(data_surface)
+    boundary = to_arrays(data_boundary)
+    
+    x_min = min(surface[0].min(), boundary[0].min())
+    x_max = max(surface[0].max(), boundary[0].max())
+    y_min = min(surface[1].min(), boundary[1].min())
+    y_max = max(surface[1].max(), boundary[1].max())
+    
+    height = int((y_max - y_min) / resolution)
+    width = int((x_max - x_min) / resolution)
+    print(f'Depth map dimensions: {height} x {width}')
+    
+    depth_map = np.full((height, width), np.nan, dtype=np.float32)
+    
+    def process_points(data, index, record=False):
+        grid_x = np.clip(((data[0] - x_min) / resolution).astype(int), 0, width - 1)
+        grid_y = np.clip(((data[1] - y_min) / resolution).astype(int), 0, height - 1)
+        
+        pixel_values = defaultdict(list)
+        mapping = []
+        
+        if index is None:
+            index = range(len(data[0]))
+        
+        for idx, (gx, gy, z, pred) in zip(index, zip(grid_x, grid_y, data[2], data[3])):
+            pixel_values[(gy, gx)].append(z)
+            if record and pred != 8:
+                mapping.append({'pixel_x': gx, 'pixel_y': gy, 'index': idx})
+        
+        for (gy, gx), z_vals in pixel_values.items():
+            depth_map[gy, gx] = np.mean(z_vals)
+        
+        return mapping if record else None
+    
+    mapping = []
+    total_steps = 1 if outlier_mode else 2
+    with tqdm(total=total_steps, desc="Projecting to depth map") as pbar:
+        if not outlier_mode:
+            mapping = process_points(surface, surface_index, record=record_mapping)
+            pbar.update(1)
+        process_points(boundary, None, record=False)
+        pbar.update(1)
+    
+    if record_mapping and not outlier_mode:
+        print(f"Mapped {len(mapping)} points to pixels")
+    
+    # Interpolate gaps (use provided window_size or default)
+    effective_window = window_size if window_size is not None else DEFAULT_INTERPOLATION_WINDOW
+    if effective_window > 1:
+        valid_points = []
+        half_w = effective_window // 2
+        
+        for i in tqdm(range(half_w, height - half_w), desc="Finding gaps to fill"):
+            for j in range(half_w, width - half_w):
+                if np.isnan(depth_map[i, j]):
+                    window = depth_map[i - half_w:i + half_w + 1, j - half_w:j + half_w + 1]
+                    if np.any(~np.isnan(window)):
+                        valid_points.append((i, j))
+        
+        if valid_points:
+            interp_coords = np.array(valid_points)
+            known_coords = np.argwhere(~np.isnan(depth_map))
+            known_values = depth_map[~np.isnan(depth_map)]
+            
+            with tqdm(total=1, desc="Interpolating gaps") as pbar:
+                interp_values = griddata(known_coords, known_values, interp_coords, method='nearest')
+                pbar.update(1)
+            
+            depth_map[interp_coords[:, 0], interp_coords[:, 1]] = interp_values
+    
+    return depth_map, mapping if record_mapping else []
+
+
+def save_depth_map_image(depth_map: np.ndarray, filepath: str, resolution: float) -> None:
+    """Save depth map as an image with exact pixel dimensions."""
+    height, width = depth_map.shape
+    dpi = 1.0 / resolution
+    
+    fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axis('off')
+    ax.imshow(depth_map, cmap='viridis')
+    
+    plt.savefig(filepath, dpi=dpi, bbox_inches='tight', pad_inches=0)
+    plt.close()
+
+
+def classify_tunnel_pattern(depth_map_outlier: np.ndarray, tunnel_dir: str) -> Dict[str, Any]:
+    """Classify tunnel joint pattern from enhanced depth map."""
+    L, W = depth_map_outlier.shape
+    
+    binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
+    ret, binary = cv2.threshold(binary_map, 120, 255, cv2.THRESH_BINARY)
+    
+    lines_oblique = cv2.HoughLinesP(binary, 1, np.pi/180, 30, minLineLength=50, maxLineGap=20)
+    
+    angles = []
+    y_positions = []
+    
+    if lines_oblique is not None:
+        for line in lines_oblique[:200]:
+            x1, y1, x2, y2 = line[0]
+            angle = np.degrees(np.arctan2(-(y2 - y1), x2 - x1))
+            
+            if 5 <= abs(angle) <= 10:
+                angles.append(angle)
+                mid_y = (y1 + y2) / 2
+                y_positions.append(mid_y)
+    
+    if len(angles) > 0 and len(y_positions) > 0:
+        angle_std = np.std(angles)
+        angle_mean = np.mean(np.abs(angles))
+        y_std = np.std(y_positions)
+        y_mean = np.mean(y_positions)
+        
+        is_alternating = False
+        if len(y_positions) >= 4:
+            try:
+                y_array = np.array(y_positions).reshape(-1, 1)
+                centroids, labels = kmeans2(y_array, 2, iter=10, minit="++")
+                cluster_stds = [float(np.std(y_array[labels == i])) for i in range(2)]
+                unique_labels = len(set(labels))
+                c0 = float(np.asarray(centroids[0]).flat[0])
+                c1 = float(np.asarray(centroids[1]).flat[0])
+
+                is_alternating = (unique_labels == 2 and
+                                 all(std < 50 for std in cluster_stds) and
+                                 abs(c0 - c1) > 200)
+            except Exception:
+                pass
+        
+        if y_std < 100:
+            pattern_type = "continuous"
+            confidence = min(1.0, (100 - y_std) / 100)
+            description = "Continuous joints (T3-like): K-blocks horizontally aligned"
+        elif is_alternating:
+            pattern_type = "complex_staggered"
+            confidence = 0.8
+            description = "Simple staggered joints (T1/T2-like): Regular alternating pattern"
+        elif y_std < 250 and angle_std < 8.0:
+            pattern_type = "complex_staggered"
+            confidence = 0.7
+            description = "Simple staggered joints (T1/T2-like): Regular pattern"
+        else:
+            pattern_type = "complex_staggered"
+            confidence = 0.7
+            description = "Complex staggered joints (T4/T5-like): Irregular/variable offset"
+    else:
+        pattern_type = "unknown"
+        confidence = 0.0
+        angle_std = 0.0
+        angle_mean = 0.0
+        y_std = 0.0
+        y_mean = 0.0
+        description = "No oblique lines detected - pattern classification unavailable"
+    
+    pattern_info = {
+        "pattern_type": pattern_type,
+        "confidence": float(confidence),
+        "description": description,
+        "statistics": {
+            "oblique_lines_detected": len(angles),
+            "angle_mean_deg": float(angle_mean) if len(angles) > 0 else 0.0,
+            "angle_std_deg": float(angle_std) if len(angles) > 0 else 0.0,
+            "y_position_mean": float(y_mean) if len(y_positions) > 0 else 0.0,
+            "y_position_std": float(y_std) if len(y_positions) > 0 else 0.0,
+            "is_alternating": is_alternating if len(y_positions) >= 4 else False
+        }
+    }
+    
+    return pattern_info
+
+
+def enhance_point_cloud(
+    df: pd.DataFrame,
+    tunnel_dir: str,
+    ring_spacing: float,
+    target_distances: List[float],
+    curvature_neighbors: int,
+    depth_map_resolution: float,
+    interpolation_window: int = DEFAULT_INTERPOLATION_WINDOW
+) -> pd.DataFrame:
+    """
+    Execute Stage 3: Enhancing.
+    
+    CRITICAL PARAMETERS:
+    - target_distances: Controls upsampling density (HIGH impact)
+    - curvature_neighbors: Affects surface smoothness (MEDIUM impact)
+    - depth_map_resolution: Affects all downstream stages (HIGH impact)
+    - interpolation_window: Gap filling window for main depth_map (LOW impact)
+    """
+    df_valid = df[df['pred'] != 0].copy()
+    
+    # Add curvature
+    df_with_curvature = add_curvature_column(df_valid, curvature_neighbors)
+    
+    # Progressive upsampling
+    df_upsampled = progressive_upsample(df_with_curvature, target_distances)
+    
+    # Outlier boundary enhancement
+    outlier_df, boundary_points = enhance_outlier_boundaries(
+        df_with_curvature, depth_map_resolution, ring_spacing
+    )
+    df_boundary = pd.concat([outlier_df, boundary_points], ignore_index=False)
+    
+    # Mark outliers as removed
+    df.loc[outlier_df.index, 'pred'] = 0
+    
+    # Generate depth maps
+    surface_data = {
+        'index': df_upsampled.index,
+        'x': df_upsampled['h'],
+        'y': df_upsampled['theta'],
+        'z': df_upsampled['r'],
+        'pred': df_upsampled['pred']
+    }
+    
+    boundary_data = {
+        'x': df_boundary['h'],
+        'y': df_boundary['theta'],
+        'z': df_boundary['r'],
+        'pred': df_boundary['pred']
+    }
+    
+    depth_map, pixel_mapping = generate_depth_map(
+        surface_data, boundary_data, resolution=depth_map_resolution,
+        window_size=interpolation_window  # Tunable for main depth_map
+    )
+    
+    with open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), 'wb') as f:
+        pickle.dump(pixel_mapping, f)
+    
+    save_depth_map_image(depth_map, os.path.join(tunnel_dir, "depth_map.png"), resolution=depth_map_resolution)
+    
+    # Generate outlier depth map
+    outlier_data = {
+        'x': df_boundary['h'],
+        'y': df_boundary['theta'],
+        'z': df_boundary['r'],
+        'pred': df_boundary['pred'],
+        'intensity': df_boundary.get('intensity', pd.Series([0] * len(df_boundary)))
+    }
+    
+    depth_map_outlier, _ = generate_depth_map(
+        surface_data, outlier_data,
+        resolution=depth_map_resolution, record_mapping=False, outlier_mode=True,
+        window_size=1  # No gap interpolation for outlier depth map (matches original p4tun)
+    )
+    np.save(os.path.join(tunnel_dir, "depth_map_outlier.npy"), depth_map_outlier)
+    
+    # Combine original and new points
+    new_surface_points = df_upsampled[df_upsampled['pred'] == 8].copy()
+    new_boundary_points = df_boundary[df_boundary['pred'] == 8].copy()
+    
+    for col in df.columns:
+        if col not in new_surface_points.columns:
+            new_surface_points[col] = np.nan if col in ['x', 'y', 'z'] else None
+        if col not in new_boundary_points.columns:
+            new_boundary_points[col] = np.nan if col in ['x', 'y', 'z'] else None
+    
+    all_new = pd.concat([new_surface_points, new_boundary_points], ignore_index=True)
+    df_enhanced = pd.concat([df, all_new], ignore_index=True)
+    
+    df_enhanced.to_csv(os.path.join(tunnel_dir, "enhanced.csv"), index=False)
+    
+    # Pattern classification
+    pattern_info = classify_tunnel_pattern(depth_map_outlier, tunnel_dir)
+    with open(os.path.join(tunnel_dir, "pattern_type.json"), 'w') as f:
+        json.dump(pattern_info, f, indent=2)
+    
+    return df_enhanced
+
+
+# =============================================================================
 # MAIN PREPROCESSING PIPELINE
 # =============================================================================
 
 def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     """
-    Execute the complete preprocessing pipeline: Unfolding + Denoising.
+    Execute the complete preprocessing pipeline: Unfolding + Denoising + Enhancing.
     
     Data flows in memory between stages. Outputs are saved for downstream use.
     
-    CRITICAL PARAMETERS (4 total):
+    CRITICAL PARAMETERS (8 total):
     - Unfolding: ring_spacing, tunnel_diameter (physical constants)
     - Denoising: radius_min, radius_max, gradient_threshold
+    - Enhancing: depth_map_resolution, target_distances, curvature_neighbors, interpolation_window
     
     Args:
         tunnel_id: Identifier for the tunnel (e.g., "1-4", "5-1").
@@ -818,6 +1435,10 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     radius_min = get_param(params, 'radius_min', default=DEFAULT_RADIUS_MIN, allow_default=allow_defaults)
     radius_max = get_param(params, 'radius_max', default=DEFAULT_RADIUS_MAX, allow_default=allow_defaults)
     gradient_threshold = get_param(params, 'gradient_threshold', default=DEFAULT_GRADIENT_THRESHOLD, allow_default=allow_defaults)
+    target_distances = get_param(params, 'target_distances', default=DEFAULT_TARGET_DISTANCES, allow_default=allow_defaults)
+    curvature_neighbors = get_param(params, 'curvature_neighbors', default=DEFAULT_CURVATURE_NEIGHBORS, allow_default=allow_defaults)
+    depth_map_resolution = get_param(params, 'depth_map_resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
+    interpolation_window = get_param(params, 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=True)  # Always allow default (LOW impact)
     
     print("\nCritical parameters:")
     print(f"  ring_spacing:       {ring_spacing}")
@@ -825,6 +1446,10 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     print(f"  radius_min:         {radius_min}")
     print(f"  radius_max:         {radius_max}")
     print(f"  gradient_threshold: {gradient_threshold}")
+    print(f"  target_distances:   {target_distances}")
+    print(f"  curvature_neighbors: {curvature_neighbors}")
+    print(f"  depth_map_resolution: {depth_map_resolution}")
+    print(f"  interpolation_window: {interpolation_window} (LOW impact)")
     
     # ---- Stage 1: Unfolding ----
     print("\n[Stage 1] Unfolding...")
@@ -848,8 +1473,19 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     valid_count = (df_denoised['pred'] != 0).sum()
     print(f"  Saved denoised.csv, valid points: {valid_count}/{len(df_denoised)}")
     
+    # ---- Stage 3: Enhancing ----
+    print("\n[Stage 3] Enhancing...")
+    df_enhanced = enhance_point_cloud(
+        df_denoised, tunnel_dir,
+        ring_spacing=ring_spacing,
+        target_distances=target_distances,
+        curvature_neighbors=curvature_neighbors,
+        depth_map_resolution=depth_map_resolution,
+        interpolation_window=interpolation_window
+    )
+    
     print(f"\n{'=' * 60}")
-    print(f"Preprocessing complete: {valid_count} valid points in denoised.csv")
+    print(f"Preprocessing complete: {len(df_enhanced)} points in enhanced.csv")
     print(f"{'=' * 60}")
 
 

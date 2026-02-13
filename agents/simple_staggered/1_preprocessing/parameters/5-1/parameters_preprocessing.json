@@ -1,0 +1,10 @@
+{
+  "target_distances": [
+    0.07564532903055843,
+    0.037822664515279214,
+    0.02
+  ],
+  "curvature_neighbors": 17,
+  "depth_map_resolution": 0.003326659642495308,
+  "interpolation_window": 14
+}

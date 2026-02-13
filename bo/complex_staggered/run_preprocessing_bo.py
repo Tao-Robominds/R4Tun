@@ -1,11 +1,16 @@
 """
 Bayesian Optimization for Preprocessing Parameters with F2 Objective
 
-Optimizes preprocessing parameters (ring_spacing, radius_min, radius_max,
-gradient_threshold) to maximize Retention F2 score.
+Optimizes preprocessing parameters (unfolding + denoising + enhancing) to maximize
+Retention F2 score.
 
 F2 weights recall 4x more than precision, appropriate because false negatives
 (removing true lining points) are irreversible for downstream detection/SAM.
+
+Search space (8D):
+- Unfolding: ring_spacing (physical constant)
+- Denoising: radius_min, radius_max, gradient_threshold
+- Enhancing: target_distance_1, curvature_neighbors, depth_map_resolution, interpolation_window
 """
 
 import os
@@ -58,14 +63,14 @@ DEFAULT_TUNNEL_DIAMETER = preprocessing_module.DEFAULT_TUNNEL_DIAMETER
 # Search Space Definition
 # =============================================================================
 
-def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_staggered') -> Tuple[List, List[str]]:
+def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'complex_staggered') -> Tuple[List, List[str]]:
     """
-    Define search space for preprocessing parameters (4 total).
+    Define search space for preprocessing parameters (8D total).
     Radius bounds are auto-set from tunnel characteristics (10% rule).
     
     Args:
         tunnel_id: Tunnel identifier (e.g., '1-4', '2-2')
-        agent_type: Agent type ('simple_staggered', 'continuous', 'complex_staggered')
+        agent_type: Agent type ('complex_staggered', 'continuous', 'complex_staggered')
     
     Returns:
         Tuple of (dimensions list, parameter names list)
@@ -93,10 +98,17 @@ def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_stagg
     radius_max_high = radius * 1.10
     
     dimensions = [
+        # Unfolding (1D)
         Real(1.0, 1.4, name='ring_spacing'),             # Ring spacing in meters (universal)
+        # Denoising (3D)
         Real(radius_min_low, radius_min_high, name='radius_min'),  # Inner radius filter (tunnel-specific)
         Real(radius_max_low, radius_max_high, name='radius_max'),  # Outer radius filter (tunnel-specific)
         Real(0.05, 0.5, name='gradient_threshold'),       # Surface cutoff aggressiveness (universal)
+        # Enhancing (4D)
+        Real(0.03, 0.12, name='target_distance_1'),      # First target distance (constructs [td1, td1*0.5, 0.02])
+        Integer(8, 30, name='curvature_neighbors'),     # Curvature computation neighbors
+        Real(0.003, 0.008, name='depth_map_resolution'), # Depth map resolution (can be fixed if preferred)
+        Integer(3, 15, name='interpolation_window'),     # Gap interpolation window
     ]
     
     param_names = [
@@ -104,6 +116,10 @@ def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_stagg
         'radius_min',
         'radius_max',
         'gradient_threshold',
+        'target_distance_1',
+        'curvature_neighbors',
+        'depth_map_resolution',
+        'interpolation_window',
     ]
     
     return dimensions, param_names
@@ -290,6 +306,10 @@ class PreprocessingObjective:
             # Load existing params to preserve fixed values
             existing_params, _ = load_parameters(self.tunnel_id, self.data_dir)
             
+            # Construct target_distances from target_distance_1
+            td1 = param_dict['target_distance_1']
+            target_distances = [td1, td1 * 0.5, 0.02]
+            
             # Merge tunable params with fixed params
             params_to_save = {
                 'ring_spacing': param_dict['ring_spacing'],
@@ -297,6 +317,11 @@ class PreprocessingObjective:
                 'radius_min': param_dict['radius_min'],
                 'radius_max': param_dict['radius_max'],
                 'gradient_threshold': param_dict['gradient_threshold'],
+                # Enhancing parameters
+                'target_distances': target_distances,
+                'curvature_neighbors': int(param_dict['curvature_neighbors']),
+                'depth_map_resolution': float(param_dict['depth_map_resolution']),
+                'interpolation_window': int(param_dict['interpolation_window']),
             }
             
             # Save parameters
@@ -396,7 +421,7 @@ class PreprocessingObjective:
                 'trial_id': trial_id,
                 'timestamp_utc': timestamp,
                 'tunnel_id': self.tunnel_id,
-                'assembly_type': 'simple_staggered',
+                'assembly_type': 'complex_staggered',
             },
             'params': {
                 'ring_spacing': float(params['ring_spacing']),
@@ -623,9 +648,9 @@ if __name__ == "__main__":
     parser.add_argument('--n-calls', type=int, default=30, help='Total evaluations')
     parser.add_argument('--n-initial', type=int, default=5, help='Initial random points')
     parser.add_argument('--verbose', action='store_true', default=True, help='Verbose output')
-    parser.add_argument('--agent-type', type=str, default='simple_staggered',
-                       choices=['simple_staggered', 'continuous', 'complex_staggered'],
-                       help='Agent type (default: simple_staggered)')
+    parser.add_argument('--agent-type', type=str, default='complex_staggered',
+                       choices=['complex_staggered', 'continuous', 'complex_staggered'],
+                       help='Agent type (default: complex_staggered)')
     
     args = parser.parse_args()
     

@@ -2,5 +2,13 @@
   "ring_spacing": 1.2559658027631921,
   "radius_min": 3.514981631209217,
   "radius_max": 3.907252419875121,
-  "gradient_threshold": 0.4565331890819642
+  "gradient_threshold": 0.4565331890819642,
+  "target_distances": [
+    0.07931566857703543,
+    0.03965783428851771,
+    0.02
+  ],
+  "curvature_neighbors": 15,
+  "depth_map_resolution": 0.008478373609326472,
+  "interpolation_window": 15
 }
