@@ -125,7 +125,7 @@ safetensors==0.5.3
 scikit-learn==1.7.0
 scipy==1.15.3
 seaborn==0.13.2
--e git+https://github.com/facebookresearch/segment-anything.git@dca509fe793f601edb92606367a655c15ac00fdf#egg=segment_anything
+-e skills/segment-anything
 setuptools==80.9.0
 shapely==2.1.1
 six==1.17.0

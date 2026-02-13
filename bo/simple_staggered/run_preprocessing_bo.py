@@ -7,8 +7,8 @@ Retention F2 score.
 F2 weights recall 4x more than precision, appropriate because false negatives
 (removing true lining points) are irreversible for downstream detection/SAM.
 
-Search space (8D):
-- Unfolding: ring_spacing (physical constant)
+Search space (9D):
+- Unfolding: ring_spacing, tunnel_diameter (physical constants, tunable)
 - Denoising: radius_min, radius_max, gradient_threshold
 - Enhancing: target_distance_1, curvature_neighbors, depth_map_resolution, interpolation_window
 """
@@ -65,8 +65,9 @@ DEFAULT_TUNNEL_DIAMETER = preprocessing_module.DEFAULT_TUNNEL_DIAMETER
 
 def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_staggered') -> Tuple[List, List[str]]:
     """
-    Define search space for preprocessing parameters (8D total).
+    Define search space for preprocessing parameters (9D total).
     Radius bounds are auto-set from tunnel characteristics (10% rule).
+    Tunnel diameter is derived from radius with ±5% tuning range.
     
     Args:
         tunnel_id: Tunnel identifier (e.g., '1-4', '2-2')
@@ -97,9 +98,16 @@ def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_stagg
     radius_max_low = radius
     radius_max_high = radius * 1.10
     
+    # Tunnel diameter: 2 × radius, ±5% tuning range
+    # Small changes affect cylindrical coordinate transform (θ *= π × diameter / 360)
+    diameter_center = 2 * radius
+    diameter_low = diameter_center * 0.95
+    diameter_high = diameter_center * 1.05
+    
     dimensions = [
-        # Unfolding (1D)
+        # Unfolding (2D)
         Real(1.0, 1.4, name='ring_spacing'),             # Ring spacing in meters (universal)
+        Real(diameter_low, diameter_high, name='tunnel_diameter'),  # Tunnel diameter (affects θ transform)
         # Denoising (3D)
         Real(radius_min_low, radius_min_high, name='radius_min'),  # Inner radius filter (tunnel-specific)
         Real(radius_max_low, radius_max_high, name='radius_max'),  # Outer radius filter (tunnel-specific)
@@ -113,6 +121,7 @@ def get_preprocessing_dimensions(tunnel_id: str, agent_type: str = 'simple_stagg
     
     param_names = [
         'ring_spacing',
+        'tunnel_diameter',
         'radius_min',
         'radius_max',
         'gradient_threshold',
@@ -313,7 +322,7 @@ class PreprocessingObjective:
             # Merge tunable params with fixed params
             params_to_save = {
                 'ring_spacing': param_dict['ring_spacing'],
-                'tunnel_diameter': get_param(existing_params, 'tunnel_diameter', default=DEFAULT_TUNNEL_DIAMETER, allow_default=True),
+                'tunnel_diameter': float(param_dict['tunnel_diameter']),
                 'radius_min': param_dict['radius_min'],
                 'radius_max': param_dict['radius_max'],
                 'gradient_threshold': param_dict['gradient_threshold'],
@@ -425,9 +434,14 @@ class PreprocessingObjective:
             },
             'params': {
                 'ring_spacing': float(params['ring_spacing']),
+                'tunnel_diameter': float(params.get('tunnel_diameter', DEFAULT_TUNNEL_DIAMETER)),
                 'radius_min': float(params['radius_min']),
                 'radius_max': float(params['radius_max']),
                 'gradient_threshold': float(params['gradient_threshold']),
+                'target_distance_1': float(params.get('target_distance_1', 0.08)),
+                'curvature_neighbors': int(params.get('curvature_neighbors', 15)),
+                'depth_map_resolution': float(params.get('depth_map_resolution', 0.005)),
+                'interpolation_window': int(params.get('interpolation_window', 5)),
             },
         }
         
@@ -468,15 +482,20 @@ class PreprocessingObjective:
         if self.best_params is None:
             return None
         
-        # Load existing params to preserve fixed values
-        existing_params, _ = load_parameters(self.tunnel_id, self.data_dir)
+        # Construct target_distances from target_distance_1
+        td1 = self.best_params.get('target_distance_1', 0.08)
+        target_distances = [td1, td1 * 0.5, 0.02]
         
         params_to_save = {
             'ring_spacing': float(self.best_params['ring_spacing']),
-            'tunnel_diameter': get_param(existing_params, 'tunnel_diameter', default=DEFAULT_TUNNEL_DIAMETER, allow_default=True),
+            'tunnel_diameter': float(self.best_params['tunnel_diameter']),
             'radius_min': float(self.best_params['radius_min']),
             'radius_max': float(self.best_params['radius_max']),
             'gradient_threshold': float(self.best_params['gradient_threshold']),
+            'target_distances': target_distances,
+            'curvature_neighbors': int(self.best_params['curvature_neighbors']),
+            'depth_map_resolution': float(self.best_params['depth_map_resolution']),
+            'interpolation_window': int(self.best_params['interpolation_window']),
         }
         
         params_file = os.path.join(self.params_dir, 'parameters_preprocessing.json')
@@ -536,13 +555,27 @@ def load_best_from_logs(logs_dir: str, tunnel_id: str) -> Optional[Tuple[List[fl
         return None
     
     # Build param list in dimension order
-    # If ring_spacing is missing from old logs, use default 1.2
+    # If ring_spacing/tunnel_diameter are missing from old logs, use defaults
     param_values = [
         best_params.get('ring_spacing', 1.2),
+        best_params.get('tunnel_diameter', DEFAULT_TUNNEL_DIAMETER),
         best_params['radius_min'],
         best_params['radius_max'],
         best_params['gradient_threshold'],
     ]
+    
+    # Add enhancing params if present (for 9D warm-start)
+    if 'target_distance_1' in best_params:
+        param_values.append(best_params['target_distance_1'])
+    elif 'target_distances' in best_params:
+        param_values.append(best_params['target_distances'][0])
+    
+    if 'curvature_neighbors' in best_params:
+        param_values.append(best_params['curvature_neighbors'])
+    if 'depth_map_resolution' in best_params:
+        param_values.append(best_params['depth_map_resolution'])
+    if 'interpolation_window' in best_params:
+        param_values.append(best_params['interpolation_window'])
     
     return param_values, -best_f2  # negative for minimization
 

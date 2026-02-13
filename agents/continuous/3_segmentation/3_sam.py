@@ -1,13 +1,9 @@
 """
-Simple Staggered SAM Segmentation (Stage 3)
+Continuous SAM Segmentation (Stage 3)
 
-SAM-based segment segmentation for SIMPLE STAGGERED tunnels only.
-For continuous or complex staggered patterns, use the appropriate pipeline.
-
-Simple staggered characteristics:
-- Regular K-block positions at alternating Y coordinates
-- 6 segments per ring (K, B1, A1, A2, A3, B2)
-- Consistent oblique angle across rings
+SAM-based segment segmentation for CONTINUOUS tunnels (e.g., 3-1).
+Uses the same row-based processing algorithm as simple staggered,
+but supports auto-detection of segment count (6 or 7).
 
 Pipeline:
     1_preprocessing.py → depth_map.png, enhanced.csv, pixel_to_point.pkl
@@ -69,6 +65,10 @@ DEFAULT_USE_QUALITY_WEIGHTING = True
 # =============================================================================
 
 FIXED_MASK_EPS = 0.001
+
+# Physical constants
+DEFAULT_K_HEIGHT_MM = 1079.92
+DEFAULT_AB_HEIGHT_MM = 3239.77
 
 # Fixed prompt point parameters (complex, low individual impact)
 FIXED_K_OUTER_RING = 700.0
@@ -171,21 +171,12 @@ def calculate_segment_heights(tunnel_diameter: float):
     return k_height_mm, ab_height_mm
 
 
-# Default physical heights for segment count detection
-DEFAULT_K_HEIGHT_MM = 1079.92
-DEFAULT_AB_HEIGHT_MM = 3239.77
-
-
 # =============================================================================
 # SEGMENT COUNT DETECTION
 # =============================================================================
 
-def detect_segment_count(tunnel_dir: str, default: int = 6) -> int:
-    """Detect segment count from tunnel geometry (radius → circumference).
-    
-    Compares circumference to expected values for 6 vs 7 segments.
-    Default for simple staggered: 6
-    """
+def detect_segment_count_from_geometry(tunnel_dir: str) -> int:
+    """Detect segment count from tunnel geometry (radius → circumference)."""
     enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
     
     if os.path.exists(enhanced_path):
@@ -201,8 +192,7 @@ def detect_segment_count(tunnel_dir: str, default: int = 6) -> int:
             print(f"Detected from geometry: {segment_count} segments (radius={avg_radius:.3f}m)")
             return segment_count
     
-    print(f"Using default segment count: {default}")
-    return default
+    return 6  # Default for continuous tunnels
 
 
 # =============================================================================
@@ -347,7 +337,6 @@ def generate_prompt_points_ab(x, y, block_type):
     
     if block_type == 'B1':
         points_real = np.array([
-            # Top row
             [x-outer, y-l1], [x-middle, y-l1], [x-edge, y-l1], [x, y-l1], [x+edge, y-l1], [x+middle, y-l1], [x+outer, y-l1],
             [x-outer, y-l2], [x+outer, y-l2],
             [x-outer, y-l3], [x-edge, y-l3], [x+edge, y-l3], [x+outer, y-l3],
@@ -360,11 +349,9 @@ def generate_prompt_points_ab(x, y, block_type):
             [x-outer, y+l6], [x+outer, y+l6],
             [x-outer, y+l5], [x+outer, y+l5],
             [x-outer, y+l4], [x-center, y+l4], [x+center, y+l4], [x+outer, y+l4],
-            # Slanted bottom rows
             [x-outer, y+1298.93], [x-edge_sp, y+1298.93], [x+edge_sp, y+1390.84], [x+outer, y+1390.84],
             [x-outer, y+1427.43], [x+outer, y+1612.28],
             [x-outer, y+1627.49], [x-middle, y+1652.43], [x-edge_sp, y+1673.69], [x, y+l1], [x+edge_sp, y+1766.08], [x+middle, y+1787.34], [x+outer, y+1812.28],
-            # Inner points
             [x-middle, y-l2], [x-edge, y-l2], [x, y-l2], [x+edge, y-l2], [x+middle, y-l2],
             [x-middle, y-l3], [x, y-l3], [x+middle, y-l3],
             [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
@@ -381,7 +368,6 @@ def generate_prompt_points_ab(x, y, block_type):
         ])
     elif block_type == 'B2':
         points_real = np.array([
-            # Slanted top rows
             [x-outer, y-1627.49], [x-middle, y-1652.43], [x-edge_sp, y-1673.69], [x, y-l1], [x+edge_sp, y-1766.08], [x+middle, y-1787.34], [x+outer, y-1812.28],
             [x-outer, y-1427.43], [x+outer, y-1612.28],
             [x-outer, y-1298.93], [x-edge_sp, y-1298.93], [x+edge_sp, y-1390.84], [x+outer, y-1390.84],
@@ -396,9 +382,7 @@ def generate_prompt_points_ab(x, y, block_type):
             [x-outer, y+l4], [x-center, y+l4], [x+center, y+l4], [x+outer, y+l4],
             [x-outer, y+l3], [x-edge, y+l3], [x+edge, y+l3], [x+outer, y+l3],
             [x-outer, y+l2], [x+outer, y+l2],
-            # Bottom row
             [x-outer, y+l1], [x-middle, y+l1], [x-edge, y+l1], [x, y+l1], [x+edge, y+l1], [x+middle, y+l1], [x+outer, y+l1],
-            # Inner points
             [x-middle, y-1452.43], [x-edge_sp, y-1473.69], [x, y-l2], [x+edge_sp, y-1566.08], [x+middle, y-1587.34],
             [x-middle, y-1298.93], [x, y-1345.01], [x+middle, y-1390.84],
             [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
@@ -415,7 +399,6 @@ def generate_prompt_points_ab(x, y, block_type):
         ])
     else:  # A blocks - rectangular pattern
         points_real = np.array([
-            # Top and bottom rows (symmetric)
             [x-outer, y-l1], [x-middle, y-l1], [x-edge, y-l1], [x, y-l1], [x+edge, y-l1], [x+middle, y-l1], [x+outer, y-l1],
             [x-outer, y-l2], [x+outer, y-l2],
             [x-outer, y-l3], [x-edge, y-l3], [x+edge, y-l3], [x+outer, y-l3],
@@ -431,7 +414,6 @@ def generate_prompt_points_ab(x, y, block_type):
             [x-outer, y+l3], [x-edge, y+l3], [x+edge, y+l3], [x+outer, y+l3],
             [x-outer, y+l2], [x+outer, y+l2],
             [x-outer, y+l1], [x-middle, y+l1], [x-edge, y+l1], [x, y+l1], [x+edge, y+l1], [x+middle, y+l1], [x+outer, y+l1],
-            # Inner points
             [x-middle, y-l2], [x-edge, y-l2], [x, y-l2], [x+edge, y-l2], [x+middle, y-l2],
             [x-middle, y-l3], [x, y-l3], [x+middle, y-l3],
             [x-inner, y-l4], [x, y-l4], [x+inner, y-l4],
@@ -525,6 +507,10 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
 
     return cropped_image, template_mask_logits, prompt_centre
 
+
+# =============================================================================
+# BLOCK LABELS (supports 6 or 7 segments)
+# =============================================================================
 
 def compute_block_label(segment_per_ring):
     """Get block labels for given segment count."""
@@ -714,19 +700,12 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
 
 def run_sam(tunnel_id: str, base_dir: str = "data"):
     """
-    Run SAM segmentation pipeline.
+    Run SAM segmentation pipeline for continuous tunnels.
     
-    CRITICAL PARAMETERS (9 tunable):
-    - segment_width, angle_deg (geometry)
-    - k_mask_width, k_mask_height, ab_mask_width, ab_mask_height (template masks)
-    - padding, crop_margin (processing)
-    - min_quality_threshold (quality weighting)
-    
-    INHERITED FROM PREPROCESSING:
-    - resolution, tunnel_diameter (→ k_height_mm, ab_height_mm)
+    Supports auto-detection of segment count (6 or 7).
     """
     print(f"{'=' * 60}")
-    print(f"SAM Segmentation Pipeline: {tunnel_id}")
+    print(f"SAM Segmentation Pipeline (Continuous): {tunnel_id}")
     print(f"{'=' * 60}")
     
     tunnel_dir = os.path.join(base_dir, tunnel_id)
@@ -744,6 +723,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     # Calculate K and AB heights from tunnel diameter
     K_height, AB_height = calculate_segment_heights(tunnel_diameter)
+    
+    # Auto-detect segment count
+    segment_per_ring = detect_segment_count_from_geometry(tunnel_dir)
     
     # Extract CRITICAL tunable parameters
     segment_width = get_param(params, 'segment_width', default=DEFAULT_SEGMENT_WIDTH, allow_default=allow_defaults)
@@ -770,6 +752,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  tunnel_diameter:  {tunnel_diameter}m")
     print(f"  K_height:         {K_height:.2f}mm (calculated)")
     print(f"  AB_height:        {AB_height:.2f}mm (calculated)")
+    print(f"  segments/ring:    {segment_per_ring} (auto-detected)")
     
     print(f"\nCritical parameters (tunable):")
     print(f"  segment_width:    {segment_width}")
@@ -793,12 +776,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "enhanced.csv"))
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     
-    # Auto-detect segment count (default 6 for simple staggered)
-    segment_per_ring = detect_segment_count(tunnel_dir, default=6)
-    
     print(f"  Detected K positions: {len(initial_prompt_points)}")
     print(f"  Ring count: {ring_count}")
-    print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
+    print(f"  Segments per ring: {segment_per_ring} (continuous)")
     
     # Calculate y_bounds from image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
@@ -915,8 +895,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="SAM-based tunnel segmentation (simplified for BO)")
-    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 2-2)")
+    parser = argparse.ArgumentParser(description="SAM-based tunnel segmentation (continuous)")
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 3-1)")
     parser.add_argument("--data-dir", default="data", help="Base data directory")
     args = parser.parse_args()
     

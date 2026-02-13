@@ -1,20 +1,20 @@
 """
-Simple Staggered Evaluation (Stage 4)
+Continuous Tunnel Evaluation (Stage 4)
 
-Evaluates segmentation quality for SIMPLE STAGGERED tunnels only.
-For continuous or complex staggered patterns, use the appropriate pipeline.
+Evaluates segmentation quality for CONTINUOUS tunnels (e.g., 3-1).
+Auto-detects segment count (6 or 7) from tunnel geometry.
 
-Supports two modes:
+This module evaluates tunnel segmentation quality. It supports two modes:
+
 1. WITH Ground Truth: Compare predictions against ground truth labels
    - Input: final.csv with 'segment' (GT) and 'pred' columns
    - Outputs: OA, F1, mIoU metrics
 
 2. WITHOUT Ground Truth: Generate prediction statistics only
-   - Input: final.csv with 'pred' column
+   - Input: final.csv with 'pred' column (or predictions.csv)
    - Outputs: Class distribution, coverage analysis
 
-Simple staggered tunnels typically have 6 segments per ring:
-K-block, B1-block, A1-block, A2-block, A3-block, B2-block
+Segment count (6 or 7) is auto-detected from tunnel geometry or depth map image height.
 """
 
 import os
@@ -79,6 +79,7 @@ def get_param(params: dict, *keys, default=None):
 # Class Names
 # =============================================================================
 
+# Class names for different segment counts
 CLASS_NAMES_6 = {
     0: 'Background',
     1: 'K-block',
@@ -102,35 +103,98 @@ CLASS_NAMES_7 = {
 
 
 # =============================================================================
-# Segment Count Detection (default 6 for simple staggered)
+# Segment Count Detection
 # =============================================================================
 
-def detect_segment_count(tunnel_dir: str, default: int = 6) -> int:
+def detect_segment_count_from_geometry(
+    tunnel_dir: str,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> Optional[int]:
     """
-    Auto-detect segment count from tunnel geometry (radius → circumference).
+    Detect segment count from tunnel geometry (radius → circumference).
     
-    Default for simple staggered: 6
+    Uses the relationship: circumference = 2π × radius
+    This is the preferred method as it uses actual point cloud geometry.
     """
     enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
     
     if os.path.exists(enhanced_path):
-        try:
-            df = pd.read_csv(enhanced_path, usecols=['r'])
-            if 'r' in df.columns:
-                avg_radius = df['r'].mean()
-                circumference_mm = 2 * np.pi * avg_radius * 1000
-                
-                circ_6 = DEFAULT_K_HEIGHT_MM + 5 * DEFAULT_AB_HEIGHT_MM
-                circ_7 = DEFAULT_K_HEIGHT_MM + 6 * DEFAULT_AB_HEIGHT_MM
-                
-                segment_count = 6 if abs(circumference_mm - circ_6) < abs(circumference_mm - circ_7) else 7
-                print(f"Detected from geometry: {segment_count} segments (radius={avg_radius:.3f}m)")
-                return segment_count
-        except Exception:
-            pass
+        df = pd.read_csv(enhanced_path, usecols=['r'] if 'r' in pd.read_csv(enhanced_path, nrows=0).columns else None)
+        if df is not None and 'r' in df.columns:
+            avg_radius = df['r'].mean()
+            circumference_mm = 2 * np.pi * avg_radius * 1000
+            
+            circ_6 = k_height_mm + 5 * ab_height_mm
+            circ_7 = k_height_mm + 6 * ab_height_mm
+            
+            dist_6 = abs(circumference_mm - circ_6)
+            dist_7 = abs(circumference_mm - circ_7)
+            segment_count = 6 if dist_6 < dist_7 else 7
+            
+            print(f"Detected from geometry: {segment_count} segments (radius={avg_radius:.3f}m)")
+            return segment_count
     
-    print(f"Using default segment count: {default}")
-    return default
+    return None
+
+
+def detect_segment_count_from_height(
+    tunnel_dir: str,
+    resolution: float = DEFAULT_RESOLUTION,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> int:
+    """
+    Fallback: Auto-detect segment count from depth map image height.
+    
+    Compares image height to expected circumference:
+    - 6 segments: K + 5×AB = 17278.77 mm
+    - 7 segments: K + 6×AB = 20518.54 mm
+    """
+    import cv2
+    
+    depth_map_path = os.path.join(tunnel_dir, "depth_map.png")
+    if os.path.exists(depth_map_path):
+        img = cv2.imread(depth_map_path)
+        if img is not None:
+            image_height = img.shape[0]
+            height_mm = image_height * resolution * 1000
+            
+            circumference_6 = k_height_mm + 5 * ab_height_mm
+            circumference_7 = k_height_mm + 6 * ab_height_mm
+            
+            dist_6 = abs(height_mm - circumference_6)
+            dist_7 = abs(height_mm - circumference_7)
+            
+            segment_count = 6 if dist_6 < dist_7 else 7
+            print(f"Detected from image height: {segment_count} segments (height={image_height}px, {height_mm:.0f}mm)")
+            return segment_count
+    
+    print("Warning: Could not load depth map, defaulting to 6 segments")
+    return 6
+
+
+def detect_segment_count(
+    tunnel_dir: str,
+    resolution: float = DEFAULT_RESOLUTION,
+    k_height_mm: float = DEFAULT_K_HEIGHT_MM,
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+) -> int:
+    """
+    Auto-detect segment count using best available method.
+    
+    Priority:
+    1. Geometry-based (from enhanced.csv radius)
+    2. Image height-based (from depth_map.png)
+    """
+    # Try geometry-based first
+    segment_count = detect_segment_count_from_geometry(tunnel_dir, k_height_mm, ab_height_mm)
+    
+    if segment_count is not None:
+        return segment_count
+    
+    # Fall back to image height
+    return detect_segment_count_from_height(tunnel_dir, resolution, k_height_mm, ab_height_mm)
 
 
 def get_class_names(segment_count: int) -> Dict[int, str]:
@@ -417,17 +481,21 @@ def generate_report(
 # Main Pipeline
 # =============================================================================
 
-def evaluate(tunnel_id: str, base_dir: str = "data", segment_count: Optional[int] = None) -> Dict:
+def evaluate(
+    tunnel_id: str,
+    base_dir: str = "data",
+    segment_count: Optional[int] = None
+) -> Dict:
     """
-    Run evaluation for simple staggered tunnel.
+    Run complete evaluation pipeline.
     
     Args:
-        tunnel_id: Tunnel identifier (e.g., "1-4", "2-2").
+        tunnel_id: Tunnel identifier.
         base_dir: Base data directory.
-        segment_count: Number of segments (auto-detected if None, default 6).
+        segment_count: Number of segments (auto-detected if None).
     """
     print("=" * 70)
-    print("SIMPLE STAGGERED EVALUATION")
+    print("SEGMENTATION EVALUATION")
     print("=" * 70)
     print(f"Tunnel: {tunnel_id}")
     
@@ -435,9 +503,15 @@ def evaluate(tunnel_id: str, base_dir: str = "data", segment_count: Optional[int
     output_dir = os.path.join(tunnel_dir, "evaluation")
     os.makedirs(output_dir, exist_ok=True)
     
-    # Auto-detect segment count (default 6 for simple staggered)
+    # Load parameters for physical constants
+    params = load_parameters(tunnel_id, base_dir)
+    resolution = get_param(params, 'physical_constants', 'resolution', default=DEFAULT_RESOLUTION)
+    k_height_mm = get_param(params, 'physical_constants', 'k_height_mm', default=DEFAULT_K_HEIGHT_MM)
+    ab_height_mm = get_param(params, 'physical_constants', 'ab_height_mm', default=DEFAULT_AB_HEIGHT_MM)
+    
+    # Detect segment count
     if segment_count is None:
-        segment_count = detect_segment_count(tunnel_dir, default=6)
+        segment_count = detect_segment_count(tunnel_dir, resolution, k_height_mm, ab_height_mm)
     else:
         print(f"Using specified segment count: {segment_count}")
     
@@ -513,22 +587,22 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Evaluate simple staggered tunnel segmentation",
+        description="Evaluate tunnel segmentation results",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Simple Staggered Evaluation
-
 Examples:
-  python evaluation.py 1-4                    # Auto-detect segments (default 6)
-  python evaluation.py 2-2 --segments 7       # Force 7 segments
-  python evaluation.py 2-2 --data-dir data/custom
+  python evaluation.py 1-4                    # Auto-detect segments
+  python evaluation.py 4-1 --segments 7       # Force 7 segments  
+  python evaluation.py 4-1 --data-dir data/configurable
 
-Input: <data_dir>/<tunnel_id>/final.csv (with 'segment' column for GT metrics)
+Input files (in order of preference):
+  - <data_dir>/<tunnel_id>/final.csv (with 'segment' column for GT)
+  - <data_dir>/<tunnel_id>/predictions.csv
 """
     )
-    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 2-2)")
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4, 4-1)")
     parser.add_argument("--segments", type=int, default=None,
-                       help="Number of segments per ring (auto-detected if omitted, default 6)")
+                       help="Number of segments per ring (auto-detected if omitted)")
     parser.add_argument("--data-dir", default="data",
                        help="Base data directory (default: data)")
     

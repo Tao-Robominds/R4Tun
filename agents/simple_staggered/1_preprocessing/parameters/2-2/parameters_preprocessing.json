@@ -10,5 +10,6 @@
   ],
   "curvature_neighbors": 20,
   "depth_map_resolution": 0.009493057644594422,
-  "interpolation_window": 12
+  "interpolation_window": 12,
+  "tunnel_diameter": 5.285043
 }

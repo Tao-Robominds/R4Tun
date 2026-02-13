@@ -1,8 +1,0 @@
-{
-  "tunnel_id": "1-4",
-  "stage": "combined",
-  "metric": "mIoU",
-  "best_score": -Infinity,
-  "best_params": null,
-  "history": []
-}

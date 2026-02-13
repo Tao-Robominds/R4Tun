@@ -6,5 +6,10 @@
   ],
   "curvature_neighbors": 12,
   "depth_map_resolution": 0.007252813963310069,
-  "interpolation_window": 7
+  "interpolation_window": 7,
+  "tunnel_diameter": 5.5,
+  "ring_spacing": 1.16974258306134,
+  "radius_min": 2.5688870592873907,
+  "radius_max": 3.0250000000000004,
+  "gradient_threshold": 0.48199408605169713
 }

@@ -1,8 +1,0 @@
-{
-  "binary_threshold": 0,
-  "hough_oblique_threshold": 0,
-  "dilation_iterations": 0,
-  "dilation_kernel_size": 0,
-  "hough_oblique_min_length": 0,
-  "hough_oblique_max_gap": 0
-}

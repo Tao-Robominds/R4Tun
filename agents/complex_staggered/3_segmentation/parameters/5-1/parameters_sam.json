@@ -1,0 +1,13 @@
+{
+  "segment_width": 1322.7638483100934,
+  "angle_deg": 7.277697809895329,
+  "k_mask_width": 583.1130463165057,
+  "k_mask_height_pos": 638.5365206939068,
+  "k_mask_height_neg": 411.64524419108534,
+  "ab_mask_width": 679.4367752001651,
+  "ab_mask_height": 1573.9650719360902,
+  "padding": 150,
+  "crop_margin": 50,
+  "min_quality_threshold": 0.3,
+  "use_quality_weighting": true
+}

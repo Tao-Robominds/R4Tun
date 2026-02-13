@@ -9,5 +9,10 @@
   "angle_positive_max": 7.571848134990964,
   "angle_negative_min": -7.571848134990964,
   "angle_negative_max": -5.156249507619749,
-  "hough_vertical_threshold": 739
+  "hough_vertical_threshold": 739,
+  "hough_horizontal_threshold": 50,
+  "hough_horizontal_min_length": 100,
+  "hough_horizontal_max_gap": 10,
+  "horizontal_angle_tolerance": 1.0,
+  "merge_distance_threshold": 3.0
 }
