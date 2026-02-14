@@ -2,36 +2,45 @@
   "schema_version": "r4tun.sam.v1",
   "trial": {
     "trial_id": "sam_1-4_017",
-    "timestamp_utc": "2026-02-13T16:56:12Z",
+    "timestamp_utc": "2026-02-14T01:49:00Z",
     "tunnel_id": "1-4",
     "assembly_type": "simple_staggered"
   },
   "params": {
-    "segment_width": 1066.387150487907,
-    "angle_deg": 5.809650550765961,
-    "k_mask_width": 604.4781863347478,
-    "k_mask_height_pos": 523.6128049605569,
-    "k_mask_height_neg": 636.1731437280755,
-    "ab_mask_width": 612.347355525915,
-    "ab_mask_height": 1436.5986760602354,
-    "padding": 164,
-    "crop_margin": 72,
-    "min_quality_threshold": 0.4666050499342063
+    "segment_width": 1144.6133446696472,
+    "angle_deg": 6.443324831218468,
+    "k_mask_width": 514.836656886625,
+    "k_mask_height_pos": 543.6015356073373,
+    "k_mask_height_neg": 632.9503544269006,
+    "ab_mask_width": 546.5194804081781,
+    "ab_mask_height": 1753.3283747523913,
+    "padding": 237,
+    "crop_margin": 26,
+    "min_quality_threshold": 0.26950315115778367,
+    "resolution": 0.005,
+    "k_height": 1079.92,
+    "ab_height": 3239.77,
+    "b1_height_top": 1619.89,
+    "b1_height_bottom_pos": 1540.69,
+    "b1_height_bottom_neg": 1699.08,
+    "b2_height_top_pos": 1540.69,
+    "b2_height_top_neg": 1699.08,
+    "b2_height_bottom": 1619.89
   },
   "outputs": {
     "metrics": {
-      "OA": 0.8515225667720292,
-      "F1": 0.797102892118413,
-      "mIoU": 0.675090460566161
+      "OA": 0.8479526279919627,
+      "F1": 0.7547174921384482,
+      "mIoU": 0.6423298714055058
     },
     "iou_per_class": [
-      0.857523289644519,
-      0.49486817968193325,
-      0.7603383215734926,
-      0.7209292842798455,
-      0.4379070425953643,
-      0.7061748249405301,
-      0.7478922812474421
+      0.8006312351019688,
+      0.559145443813073,
+      0.7423722520261705,
+      0.7622101500033727,
+      0.1453732912723449,
+      0.7366399561871271,
+      0.7499367714344837
     ],
     "classes": [
       0,
@@ -45,9 +54,9 @@
   },
   "bo": {
     "objective_name": "miou",
-    "objective_value": 0.675090460566161,
+    "objective_value": 0.6423298714055058,
     "eval_index": 17,
-    "runtime_sec": 123.44362092018127,
+    "runtime_sec": 112.59130644798279,
     "is_feasible": true,
     "cached": false
   }

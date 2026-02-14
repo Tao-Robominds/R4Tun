@@ -2,33 +2,62 @@
   "schema_version": "r4tun.sam.v1",
   "trial": {
     "trial_id": "sam_1-4_033",
-    "timestamp_utc": "2026-02-13T17:24:00Z",
+    "timestamp_utc": "2026-02-14T02:19:10Z",
     "tunnel_id": "1-4",
     "assembly_type": "simple_staggered"
   },
   "params": {
-    "segment_width": 1128.6053767827075,
-    "angle_deg": 5.501956404647131,
-    "k_mask_width": 598.2550621721707,
-    "k_mask_height_pos": 546.3791603383678,
-    "k_mask_height_neg": 426.826198301459,
-    "ab_mask_width": 747.8637914672364,
-    "ab_mask_height": 1438.102059761642,
-    "padding": 143,
-    "crop_margin": 37,
-    "min_quality_threshold": 0.23410001481903298
+    "segment_width": 1097.205037752604,
+    "angle_deg": 5.6260644694389415,
+    "k_mask_width": 632.8745531495289,
+    "k_mask_height_pos": 538.7414298284305,
+    "k_mask_height_neg": 606.9482982233576,
+    "ab_mask_width": 708.9497429576979,
+    "ab_mask_height": 1793.707485807915,
+    "padding": 155,
+    "crop_margin": 43,
+    "min_quality_threshold": 0.5181763565656425,
+    "resolution": 0.005,
+    "k_height": 1079.92,
+    "ab_height": 3239.77,
+    "b1_height_top": 1619.89,
+    "b1_height_bottom_pos": 1540.69,
+    "b1_height_bottom_neg": 1699.08,
+    "b2_height_top_pos": 1540.69,
+    "b2_height_top_neg": 1699.08,
+    "b2_height_bottom": 1619.89
   },
-  "trace": {
-    "warnings": [
-      "Error: height and width must be > 0"
+  "outputs": {
+    "metrics": {
+      "OA": 0.8735943503754274,
+      "F1": 0.7968977771230925,
+      "mIoU": 0.6889199602468047
+    },
+    "iou_per_class": [
+      0.847823795480578,
+      0.5919148354568786,
+      0.7826611451790214,
+      0.788697649506623,
+      0.25532876402801835,
+      0.7701315091281963,
+      0.7858820229483173
+    ],
+    "classes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
     ]
   },
   "bo": {
     "objective_name": "miou",
-    "objective_value": 0.0,
+    "objective_value": 0.6889199602468047,
     "eval_index": 33,
-    "runtime_sec": 19.826343297958374,
-    "is_feasible": false,
+    "runtime_sec": 113.35848617553711,
+    "is_feasible": true,
     "cached": false
   }
 }

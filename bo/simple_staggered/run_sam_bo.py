@@ -168,7 +168,7 @@ def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict 
     # Merge fixed params into param_dict (fixed params take precedence)
     param_dict.update(fixed_params)
     
-    return {
+    result = {
         'segment_width': float(param_dict['segment_width']),
         'angle_deg': float(param_dict['angle_deg']),
         'k_mask_width': float(param_dict['k_mask_width']),
@@ -180,6 +180,13 @@ def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict 
         'crop_margin': int(param_dict['crop_margin']),
         'min_quality_threshold': float(param_dict['min_quality_threshold']),
     }
+    
+    # Preserve non-BO fields from fixed_params (resolution, k_height, ab_height, B1/B2 heights)
+    for key, value in fixed_params.items():
+        if key not in result:
+            result[key] = value
+    
+    return result
 
 
 # =============================================================================
