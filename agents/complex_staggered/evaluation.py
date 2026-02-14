@@ -117,7 +117,7 @@ def detect_segment_count_from_geometry(
     Uses the relationship: circumference = 2π × radius
     This is the preferred method as it uses actual point cloud geometry.
     """
-    enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
+    enhanced_path = os.path.join(tunnel_dir, 'denoised.csv')
     
     if os.path.exists(enhanced_path):
         df = pd.read_csv(enhanced_path, usecols=['r'] if 'r' in pd.read_csv(enhanced_path, nrows=0).columns else None)
@@ -142,7 +142,8 @@ def detect_segment_count_from_height(
     tunnel_dir: str,
     resolution: float = DEFAULT_RESOLUTION,
     k_height_mm: float = DEFAULT_K_HEIGHT_MM,
-    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM,
+    default: int = 6
 ) -> int:
     """
     Fallback: Auto-detect segment count from depth map image height.
@@ -170,21 +171,22 @@ def detect_segment_count_from_height(
             print(f"Detected from image height: {segment_count} segments (height={image_height}px, {height_mm:.0f}mm)")
             return segment_count
     
-    print("Warning: Could not load depth map, defaulting to 6 segments")
-    return 6
+    print(f"Warning: Could not load depth map, defaulting to {default} segments")
+    return default
 
 
 def detect_segment_count(
     tunnel_dir: str,
     resolution: float = DEFAULT_RESOLUTION,
     k_height_mm: float = DEFAULT_K_HEIGHT_MM,
-    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM
+    ab_height_mm: float = DEFAULT_AB_HEIGHT_MM,
+    default: int = 6
 ) -> int:
     """
     Auto-detect segment count using best available method.
     
     Priority:
-    1. Geometry-based (from enhanced.csv radius)
+    1. Geometry-based (from denoised.csv radius)
     2. Image height-based (from depth_map.png)
     """
     # Try geometry-based first
@@ -194,7 +196,7 @@ def detect_segment_count(
         return segment_count
     
     # Fall back to image height
-    return detect_segment_count_from_height(tunnel_dir, resolution, k_height_mm, ab_height_mm)
+    return detect_segment_count_from_height(tunnel_dir, resolution, k_height_mm, ab_height_mm, default=default)
 
 
 def get_class_names(segment_count: int) -> Dict[int, str]:
@@ -511,7 +513,7 @@ def evaluate(
     
     # Detect segment count
     if segment_count is None:
-        segment_count = detect_segment_count(tunnel_dir, resolution, k_height_mm, ab_height_mm)
+        segment_count = detect_segment_count(tunnel_dir, resolution, k_height_mm, ab_height_mm, default=7)
     else:
         print(f"Using specified segment count: {segment_count}")
     

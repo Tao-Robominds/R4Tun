@@ -85,7 +85,7 @@ def get_sam_dimensions(
     Returns:
         Tuple of (dimensions list, parameter names list, fixed_params dict)
     """
-    # Default bounds (10D SAM space)
+    # Default bounds (10D + 8 physical params for complex_staggered)
     default_bounds = {
         'segment_width': (1050.0, 1350.0),
         'angle_deg': (5.5, 9.0),
@@ -97,6 +97,15 @@ def get_sam_dimensions(
         'padding': (80, 200),
         'crop_margin': (25, 90),
         'min_quality_threshold': (0.2, 0.6),
+        # Physical params (complex_staggered)
+        'k_height': (950.0, 1350.0),
+        'ab_height': (3000.0, 3600.0),
+        'b1_height_top': (1300.0, 1800.0),
+        'b1_height_bottom_pos': (1400.0, 1700.0),
+        'b1_height_bottom_neg': (1550.0, 1850.0),
+        'b2_height_top_pos': (1400.0, 1700.0),
+        'b2_height_top_neg': (1550.0, 1850.0),
+        'b2_height_bottom': (1300.0, 1800.0),
     }
     
     # Load per-tunnel config if it exists
@@ -138,6 +147,14 @@ def get_sam_dimensions(
         ('padding', Integer, bounds['padding']),
         ('crop_margin', Integer, bounds['crop_margin']),
         ('min_quality_threshold', Real, bounds['min_quality_threshold']),
+        ('k_height', Real, bounds['k_height']),
+        ('ab_height', Real, bounds['ab_height']),
+        ('b1_height_top', Real, bounds['b1_height_top']),
+        ('b1_height_bottom_pos', Real, bounds['b1_height_bottom_pos']),
+        ('b1_height_bottom_neg', Real, bounds['b1_height_bottom_neg']),
+        ('b2_height_top_pos', Real, bounds['b2_height_top_pos']),
+        ('b2_height_top_neg', Real, bounds['b2_height_top_neg']),
+        ('b2_height_bottom', Real, bounds['b2_height_bottom']),
     ]
     
     for name, param_type, (low, high) in param_defs:
@@ -152,6 +169,9 @@ def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict 
     """
     Convert BO parameters to SAM JSON structure.
     
+    Preserves non-BO fields from fixed_params (e.g. resolution, k_height, ab_height,
+    B1/B2 heights for complex_staggered) so SAM runs with correct physical parameters.
+    
     Args:
         params: List of BO-tuned parameter values
         param_names: List of parameter names corresponding to params
@@ -163,23 +183,18 @@ def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict 
     if fixed_params is None:
         fixed_params = {}
     
+    # Start with fixed_params (preserves resolution, k_height, ab_height, B1/B2, etc.)
+    result = dict(fixed_params)
+    
+    # Override with BO-tuned params
     param_dict = dict(zip(param_names, params))
+    int_keys = {'padding', 'crop_margin'}
+    for key, val in param_dict.items():
+        result[key] = int(val) if key in int_keys else float(val)
     
-    # Merge fixed params into param_dict (fixed params take precedence)
-    param_dict.update(fixed_params)
+    result.setdefault('use_quality_weighting', True)
     
-    return {
-        'segment_width': float(param_dict['segment_width']),
-        'angle_deg': float(param_dict['angle_deg']),
-        'k_mask_width': float(param_dict['k_mask_width']),
-        'k_mask_height_pos': float(param_dict['k_mask_height_pos']),
-        'k_mask_height_neg': float(param_dict['k_mask_height_neg']),
-        'ab_mask_width': float(param_dict['ab_mask_width']),
-        'ab_mask_height': float(param_dict['ab_mask_height']),
-        'padding': int(param_dict['padding']),
-        'crop_margin': int(param_dict['crop_margin']),
-        'min_quality_threshold': float(param_dict['min_quality_threshold']),
-    }
+    return result
 
 
 # =============================================================================
@@ -274,12 +289,12 @@ class SamObjective:
         )
         
         # Detect segment count (default 6 for simple_staggered/continuous, 7 for complex_staggered)
-        # For continuous and complex_staggered, detect_segment_count doesn't have a default parameter
-        if agent_type == 'continuous' or agent_type == 'complex_staggered':
-            self.segment_count = detect_segment_count(self.tunnel_dir)
+        if agent_type == 'complex_staggered':
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=7)
+        elif agent_type == 'continuous':
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=6)
         else:
-            default_segments = 6
-            self.segment_count = detect_segment_count(self.tunnel_dir, default=default_segments)
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=6)
         
         # Track best
         self.best_score = -1.0
@@ -547,6 +562,14 @@ def load_best_from_logs(
         'padding': lambda p: p.get('padding', 150),
         'crop_margin': lambda p: p.get('crop_margin', 50),
         'min_quality_threshold': lambda p: p.get('min_quality_threshold', 0.3),
+        'k_height': lambda p: p.get('k_height', 1200.0),
+        'ab_height': lambda p: p.get('ab_height', 3270.0),
+        'b1_height_top': lambda p: p.get('b1_height_top', 1500.0),
+        'b1_height_bottom_pos': lambda p: p.get('b1_height_bottom_pos', 1540.69),
+        'b1_height_bottom_neg': lambda p: p.get('b1_height_bottom_neg', 1699.08),
+        'b2_height_top_pos': lambda p: p.get('b2_height_top_pos', 1540.69),
+        'b2_height_top_neg': lambda p: p.get('b2_height_top_neg', 1699.08),
+        'b2_height_bottom': lambda p: p.get('b2_height_bottom', 1500.0),
     }
     
     param_values = []

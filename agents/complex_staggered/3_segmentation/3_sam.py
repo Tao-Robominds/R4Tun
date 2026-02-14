@@ -56,6 +56,10 @@ DEFAULT_K_MASK_HEIGHT_NEG = 460.0
 DEFAULT_AB_MASK_WIDTH = 625.0
 DEFAULT_AB_MASK_HEIGHT = 1620.0
 
+# Segment physical heights defaults (in mm)
+DEFAULT_K_HEIGHT = 1079.92
+DEFAULT_AB_HEIGHT = 3239.77
+
 # Processing defaults
 DEFAULT_PADDING = 150
 DEFAULT_CROP_MARGIN = 50
@@ -63,6 +67,21 @@ DEFAULT_CROP_MARGIN = 50
 # Quality weighting defaults
 DEFAULT_MIN_QUALITY_THRESHOLD = 0.3
 DEFAULT_USE_QUALITY_WEIGHTING = True
+
+# Walk order: list of (block_name, direction_from_K)
+# direction: +1 = increasing Y (downward on depth map), -1 = decreasing Y (upward)
+# The first entry must be K with direction 0 (anchor).
+# Subsequent entries are walked cumulatively in the given direction.
+# Default: 5-1 arrangement (B1 below K, B2 above K)
+DEFAULT_WALK_ORDER = [
+    ("K", 0),       # anchor at detected position
+    ("B1", 1),      # 1 step downward from K
+    ("A1", 1),      # continues downward
+    ("A2", 1),      # continues downward
+    ("A3", 1),      # continues downward (wraps)
+    ("A4", 1),      # continues downward (wraps)
+    ("B2", -1),     # 1 step upward from K (reverse direction)
+]
 
 
 # =============================================================================
@@ -176,6 +195,14 @@ def calculate_segment_heights(tunnel_diameter: float):
 DEFAULT_K_HEIGHT_MM = 1079.92
 DEFAULT_AB_HEIGHT_MM = 3239.77
 
+# B1/B2 block template mask defaults (slanted edges)
+DEFAULT_B1_HEIGHT_TOP = 1619.89
+DEFAULT_B1_HEIGHT_BOTTOM_POS = 1540.69
+DEFAULT_B1_HEIGHT_BOTTOM_NEG = 1699.08
+DEFAULT_B2_HEIGHT_TOP_POS = 1540.69
+DEFAULT_B2_HEIGHT_TOP_NEG = 1699.08
+DEFAULT_B2_HEIGHT_BOTTOM = 1619.89
+
 
 # =============================================================================
 # SEGMENT COUNT DETECTION
@@ -187,7 +214,7 @@ def detect_segment_count(tunnel_dir: str, default: int = 7) -> int:
     Compares circumference to expected values for 6 vs 7 segments.
     Default for complex staggered: 7
     """
-    enhanced_path = os.path.join(tunnel_dir, 'enhanced.csv')
+    enhanced_path = os.path.join(tunnel_dir, 'denoised.csv')
     
     if os.path.exists(enhanced_path):
         df = pd.read_csv(enhanced_path)
@@ -219,10 +246,8 @@ def fill_polygon(mask, vertices):
     mask[mask_inside] = 1
 
 
-def generate_template_mask(height, width, prompt_centre, block, resolution,
-                           k_mask_width, k_mask_height_pos, k_mask_height_neg,
-                           ab_mask_width, ab_mask_height):
-    """Generate template mask using parameterized dimensions.
+def generate_template_mask(height, width, prompt_centre, block, resolution, template_params):
+    """Generate template mask using parameterized dimensions (matching p4tun behavior).
     
     Complex staggered uses slanted B1/B2 masks (same as simple staggered).
     """
@@ -232,23 +257,25 @@ def generate_template_mask(height, width, prompt_centre, block, resolution,
     y = prompt_centre_y * (resolution * 1000)
     
     if block == 'K':
-        w = k_mask_width
-        hp = k_mask_height_pos
-        hn = k_mask_height_neg
+        w = template_params['k_mask_width']
+        hp = template_params['k_mask_height_pos']
+        hn = template_params['k_mask_height_neg']
         vertices_real = np.array([[x-w, y-hp], [x-w, y+hp], [x+w, y+hn], [x+w, y-hn]])
     elif block == 'B1':
-        w = ab_mask_width
-        ht = ab_mask_height
-        # B1: slanted bottom
-        vertices_real = np.array([[x-w, y-ht], [x-w, y+1540.69], [x+w, y+1699.08], [x+w, y-ht]])
+        w = template_params['ab_mask_width']
+        ht = template_params['b1_height_top']
+        hbp = template_params['b1_height_bottom_pos']
+        hbn = template_params['b1_height_bottom_neg']
+        vertices_real = np.array([[x-w, y-ht], [x-w, y+hbp], [x+w, y+hbn], [x+w, y-ht]])
     elif block == 'B2':
-        w = ab_mask_width
-        ht = ab_mask_height
-        # B2: slanted top
-        vertices_real = np.array([[x-w, y-1540.69], [x-w, y+ht], [x+w, y+ht], [x+w, y-1699.08]])
+        w = template_params['ab_mask_width']
+        htp = template_params['b2_height_top_pos']
+        htn = template_params['b2_height_top_neg']
+        hb = template_params['b2_height_bottom']
+        vertices_real = np.array([[x-w, y-htp], [x-w, y+hb], [x+w, y+hb], [x+w, y-htn]])
     else:  # A blocks - rectangular
-        w = ab_mask_width
-        h = ab_mask_height
+        w = template_params['ab_mask_width']
+        h = template_params['ab_mask_height']
         vertices_real = np.array([[x-w, y-h], [x-w, y+h], [x+w, y+h], [x+w, y-h]])
         
     vertices = vertices_real / (resolution * 1000)
@@ -507,9 +534,7 @@ def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution * 1000))
 
 
-def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution,
-                               k_mask_width, k_mask_height_pos, k_mask_height_neg,
-                               ab_mask_width, ab_mask_height):
+def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params):
     """
     Crop image and generate template mask logits.
     
@@ -566,14 +591,15 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
         })
         prompt_centre_x = cx - x1
 
+    if cropped_image.shape[0] == 0 or cropped_image.shape[1] == 0:
+        return None, None, None, None
+
     prompt_centre_y = cy - y1
     prompt_centre = (prompt_centre_x, prompt_centre_y)
 
     cropped_template_mask = generate_template_mask(
         cropped_image.shape[0], cropped_image.shape[1],
-        prompt_centre, block, resolution,
-        k_mask_width, k_mask_height_pos, k_mask_height_neg,
-        ab_mask_width, ab_mask_height
+        prompt_centre, block, resolution, template_params
     )
     template_mask_logits = compute_logits_from_mask(cropped_template_mask)
 
@@ -607,159 +633,135 @@ def compute_block_to_label_map(segment_per_ring):
 # ROW PROCESSING (from detected K positions — NO ground truth)
 # =============================================================================
 
+def _normalize_walk_order(walk_order):
+    """Convert walk_order from JSON format (lists) to list of (block_name, direction)."""
+    result = []
+    for item in walk_order:
+        if isinstance(item, (list, tuple)):
+            block, direction = item[0], int(item[1])
+        else:
+            block, direction = item
+        result.append((block, direction))
+    return result
+
+
+def _run_sam_on_block(block, map_y, initial_x, delta_x, delta_y, image, predictor, config, quality):
+    """Run SAM on a single block at map_y; returns result dict or None."""
+    resolution = config['resolution']
+    segment_width = config['segment_width']
+    K_height = config['K_height']
+    AB_height = config['AB_height']
+    y_bounds = config['y_bounds']
+    template_params = config['template_params']
+
+    crop_result = crop_image_and_mask_logits(
+        image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params)
+    if crop_result[0] is None:
+        return None
+    cropped_image, template_mask_logit, prompt_centre, crop_info = crop_result
+    points, labels = generate_prompt_points(
+        prompt_centre, initial_x, map_y, block, resolution,
+        segment_width, K_height, AB_height, image, y_bounds)
+
+    # Filter points outside crop bounds
+    if len(points) > 0 and np.any(points[:, 1] < 0):
+        within_bounds = (points[:, 1] >= 0)
+        points = points[within_bounds]
+        labels = labels[within_bounds]
+    if len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
+        within_bounds = ((points[:, 1] + map_y - delta_y) <= image.shape[0])
+        points = points[within_bounds]
+        labels = labels[within_bounds]
+
+    if len(points) == 0 or cropped_image.size == 0:
+        return None
+
+    predictor.set_image(cropped_image)
+    mask, score, logit = predictor.predict(
+        point_coords=points,
+        point_labels=labels,
+        mask_input=template_mask_logit,
+        multimask_output=False,
+    )
+    return {
+        'block': block,
+        'mask': mask,
+        'score': score,
+        'logit': logit[0],
+        'crop_info': crop_info,
+        'quality': quality,
+    }
+
+
 def process_row(df_row, image, predictor, config):
     """Process a single row (ring) for SAM segmentation.
-    
-    Same row-based approach as simple staggered:
-    1. Start at detected K position
-    2. Walk upward: K → B1 → A1 → A2 → A3 → A4
-    3. If hitting top boundary, reverse and walk downward
-    4. Walk downward: B2 (below K)
-    
-    DIFFERENCES from simple staggered:
-    - 7 segments instead of 6 (extra A4)
-    - crop_image_and_mask_logits handles wrap-around
-    - Returns crop_info for wrap-around-aware aggregation
+
+    Uses tunable walk_order: list of (block_name, direction).
+    direction: 0 = K anchor, +1 = step downward from previous, -1 = step upward from K.
+    Two-pass: forward group (K + direction +1), then reverse group (direction -1).
     """
     initial_x, initial_y = df_row['X'], df_row['Y']
     quality = df_row.get('quality', 1.0) if hasattr(df_row, 'get') else 1.0
-    
-    # Extract config
+
     resolution = config['resolution']
-    segment_per_ring = config['segment_per_ring']
     segment_width = config['segment_width']
     K_height = config['K_height']
     AB_height = config['AB_height']
     angle = config['angle']
     padding = config['padding']
     crop_margin = config['crop_margin']
-    y_bounds = config['y_bounds']
-    k_mask_width = config['k_mask_width']
-    k_mask_height_pos = config['k_mask_height_pos']
-    k_mask_height_neg = config['k_mask_height_neg']
-    ab_mask_width = config['ab_mask_width']
-    ab_mask_height = config['ab_mask_height']
-    
-    block_labels = compute_block_label(segment_per_ring)
+    walk_order = _normalize_walk_order(config['walk_order'])
 
     delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
-    delta_y = 0
-
-    reverse = False
-    stop = False
-    map_y = 0
-    block_label_index = 0
+    step_px = convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
+    ab_step_px = convert_to_pixel_coords(AB_height, resolution)
+    delta_y = convert_to_pixel_coords(0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
+    ab_delta_y = convert_to_pixel_coords(0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
 
     results = []
-    for i in range(segment_per_ring):
-        if not reverse:
-            block = block_labels[block_label_index]
-            if block_label_index == 0:
-                # K block
-                delta_y = convert_to_pixel_coords(0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
-                map_y = initial_y
+
+    # Split walk_order into forward (K + direction +1) and reverse (direction -1)
+    forward_blocks = [(b, d) for b, d in walk_order if d >= 0]
+    reverse_blocks = [(b, d) for b, d in walk_order if d == -1]
+
+    # Pass 1: forward group (K, then blocks with direction +1)
+    map_y = initial_y
+    for idx, (block, direction) in enumerate(forward_blocks):
+        if block == 'K':
+            map_y = initial_y
+            dy = delta_y
+        else:
+            if idx == 1:
+                map_y = initial_y + step_px
             else:
-                # A/B blocks above K
-                delta_y = convert_to_pixel_coords(0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
-                if block_label_index == 1:
-                    # B1: directly above K
-                    map_y = initial_y - convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
-                else:
-                    # A1, A2, A3, A4: each one AB_height above previous
-                    map_y = map_y - convert_to_pixel_coords(AB_height, resolution)
+                map_y = map_y + ab_step_px
+            dy = ab_delta_y
 
-            # Crop with wrap-around support
-            cropped_image, template_mask_logit, prompt_centre, crop_info = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution,
-                k_mask_width, k_mask_height_pos, k_mask_height_neg, ab_mask_width, ab_mask_height)
-            points, labels = generate_prompt_points(
-                prompt_centre, initial_x, map_y, block, resolution,
-                segment_width, K_height, AB_height, image, y_bounds)
-        
-            if len(points) > 0 and np.any(points[:, 1] < 0):
-                within_bounds = (points[:, 1] >= 0)
-                points = points[within_bounds]
-                labels = labels[within_bounds]
-                reverse = True
-            
-            if len(points) > 0 and cropped_image.size > 0:
-                predictor.set_image(cropped_image)
-                mask, score, logit = predictor.predict(
-                    point_coords=points,
-                    point_labels=labels,
-                    mask_input=template_mask_logit,
-                    multimask_output=False,
-                )
-            
-                results.append({
-                    'block': block,
-                    'mask': mask,
-                    'score': score,
-                    'logit': logit[0],
-                    'crop_info': crop_info,
-                    'quality': quality
-                })
-            
-            if reverse:
-                block_label_index = -1
-                continue
+        r = _run_sam_on_block(block, map_y, initial_x, delta_x, dy, image, predictor, config, quality)
+        if r is not None:
+            results.append(r)
 
-            block_label_index = block_label_index + 1
-            
-        if reverse:
-            block = block_labels[block_label_index]
-            if block_label_index == -1:
-                # B2: directly below K
-                map_y = initial_y + convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
-            else:
-                map_y = map_y + convert_to_pixel_coords(AB_height, resolution)
+    # Pass 2: reverse group (blocks with direction -1, walked upward from K)
+    map_y = initial_y
+    for idx, (block, direction) in enumerate(reverse_blocks):
+        if idx == 0:
+            map_y = initial_y - step_px
+        else:
+            map_y = map_y - ab_step_px
+        dy = ab_delta_y
 
-            # Crop with wrap-around support
-            cropped_image, template_mask_logit, prompt_centre, crop_info = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution,
-                k_mask_width, k_mask_height_pos, k_mask_height_neg, ab_mask_width, ab_mask_height)
-            points, labels = generate_prompt_points(
-                prompt_centre, initial_x, map_y, block, resolution,
-                segment_width, K_height, AB_height, image, y_bounds)
+        r = _run_sam_on_block(block, map_y, initial_x, delta_x, dy, image, predictor, config, quality)
+        if r is not None:
+            results.append(r)
 
-            if len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
-                within_bounds = ((points[:, 1] + map_y - delta_y) <= image.shape[0])
-                points = points[within_bounds]
-                labels = labels[within_bounds]
-                stop = True
-
-            if len(points) > 0 and cropped_image.size > 0:
-                predictor.set_image(cropped_image)
-                mask, score, logit = predictor.predict(
-                    point_coords=points,
-                    point_labels=labels,
-                    mask_input=template_mask_logit,
-                    multimask_output=False,
-                )
-
-                results.append({
-                    'block': block,
-                    'mask': mask,
-                    'score': score,
-                    'logit': logit[0],
-                    'crop_info': crop_info,
-                    'quality': quality
-                })
-
-            if stop:
-                break
-
-            block_label_index = block_label_index - 1
-             
     return results
 
 
 def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df):
     """Project segmentation results back to 3D point cloud.
     
-    CRITICAL DIFFERENCE from simple staggered:
-    Allows SAM to update both pred=0 (background) AND pred=7 (tunnel surface).
-    Simple staggered only updates pred=7.
+    Complex staggered: update pred in [0, 7] (background + tunnel surface), matching p4tun.
+    Enables recovery of pred=0 points that have valid GT segment labels.
     """
     df_copy = df.copy()
     pred = df_copy['pred'].values
@@ -773,7 +775,7 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
     img_height, img_width = segmented_map.shape
 
     valid_point_mask = np.isin(point_indices, df_copy.index.values)
-    # Complex staggered: allow SAM to update both pred=0 (background) AND pred=7 (tunnel surface)
+    # Complex staggered: update pred=0 and pred=7 (p4tun-style)
     valid_update_mask = np.isin(pred[point_indices[valid_point_mask]], [0, 7])
     
     y_valid = y[valid_point_mask][valid_update_mask]
@@ -827,12 +829,17 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     # Load preprocessing parameters for inherited values
     preprocessing_params = load_preprocessing_params(tunnel_id, base_dir)
     
-    # Get inherited parameters from preprocessing
-    resolution = preprocessing_params.get('depth_map_resolution', 0.005)
-    tunnel_diameter = preprocessing_params.get('tunnel_diameter', 5.5)
+    # Resolution: prefer SAM params over preprocessing (preprocessing can be wrong for complex)
+    resolution = params.get('resolution')
+    if resolution is None:
+        resolution = preprocessing_params.get('depth_map_resolution', 0.005)
     
-    # Calculate K and AB heights from tunnel diameter
-    K_height, AB_height = calculate_segment_heights(tunnel_diameter)
+    tunnel_diameter = preprocessing_params.get('tunnel_diameter', 5.5)
+    K_calc, AB_calc = calculate_segment_heights(tunnel_diameter)
+    
+    # K and AB heights: prefer SAM params over calculated
+    K_height = params.get('k_height', K_calc)
+    AB_height = params.get('ab_height', AB_calc)
     
     # Extract CRITICAL tunable parameters
     segment_width = get_param(params, 'segment_width', default=DEFAULT_SEGMENT_WIDTH, allow_default=allow_defaults)
@@ -845,10 +852,21 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     ab_mask_width = get_param(params, 'ab_mask_width', default=DEFAULT_AB_MASK_WIDTH, allow_default=True)
     ab_mask_height = get_param(params, 'ab_mask_height', default=DEFAULT_AB_MASK_HEIGHT, allow_default=True)
     
+    # B1/B2 block heights (slanted masks)
+    b1_height_top = get_param(params, 'b1_height_top', default=DEFAULT_B1_HEIGHT_TOP, allow_default=True)
+    b1_height_bottom_pos = get_param(params, 'b1_height_bottom_pos', default=DEFAULT_B1_HEIGHT_BOTTOM_POS, allow_default=True)
+    b1_height_bottom_neg = get_param(params, 'b1_height_bottom_neg', default=DEFAULT_B1_HEIGHT_BOTTOM_NEG, allow_default=True)
+    b2_height_top_pos = get_param(params, 'b2_height_top_pos', default=DEFAULT_B2_HEIGHT_TOP_POS, allow_default=True)
+    b2_height_top_neg = get_param(params, 'b2_height_top_neg', default=DEFAULT_B2_HEIGHT_TOP_NEG, allow_default=True)
+    b2_height_bottom = get_param(params, 'b2_height_bottom', default=DEFAULT_B2_HEIGHT_BOTTOM, allow_default=True)
+    
     # Processing parameters
     padding = get_param(params, 'padding', default=DEFAULT_PADDING, allow_default=True)
     crop_margin = get_param(params, 'crop_margin', default=DEFAULT_CROP_MARGIN, allow_default=True)
-    
+
+    # Walk order (tunable segment processing sequence)
+    walk_order = params.get('walk_order', DEFAULT_WALK_ORDER)
+
     # Quality weighting
     min_quality_threshold = get_param(params, 'min_quality_threshold', default=DEFAULT_MIN_QUALITY_THRESHOLD, allow_default=True)
     use_quality_weighting = get_param(params, 'use_quality_weighting', default=DEFAULT_USE_QUALITY_WEIGHTING, allow_default=True)
@@ -879,7 +897,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     initial_prompt_points = pd.read_csv(detected_csv_path)
     pixel_to_point = pickle.load(open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb"))
-    df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "enhanced.csv"))
+    df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "denoised.csv"))
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     
     # Auto-detect segment count (default 7 for complex staggered)
@@ -892,7 +910,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"\nComplex staggered differences:")
     print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
     print(f"  Wrap-around:      ENABLED")
-    print(f"  Point update:     pred=0 AND pred=7")
+    print(f"  Point update:     pred in [0, 7] (p4tun-style)")
     
     # Calculate y_bounds from image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
@@ -905,6 +923,21 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     sam.to(device=SAM_DEVICE)
     predictor = SamPredictor(sam)
     
+    # Build template_params for generate_template_mask (including B1/B2 heights)
+    template_params = {
+        'k_mask_width': k_mask_width,
+        'k_mask_height_pos': k_mask_height_pos,
+        'k_mask_height_neg': k_mask_height_neg,
+        'ab_mask_width': ab_mask_width,
+        'ab_mask_height': ab_mask_height,
+        'b1_height_top': b1_height_top,
+        'b1_height_bottom_pos': b1_height_bottom_pos,
+        'b1_height_bottom_neg': b1_height_bottom_neg,
+        'b2_height_top_pos': b2_height_top_pos,
+        'b2_height_top_neg': b2_height_top_neg,
+        'b2_height_bottom': b2_height_bottom,
+    }
+    
     # Build config
     config = {
         'resolution': resolution,
@@ -915,12 +948,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'angle': angle_deg,
         'padding': padding,
         'crop_margin': crop_margin,
+        'walk_order': walk_order,
         'y_bounds': y_bounds,
-        'k_mask_width': k_mask_width,
-        'k_mask_height_pos': k_mask_height_pos,
-        'k_mask_height_neg': k_mask_height_neg,
-        'ab_mask_width': ab_mask_width,
-        'ab_mask_height': ab_mask_height,
+        'template_params': template_params,
     }
     
     # Run SAM on each detected K position (row-based, same as simple staggered)

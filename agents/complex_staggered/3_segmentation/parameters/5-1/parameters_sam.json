@@ -1,13 +1,52 @@
 {
-  "segment_width": 1322.7638483100934,
-  "angle_deg": 7.277697809895329,
-  "k_mask_width": 583.1130463165057,
-  "k_mask_height_pos": 638.5365206939068,
-  "k_mask_height_neg": 411.64524419108534,
-  "ab_mask_width": 679.4367752001651,
-  "ab_mask_height": 1573.9650719360902,
-  "padding": 150,
+  "resolution": 0.005,
+  "b1_height_top": 1500,
+  "b1_height_bottom_pos": 1540.69,
+  "b1_height_bottom_neg": 1699.08,
+  "b2_height_top_pos": 1540.69,
+  "b2_height_top_neg": 1699.08,
+  "b2_height_bottom": 1500,
+  "use_quality_weighting": true,
+  "walk_order": [
+    [
+      "K",
+      0
+    ],
+    [
+      "B1",
+      1
+    ],
+    [
+      "A1",
+      1
+    ],
+    [
+      "A2",
+      1
+    ],
+    [
+      "A3",
+      1
+    ],
+    [
+      "A4",
+      1
+    ],
+    [
+      "B2",
+      -1
+    ]
+  ],
+  "k_height": 1079.92,
+  "ab_height": 3239.77,
+  "segment_width": 1200,
+  "angle_deg": 7.52,
+  "k_mask_width": 625,
+  "k_mask_height_pos": 620,
+  "k_mask_height_neg": 460,
+  "ab_mask_width": 625,
+  "ab_mask_height": 1620,
+  "padding": 200,
   "crop_margin": 50,
-  "min_quality_threshold": 0.3,
-  "use_quality_weighting": true
+  "min_quality_threshold": 0.3
 }
