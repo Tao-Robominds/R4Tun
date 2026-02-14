@@ -1,12 +1,12 @@
 {
-    "segment_width": 1150.0,
-    "angle_deg": 6.5,
-    "k_mask_width": 700.0,
-    "k_mask_height_pos": 580.0,
-    "k_mask_height_neg": 580.0,
-    "ab_mask_width": 680.0,
-    "ab_mask_height": 1577.0,
-    "padding": 100,
-    "crop_margin": 40,
-    "min_quality_threshold": 0.5
+    "segment_width": 1068.3221801501102,
+    "angle_deg": 8.730839965017946,
+    "k_mask_width": 569.4739380550277,
+    "k_mask_height_pos": 503.4771544373672,
+    "k_mask_height_neg": 350.119675386202,
+    "ab_mask_width": 589.0505806293569,
+    "ab_mask_height": 1759.4564137678362,
+    "padding": 84,
+    "crop_margin": 31,
+    "min_quality_threshold": 0.3755161066033219
 }

@@ -98,15 +98,15 @@ def get_detection_dimensions(
         'horizontal_angle_tolerance': (0.5, 3.0),
         'merge_distance_threshold': (1, 10),
         # Complex-specific parameters (8D)
-        'complex_hough_threshold': (20, 50),
-        'complex_hough_min_length': (30, 100),
+        'complex_hough_threshold': (10, 50),
+        'complex_hough_min_length': (15, 100),
         'complex_hough_max_gap': (50, 150),
         'complex_angle_pos_min': (3.0, 6.0),
         'complex_angle_pos_max': (10.0, 15.0),
         'complex_angle_neg_min': (-15.0, -10.0),
         'complex_angle_neg_max': (-6.0, -3.0),
-        'complex_min_y_span': (20, 50),
-        'complex_min_x_span': (20, 50),
+        'complex_min_y_span': (5, 50),
+        'complex_min_x_span': (5, 50),
         'complex_eps_primary': (0.02, 0.10),
         'complex_eps_secondary': (0.05, 0.15),
         'complex_subdivision_threshold': (1.0, 2.5),
@@ -129,7 +129,14 @@ def get_detection_dimensions(
     
     # Build bounds dict (narrowed overrides default)
     bounds = default_bounds.copy()
-    bounds.update(narrowed_bounds)
+    # Convert JSON arrays to tuples for compatibility
+    narrowed_bounds_converted = {}
+    for key, value in narrowed_bounds.items():
+        if isinstance(value, list):
+            narrowed_bounds_converted[key] = tuple(value)
+        else:
+            narrowed_bounds_converted[key] = value
+    bounds.update(narrowed_bounds_converted)
     
     # Build dimensions and param_names, excluding fixed params
     dimensions = []

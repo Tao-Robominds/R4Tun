@@ -1,0 +1,12 @@
+{
+  "tunnel_id": "5-1",
+  "stage": "detection",
+  "n_calls": 10,
+  "baseline_miou": 0.0,
+  "proxy_best_predicted": 0.2760498723526792,
+  "proxy_best_true_miou": 0.0,
+  "true_bo_best_miou": -0.0,
+  "proxy_vs_baseline": 0.0,
+  "proxy_vs_true_bo": 0.0,
+  "timestamp": "2026-02-01T23:13:52.945940"
+}

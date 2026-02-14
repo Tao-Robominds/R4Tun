@@ -1,0 +1,54 @@
+{
+  "schema_version": "r4tun.sam.v1",
+  "trial": {
+    "trial_id": "sam_1-4_059",
+    "timestamp_utc": "2026-02-13T18:12:29Z",
+    "tunnel_id": "1-4",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "segment_width": 1059.3942767540784,
+    "angle_deg": 8.553325884061117,
+    "k_mask_width": 639.2759762655575,
+    "k_mask_height_pos": 512.2165178324972,
+    "k_mask_height_neg": 413.63691497519955,
+    "ab_mask_width": 708.1785667826756,
+    "ab_mask_height": 1732.7956597882571,
+    "padding": 135,
+    "crop_margin": 27,
+    "min_quality_threshold": 0.36047666953269286
+  },
+  "outputs": {
+    "metrics": {
+      "OA": 0.8695896443133615,
+      "F1": 0.8225273266021004,
+      "mIoU": 0.7086670133788785
+    },
+    "iou_per_class": [
+      0.857363151199892,
+      0.5485277131690954,
+      0.7922443489386831,
+      0.765855163371809,
+      0.4842220041434958,
+      0.7349766767437725,
+      0.7774800360854022
+    ],
+    "classes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ]
+  },
+  "bo": {
+    "objective_name": "miou",
+    "objective_value": 0.7086670133788785,
+    "eval_index": 59,
+    "runtime_sec": 123.8780906200409,
+    "is_feasible": true,
+    "cached": false
+  }
+}

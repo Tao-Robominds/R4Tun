@@ -1,0 +1,34 @@
+{
+  "schema_version": "r4tun.sam.v1",
+  "trial": {
+    "trial_id": "sam_1-4_008",
+    "timestamp_utc": "2026-02-13T16:39:24Z",
+    "tunnel_id": "1-4",
+    "assembly_type": "simple_staggered"
+  },
+  "params": {
+    "segment_width": 1281.3811040057838,
+    "angle_deg": 5.759156281069316,
+    "k_mask_width": 589.6164321360682,
+    "k_mask_height_pos": 528.9672648812824,
+    "k_mask_height_neg": 608.9310277626781,
+    "ab_mask_width": 655.8245317068895,
+    "ab_mask_height": 1532.3592099410598,
+    "padding": 127,
+    "crop_margin": 47,
+    "min_quality_threshold": 0.4675365010654429
+  },
+  "trace": {
+    "warnings": [
+      "Error: height and width must be > 0"
+    ]
+  },
+  "bo": {
+    "objective_name": "miou",
+    "objective_value": 0.0,
+    "eval_index": 8,
+    "runtime_sec": 19.677114009857178,
+    "is_feasible": false,
+    "cached": false
+  }
+}

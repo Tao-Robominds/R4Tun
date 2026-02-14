@@ -48,12 +48,24 @@ from matplotlib.path import Path
 DEFAULT_SEGMENT_WIDTH = 1200.0
 DEFAULT_ANGLE_DEG = 7.5
 
+# Segment physical heights defaults (in mm)
+DEFAULT_K_HEIGHT = 1079.92
+DEFAULT_AB_HEIGHT = 3239.77
+
 # Template mask defaults (in mm)
 DEFAULT_K_MASK_WIDTH = 625.0
 DEFAULT_K_MASK_HEIGHT_POS = 620.0
 DEFAULT_K_MASK_HEIGHT_NEG = 460.0
 DEFAULT_AB_MASK_WIDTH = 625.0
 DEFAULT_AB_MASK_HEIGHT = 1620.0
+
+# B1/B2 block template mask defaults (separate heights for slanted edges)
+DEFAULT_B1_HEIGHT_TOP = 1619.89
+DEFAULT_B1_HEIGHT_BOTTOM_POS = 1540.69
+DEFAULT_B1_HEIGHT_BOTTOM_NEG = 1699.08
+DEFAULT_B2_HEIGHT_TOP_POS = 1540.69
+DEFAULT_B2_HEIGHT_TOP_NEG = 1699.08
+DEFAULT_B2_HEIGHT_BOTTOM = 1619.89
 
 # Processing defaults
 DEFAULT_PADDING = 150
@@ -218,33 +230,33 @@ def fill_polygon(mask, vertices):
     mask[mask_inside] = 1
 
 
-def generate_template_mask(height, width, prompt_centre, block, resolution, 
-                           k_mask_width, k_mask_height_pos, k_mask_height_neg,
-                           ab_mask_width, ab_mask_height):
-    """Generate template mask using parameterized dimensions."""
+def generate_template_mask(height, width, prompt_centre, block, resolution, template_params):
+    """Generate template mask using parameterized dimensions (matching p4tun behavior)."""
     mask = np.zeros((height, width), dtype=np.uint8)
     prompt_centre_x, prompt_centre_y = prompt_centre
     x = prompt_centre_x * (resolution * 1000)
     y = prompt_centre_y * (resolution * 1000)
     
     if block == 'K':
-        w = k_mask_width
-        hp = k_mask_height_pos
-        hn = k_mask_height_neg
+        w = template_params['k_mask_width']
+        hp = template_params['k_mask_height_pos']
+        hn = template_params['k_mask_height_neg']
         vertices_real = np.array([[x-w, y-hp], [x-w, y+hp], [x+w, y+hn], [x+w, y-hn]])
     elif block == 'B1':
-        w = ab_mask_width
-        ht = ab_mask_height
-        # B1: slanted bottom
-        vertices_real = np.array([[x-w, y-ht], [x-w, y+ht*0.95], [x+w, y+ht*1.05], [x+w, y-ht]])
+        w = template_params['ab_mask_width']
+        ht = template_params['b1_height_top']
+        hbp = template_params['b1_height_bottom_pos']
+        hbn = template_params['b1_height_bottom_neg']
+        vertices_real = np.array([[x-w, y-ht], [x-w, y+hbp], [x+w, y+hbn], [x+w, y-ht]])
     elif block == 'B2':
-        w = ab_mask_width
-        ht = ab_mask_height
-        # B2: slanted top
-        vertices_real = np.array([[x-w, y-ht*0.95], [x-w, y+ht], [x+w, y+ht], [x+w, y-ht*1.05]])
+        w = template_params['ab_mask_width']
+        htp = template_params['b2_height_top_pos']
+        htn = template_params['b2_height_top_neg']
+        hb = template_params['b2_height_bottom']
+        vertices_real = np.array([[x-w, y-htp], [x-w, y+hb], [x+w, y+hb], [x+w, y-htn]])
     else:  # A blocks - rectangular
-        w = ab_mask_width
-        h = ab_mask_height
+        w = template_params['ab_mask_width']
+        h = template_params['ab_mask_height']
         vertices_real = np.array([[x-w, y-h], [x-w, y+h], [x+w, y+h], [x+w, y-h]])
         
     vertices = vertices_real / (resolution * 1000)
@@ -500,9 +512,7 @@ def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution * 1000))
 
 
-def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution,
-                               k_mask_width, k_mask_height_pos, k_mask_height_neg,
-                               ab_mask_width, ab_mask_height):
+def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params):
     """Crop image and generate template mask logits."""
     img_height, img_width, _ = image.shape
     x1 = max(cx - crop_width // 2, 0)
@@ -517,9 +527,7 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
     
     cropped_template_mask = generate_template_mask(
         cropped_image.shape[0], cropped_image.shape[1], 
-        prompt_centre, block, resolution,
-        k_mask_width, k_mask_height_pos, k_mask_height_neg,
-        ab_mask_width, ab_mask_height
+        prompt_centre, block, resolution, template_params
     )
     template_mask_logits = compute_logits_from_mask(cropped_template_mask)
 
@@ -561,11 +569,21 @@ def process_row(df_row, image, predictor, config):
     padding = config['padding']
     crop_margin = config['crop_margin']
     y_bounds = config['y_bounds']
-    k_mask_width = config['k_mask_width']
-    k_mask_height_pos = config['k_mask_height_pos']
-    k_mask_height_neg = config['k_mask_height_neg']
-    ab_mask_width = config['ab_mask_width']
-    ab_mask_height = config['ab_mask_height']
+    
+    # Template params dict (passed to generate_template_mask)
+    template_params = {
+        'k_mask_width': config['k_mask_width'],
+        'k_mask_height_pos': config['k_mask_height_pos'],
+        'k_mask_height_neg': config['k_mask_height_neg'],
+        'ab_mask_width': config['ab_mask_width'],
+        'ab_mask_height': config['ab_mask_height'],
+        'b1_height_top': config['b1_height_top'],
+        'b1_height_bottom_pos': config['b1_height_bottom_pos'],
+        'b1_height_bottom_neg': config['b1_height_bottom_neg'],
+        'b2_height_top_pos': config['b2_height_top_pos'],
+        'b2_height_top_neg': config['b2_height_top_neg'],
+        'b2_height_bottom': config['b2_height_bottom'],
+    }
     
     block_labels = compute_block_label(segment_per_ring)
 
@@ -592,8 +610,7 @@ def process_row(df_row, image, predictor, config):
                     map_y = map_y - convert_to_pixel_coords(AB_height, resolution)
 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution,
-                k_mask_width, k_mask_height_pos, k_mask_height_neg, ab_mask_width, ab_mask_height)
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params)
             points, labels = generate_prompt_points(
                 prompt_centre, initial_x, map_y, block, resolution,
                 segment_width, K_height, AB_height, image, y_bounds)
@@ -636,8 +653,7 @@ def process_row(df_row, image, predictor, config):
                 map_y = map_y + convert_to_pixel_coords(AB_height, resolution)
 
             cropped_image, template_mask_logit, prompt_centre = crop_image_and_mask_logits(
-                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution,
-                k_mask_width, k_mask_height_pos, k_mask_height_neg, ab_mask_width, ab_mask_height)
+                image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params)
             points, labels = generate_prompt_points(
                 prompt_centre, initial_x, map_y, block, resolution,
                 segment_width, K_height, AB_height, image, y_bounds)
@@ -738,12 +754,15 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     # Load preprocessing parameters for inherited values
     preprocessing_params = load_preprocessing_params(tunnel_id, base_dir)
     
-    # Get inherited parameters from preprocessing
-    resolution = preprocessing_params.get('depth_map_resolution', 0.005)
+    # Resolution: prefer SAM params (matching original p4tun behavior), fallback to preprocessing
+    preprocessing_resolution = preprocessing_params.get('depth_map_resolution', 0.005)
+    resolution = get_param(params, 'resolution', default=preprocessing_resolution, allow_default=True)
     tunnel_diameter = preprocessing_params.get('tunnel_diameter', 5.5)
     
-    # Calculate K and AB heights from tunnel diameter
-    K_height, AB_height = calculate_segment_heights(tunnel_diameter)
+    # K/AB heights: read from params if available, else calculate from tunnel diameter
+    calc_K, calc_AB = calculate_segment_heights(tunnel_diameter)
+    K_height = get_param(params, 'k_height', default=calc_K, allow_default=True)
+    AB_height = get_param(params, 'ab_height', default=calc_AB, allow_default=True)
     
     # Extract CRITICAL tunable parameters
     segment_width = get_param(params, 'segment_width', default=DEFAULT_SEGMENT_WIDTH, allow_default=allow_defaults)
@@ -755,6 +774,14 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     k_mask_height_neg = get_param(params, 'k_mask_height_neg', default=DEFAULT_K_MASK_HEIGHT_NEG, allow_default=True)
     ab_mask_width = get_param(params, 'ab_mask_width', default=DEFAULT_AB_MASK_WIDTH, allow_default=True)
     ab_mask_height = get_param(params, 'ab_mask_height', default=DEFAULT_AB_MASK_HEIGHT, allow_default=True)
+    
+    # B1/B2 separate mask heights (original p4tun behavior)
+    b1_height_top = get_param(params, 'b1_height_top', default=DEFAULT_B1_HEIGHT_TOP, allow_default=True)
+    b1_height_bottom_pos = get_param(params, 'b1_height_bottom_pos', default=DEFAULT_B1_HEIGHT_BOTTOM_POS, allow_default=True)
+    b1_height_bottom_neg = get_param(params, 'b1_height_bottom_neg', default=DEFAULT_B1_HEIGHT_BOTTOM_NEG, allow_default=True)
+    b2_height_top_pos = get_param(params, 'b2_height_top_pos', default=DEFAULT_B2_HEIGHT_TOP_POS, allow_default=True)
+    b2_height_top_neg = get_param(params, 'b2_height_top_neg', default=DEFAULT_B2_HEIGHT_TOP_NEG, allow_default=True)
+    b2_height_bottom = get_param(params, 'b2_height_bottom', default=DEFAULT_B2_HEIGHT_BOTTOM, allow_default=True)
     
     # Processing parameters
     padding = get_param(params, 'padding', default=DEFAULT_PADDING, allow_default=True)
@@ -768,8 +795,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"\nInherited from preprocessing:")
     print(f"  resolution:       {resolution}")
     print(f"  tunnel_diameter:  {tunnel_diameter}m")
-    print(f"  K_height:         {K_height:.2f}mm (calculated)")
-    print(f"  AB_height:        {AB_height:.2f}mm (calculated)")
+    k_src = "from params" if 'k_height' in params else "calculated"
+    print(f"  K_height:         {K_height:.2f}mm ({k_src})")
+    print(f"  AB_height:        {AB_height:.2f}mm ({k_src})")
     
     print(f"\nCritical parameters (tunable):")
     print(f"  segment_width:    {segment_width}")
@@ -827,6 +855,12 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'k_mask_height_neg': k_mask_height_neg,
         'ab_mask_width': ab_mask_width,
         'ab_mask_height': ab_mask_height,
+        'b1_height_top': b1_height_top,
+        'b1_height_bottom_pos': b1_height_bottom_pos,
+        'b1_height_bottom_neg': b1_height_bottom_neg,
+        'b2_height_top_pos': b2_height_top_pos,
+        'b2_height_top_neg': b2_height_top_neg,
+        'b2_height_bottom': b2_height_bottom,
     }
     
     # Run SAM on each detected K position

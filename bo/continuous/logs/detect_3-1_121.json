@@ -1,0 +1,59 @@
+{
+  "schema_version": "r4tun.detection.v1",
+  "trial": {
+    "trial_id": "detect_3-1_121",
+    "timestamp_utc": "2026-02-13T15:51:14Z",
+    "tunnel_id": "3-1",
+    "assembly_type": "continuous"
+  },
+  "params": {
+    "binary_threshold": 87,
+    "dilation_kernel_size": 2,
+    "dilation_iterations": 1,
+    "hough_oblique_threshold": 26,
+    "hough_oblique_min_length": 102,
+    "hough_oblique_max_gap": 70,
+    "angle_positive_min": 5.6862750133100475,
+    "angle_positive_max": 9.831203434726138,
+    "angle_negative_min": -9.831203434726138,
+    "angle_negative_max": -5.6862750133100475,
+    "hough_vertical_threshold": 327,
+    "hough_horizontal_threshold": 24,
+    "hough_horizontal_min_length": 99,
+    "hough_horizontal_max_gap": 7,
+    "horizontal_angle_tolerance": 0.7534513690974178,
+    "merge_distance_threshold": 8.308867474771418
+  },
+  "outputs": {
+    "num_detected": 7,
+    "num_gt": 6,
+    "confusion": {
+      "tp": 5,
+      "fp": 2,
+      "fn": 1
+    },
+    "metrics": {
+      "precision": 0.7142857142857143,
+      "recall": 0.8333333333333334,
+      "f1": 0.7692307692307692,
+      "position_bonus": 0.7406570214063439,
+      "weighted_f1": 0.6694834697716707,
+      "mean_distance_px": 38.90144678904842
+    },
+    "matched_distances_px": [
+      57.23600059468181,
+      39.970725853872786,
+      33.10567413197675,
+      35.403031151416585,
+      28.791802213294165
+    ]
+  },
+  "bo": {
+    "objective_name": "kposition_weighted_f1",
+    "objective_value": 0.6694834697716707,
+    "eval_index": 121,
+    "runtime_sec": 0.35391831398010254,
+    "is_feasible": true,
+    "cached_enhancing": false
+  }
+}

@@ -1,58 +1,35 @@
 {
-  "description": "Round 1 config for 5-1, narrowed around warm-up from reports/results (F1=0.8554)",
-  "fixed_params": {},
-  "narrowed_bounds": {
-    "binary_threshold": [
-      61,
-      103
-    ],
-    "dilation_kernel_size": [
-      2,
-      4
-    ],
-    "dilation_iterations": [
-      3,
-      5
-    ],
-    "hough_oblique_threshold": [
-      36,
-      62
-    ],
-    "hough_oblique_min_length": [
-      44,
-      74
-    ],
-    "hough_oblique_max_gap": [
-      48,
-      80
-    ],
-    "angle_min": [
-      3.752,
-      6.253
-    ],
-    "angle_max": [
-      7.525,
-      12.541
-    ],
-    "curvature_neighbors": [
-      8,
-      30
-    ],
-    "depth_map_resolution": [
-      0.003,
-      0.01
-    ],
-    "interpolation_window": [
-      3,
-      15
-    ],
-    "target_distance_1": [
-      0.05,
-      0.12
-    ],
-    "hough_vertical_threshold": [
-      375,
-      625
-    ]
-  }
+    "fixed_params": {
+        "complex_max_subdivisions": 3,
+        "complex_conf_midpoint": 0.62,
+        "complex_conf_intersection": 0.97,
+        "complex_subdivision_threshold": 2.2,
+        "hough_vertical_threshold": 652,
+        "merge_distance_threshold": 5.1,
+        "dilation_kernel_size": 4,
+        "hough_horizontal_min_length": 148
+    },
+    "narrowed_bounds": {
+        "binary_threshold": [140, 180],
+        "dilation_iterations": [2, 4],
+        "hough_oblique_threshold": [30, 50],
+        "hough_oblique_min_length": [70, 100],
+        "hough_oblique_max_gap": [20, 40],
+        "angle_min": [5.0, 6.0],
+        "angle_max": [8.5, 10.0],
+        "hough_horizontal_threshold": [25, 45],
+        "hough_horizontal_max_gap": [5, 15],
+        "horizontal_angle_tolerance": [0.4, 0.7],
+        "complex_hough_threshold": [35, 55],
+        "complex_hough_min_length": [60, 85],
+        "complex_hough_max_gap": [70, 100],
+        "complex_angle_pos_min": [2.5, 4.0],
+        "complex_angle_pos_max": [11.0, 13.0],
+        "complex_angle_neg_min": [-13.0, -11.0],
+        "complex_angle_neg_max": [-6.0, -4.5],
+        "complex_min_y_span": [15, 30],
+        "complex_min_x_span": [20, 35],
+        "complex_eps_primary": [0.03, 0.06],
+        "complex_eps_secondary": [0.06, 0.10]
+    }
 }
