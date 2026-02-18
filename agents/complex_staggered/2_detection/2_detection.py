@@ -702,6 +702,112 @@ def calculate_k_positions_complex_staggered(
     return df.sort_values(by='X').reset_index(drop=True)
 
 
+def calculate_k_positions_banded(
+    line_data: Dict,
+    ring_count: int,
+    params: Dict
+) -> pd.DataFrame:
+    """Calculate K positions using evenly-spaced ring bands.
+
+    1. X = band center = (i + 0.5) * W / ring_count
+    2. Y = median Y of oblique line intersections within band (+/- 0.6 * ring_width)
+    3. Fallback: line crossings at band center
+    4. Fallback: interpolate Y from neighboring bands
+
+    Args:
+        line_data: Output from detect_lines().
+        ring_count: Number of rings.
+        params: Detection parameters dict (may include step_template).
+
+    Returns:
+        DataFrame with columns Type, X, Y, Confidence.
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+    dilated_edges = line_data['dilated_edges']
+
+    print(f"  [Banded K Detection] ring_count={ring_count}, image={L}x{W}")
+
+    positive_lines, negative_lines = detect_oblique_lines_wide_angle(
+        dilated_edges, L, W, params
+    )
+    print(f"    Oblique lines: Positive={len(positive_lines)}, Negative={len(negative_lines)}")
+
+    extended_positive = [extend_line_to_bounds(*line, W, L) for line in positive_lines]
+    extended_negative = [extend_line_to_bounds(*line, W, L) for line in negative_lines]
+
+    intersections = find_line_intersections(extended_positive, extended_negative, W, L)
+    print(f"    Line intersections: {len(intersections)}")
+
+    ring_width = W / ring_count
+    band_margin = ring_width * 0.6
+    all_extended = extended_positive + extended_negative
+
+    band_ys = {}
+    for i in range(ring_count):
+        band_center = (i + 0.5) * ring_width
+        band_left = band_center - band_margin
+        band_right = band_center + band_margin
+
+        # Primary: oblique line intersections within this band
+        band_pts_y = [y for x, y in intersections
+                      if band_left <= x <= band_right]
+
+        if len(band_pts_y) >= 3:
+            k_y = float(np.median(band_pts_y))
+            conf = min(1.0, 0.5 + 0.05 * len(band_pts_y))
+            det_type = 'band_intersection'
+        else:
+            # Fallback: oblique line crossings at vertical x=band_center
+            crossing_ys = []
+            for seg in all_extended:
+                y_val = line_segment_vertical_intersection(band_center, seg)
+                if y_val is not None:
+                    crossing_ys.append(y_val)
+            crossing_ys = merge_close_points(crossing_ys)
+
+            if len(crossing_ys) >= 2:
+                k_y = float(np.median(crossing_ys))
+                conf = min(0.7, 0.3 + 0.05 * len(crossing_ys))
+                det_type = 'band_crossing'
+            else:
+                k_y = None
+                conf = 0.0
+                det_type = 'band_interpolated'
+
+        band_ys[i] = (k_y, conf, det_type, band_center)
+
+    # Interpolation fallback for bands with no detection
+    for i in range(ring_count):
+        k_y, conf, det_type, band_center = band_ys[i]
+        if k_y is not None:
+            continue
+        neighbors = []
+        for offset in [1, -1, 2, -2]:
+            ni = i + offset
+            if 0 <= ni < ring_count and band_ys[ni][0] is not None:
+                neighbors.append(band_ys[ni][0])
+        if neighbors:
+            k_y = float(np.mean(neighbors))
+            conf = 0.2
+        else:
+            k_y = L / 2.0
+            conf = 0.1
+        band_ys[i] = (k_y, conf, 'band_interpolated', band_center)
+
+    k_positions = []
+    for i in range(ring_count):
+        k_y, conf, det_type, band_center = band_ys[i]
+        k_positions.append((det_type, band_center, k_y, conf))
+
+    k_positions.sort(key=lambda p: p[1])
+    for i, (dt, x, y, c) in enumerate(k_positions):
+        print(f"    Band {i}: X={x:.0f}, Y={y:.0f}, conf={c:.2f} [{dt}]")
+
+    df = pd.DataFrame(k_positions, columns=['Type', 'X', 'Y', 'Confidence'])
+    return df.sort_values(by='X').reset_index(drop=True)
+
+
 # =============================================================================
 # Segment Expansion: K → All Segments
 # =============================================================================
@@ -721,26 +827,33 @@ def _normalize_walk_order(walk_order):
 def expand_k_to_all_segments(
     k_positions: pd.DataFrame,
     img_height: int,
-    k_height_mm: float,
-    ab_height_mm: float,
-    resolution: float,
     walk_order: list = None,
+    k_to_b_px: float = None,
+    ab_step_px: float = None,
+    k_height_mm: float = None,
+    ab_height_mm: float = None,
+    resolution: float = None,
 ) -> pd.DataFrame:
     """Derive all segment positions from detected K positions.
 
-    For each K at (x, y), walks the ring using physical geometry:
-    - K→B1 step = 0.5*K_height + 0.5*AB_height
-    - subsequent AB steps = AB_height
+    For each K at (x, y), walks the ring using pixel step sizes:
+    - K→B1 step = k_to_b_px
+    - subsequent AB steps = ab_step_px
     - Y wraps modulo img_height (tunnel is cylindrical)
-    - X inherits from K (small variations are sub-pixel for detection)
+    - X inherits from K
+
+    Preferred: pass k_to_b_px and ab_step_px directly.
+    Fallback: pass k_height_mm, ab_height_mm, resolution to compute them.
 
     Args:
         k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
         img_height: Depth map height in pixels (for Y wrap-around).
-        k_height_mm: K-block height in mm (BO-tunable).
-        ab_height_mm: AB-block height in mm (BO-tunable).
-        resolution: Depth map resolution in m/pixel.
         walk_order: Block sequence and direction, default 5-1 layout.
+        k_to_b_px: Pixel distance from K center to B center (preferred).
+        ab_step_px: Pixel distance between adjacent A/B block centers (preferred).
+        k_height_mm: K-block height in mm (fallback).
+        ab_height_mm: AB-block height in mm (fallback).
+        resolution: Depth map resolution in m/pixel (fallback).
 
     Returns:
         DataFrame with columns Ring, Block, X, Y, quality.
@@ -749,9 +862,17 @@ def expand_k_to_all_segments(
         walk_order = DEFAULT_WALK_ORDER
     walk_order = _normalize_walk_order(walk_order)
 
-    px_per_mm = 1.0 / (resolution * 1000)
-    k_to_b_step_px = (0.5 * k_height_mm + 0.5 * ab_height_mm) * px_per_mm
-    ab_step_px = ab_height_mm * px_per_mm
+    if k_to_b_px is not None and ab_step_px is not None:
+        k_to_b_step_px = k_to_b_px
+    elif k_height_mm is not None and ab_height_mm is not None and resolution is not None:
+        px_per_mm = 1.0 / (resolution * 1000)
+        k_to_b_step_px = (0.5 * k_height_mm + 0.5 * ab_height_mm) * px_per_mm
+        ab_step_px = ab_height_mm * px_per_mm
+    else:
+        raise ValueError(
+            "Provide either (k_to_b_px, ab_step_px) or "
+            "(k_height_mm, ab_height_mm, resolution)"
+        )
 
     forward_blocks = [(b, d) for b, d in walk_order if d >= 0]
     reverse_blocks = [(b, d) for b, d in walk_order if d == -1]
@@ -795,6 +916,180 @@ def expand_k_to_all_segments(
                 'Y': map_y % img_height,
                 'quality': quality,
             })
+
+    return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
+
+
+# Per-ring expansion: k_to_b and ab_step per ring index (0..n_rings-1)
+def expand_k_per_ring_steps(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    k_to_b_per_ring,
+    ab_step_per_ring,
+    walk_order: list = None,
+) -> pd.DataFrame:
+    """
+    Derive all segment positions from detected K positions using per-ring
+    K→B and AB step sizes.
+
+    Args:
+        k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
+        img_height: Depth map height in pixels (for Y wrap-around).
+        k_to_b_per_ring: Sequence of K→B1 step sizes (pixels) per ring.
+        ab_step_per_ring: Sequence of AB step sizes (pixels) per ring.
+        walk_order: Block sequence and direction, default 5-1 layout.
+    """
+    if walk_order is None:
+        walk_order = DEFAULT_WALK_ORDER
+    walk_order = _normalize_walk_order(walk_order)
+
+    n_rings = len(k_positions)
+    if len(k_to_b_per_ring) < n_rings or len(ab_step_per_ring) < n_rings:
+        raise ValueError("Per-ring step arrays must cover all detected rings")
+
+    forward_blocks = [(b, d) for b, d in walk_order if d >= 0]
+    reverse_blocks = [(b, d) for b, d in walk_order if d == -1]
+
+    rows = []
+    for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
+        k_x = k_row['X']
+        k_y = k_row['Y']
+        quality = k_row.get('Confidence', 1.0)
+        k_to_b_step_px = float(k_to_b_per_ring[ring_idx])
+        ab_step_px = float(ab_step_per_ring[ring_idx])
+
+        # Forward pass: K then downward blocks
+        map_y = k_y
+        for idx, (block, _direction) in enumerate(forward_blocks):
+            if block == 'K':
+                map_y = k_y
+            elif idx == 1:
+                map_y = k_y + k_to_b_step_px
+            else:
+                map_y = map_y + ab_step_px
+
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': map_y % img_height,
+                'quality': quality,
+            })
+
+        # Reverse pass: upward blocks from K
+        map_y = k_y
+        for idx, (block, _direction) in enumerate(reverse_blocks):
+            if idx == 0:
+                map_y = k_y - k_to_b_step_px
+            else:
+                map_y = map_y - ab_step_px
+
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': map_y % img_height,
+                'quality': quality,
+            })
+
+    return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
+
+
+# Template block order: steps[i] = distance from block i to block i+1
+TEMPLATE_BLOCK_ORDER = ['K', 'B1', 'A1', 'A2', 'A3', 'A4', 'B2']
+
+
+def expand_k_with_template(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    step_template: list,
+    stagger_shift: int = 1,
+    line_data: Dict = None,
+) -> pd.DataFrame:
+    """Derive all segment positions using a rotatable 7-step template.
+
+    The template defines 7 step sizes around the ring circumference:
+      step[0] = K->B1, step[1] = B1->A1, ..., step[6] = B2->K
+    For each ring, the template is rotated to find the best fit against
+    available oblique line intersections. Falls back to a deterministic
+    rotation if no intersection data is available.
+
+    Args:
+        k_positions: DataFrame with columns Type, X, Y, Confidence.
+        img_height: Depth map height in pixels (for Y wrap-around).
+        step_template: 7 float values summing to img_height.
+        stagger_shift: Fallback rotation increment per ring index.
+        line_data: Output from detect_lines() for rotation scoring.
+
+    Returns:
+        DataFrame with columns Ring, Block, X, Y, quality.
+    """
+    n_blocks = len(TEMPLATE_BLOCK_ORDER)
+    assert len(step_template) == n_blocks
+
+    intersections = []
+    if line_data is not None:
+        L = line_data['image_height']
+        W = line_data['image_width']
+        dilated_edges = line_data['dilated_edges']
+        pos = [extend_line_to_bounds(*seg, W, L)
+               for seg in line_data.get('positive_lines', [])]
+        neg = [extend_line_to_bounds(*seg, W, L)
+               for seg in line_data.get('negative_lines', [])]
+        intersections = find_line_intersections(pos, neg, W, L)
+
+    ring_width = (line_data['image_width'] / max(1, len(k_positions))
+                  if line_data else 400)
+
+    rows = []
+    for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
+        k_x = k_row['X']
+        k_y = k_row['Y']
+        quality = k_row.get('Confidence', 1.0)
+
+        best_rotation = (ring_idx * stagger_shift) % n_blocks
+        best_score = -1
+
+        if intersections:
+            band_pts = [(x, y) for x, y in intersections
+                        if abs(x - k_x) < ring_width * 0.6]
+
+            if len(band_pts) >= 2:
+                for rot in range(n_blocks):
+                    rotated = step_template[rot:] + step_template[:rot]
+                    cumulative = [0.0]
+                    for s in rotated[:-1]:
+                        cumulative.append(cumulative[-1] + s)
+
+                    hits = 0
+                    for ci, cum in enumerate(cumulative):
+                        boundary_y = (k_y + cum) % img_height
+                        for _, iy in band_pts:
+                            dy = abs(iy - boundary_y)
+                            dy = min(dy, img_height - dy)
+                            if dy < 50:
+                                hits += 1
+                                break
+
+                    if hits > best_score:
+                        best_score = hits
+                        best_rotation = rot
+
+        rotated = step_template[best_rotation:] + step_template[:best_rotation]
+        block_order = (TEMPLATE_BLOCK_ORDER[best_rotation:]
+                       + TEMPLATE_BLOCK_ORDER[:best_rotation])
+
+        map_y = k_y
+        for i in range(n_blocks):
+            block = block_order[i]
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': map_y % img_height,
+                'quality': quality,
+            })
+            map_y += rotated[i]
 
     return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
@@ -1028,7 +1323,7 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     print(f"  Horizontal lines: {len(line_data['horizontal_lines'])}")
     print(f"  Vertical lines: {len(line_data['vertical_lines'])}")
     
-    print(f"\n[Step 2] Calculating K positions (complex staggered)...")
+    print(f"\n[Step 2] Calculating K positions (DBSCAN)...")
     k_positions = calculate_k_positions_complex_staggered(
         line_data, ring_count, k_height_mm, ab_height_mm, resolution, complex_params
     )
@@ -1042,20 +1337,55 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
     print(f"\n  Saved: {os.path.join(tunnel_dir, 'detected.csv')}")
     
-    # Step 3: Expand K positions to all segments
+    # Step 3: Expand K positions to all segments (fixed expansion)
     print(f"\n[Step 3] Expanding K positions to all segments...")
-    expand_k_height = get_param(params, 'k_height', k_height_mm)
-    expand_ab_height = get_param(params, 'ab_height', ab_height_mm)
+
     walk_order = params.get('walk_order', DEFAULT_WALK_ORDER)
-    
-    all_segments = expand_k_to_all_segments(
-        k_positions,
-        img_height=L,
-        k_height_mm=expand_k_height,
-        ab_height_mm=expand_ab_height,
-        resolution=resolution,
-        walk_order=walk_order,
-    )
+    param_k_to_b_px = params.get('k_to_b_px', None)
+    param_ab_step_px = params.get('ab_step_px', None)
+
+    # Optional per-ring expansion parameters: k_to_b_r0..rN, ab_step_r0..rN
+    per_ring_k = []
+    per_ring_ab = []
+    have_per_ring = True
+    n_rings_detected = len(k_positions)
+    for ring_idx in range(n_rings_detected):
+        key_k = f'k_to_b_r{ring_idx}'
+        key_ab = f'ab_step_r{ring_idx}'
+        if key_k in params and key_ab in params:
+            per_ring_k.append(float(params[key_k]))
+            per_ring_ab.append(float(params[key_ab]))
+        else:
+            have_per_ring = False
+            break
+
+    if have_per_ring and n_rings_detected > 0:
+        all_segments = expand_k_per_ring_steps(
+            k_positions,
+            img_height=L,
+            k_to_b_per_ring=per_ring_k,
+            ab_step_per_ring=per_ring_ab,
+            walk_order=walk_order,
+        )
+    elif param_k_to_b_px is not None and param_ab_step_px is not None:
+        all_segments = expand_k_to_all_segments(
+            k_positions,
+            img_height=L,
+            walk_order=walk_order,
+            k_to_b_px=float(param_k_to_b_px),
+            ab_step_px=float(param_ab_step_px),
+        )
+    else:
+        expand_k_height = get_param(params, 'k_height', k_height_mm)
+        expand_ab_height = get_param(params, 'ab_height', ab_height_mm)
+        all_segments = expand_k_to_all_segments(
+            k_positions,
+            img_height=L,
+            walk_order=walk_order,
+            k_height_mm=expand_k_height,
+            ab_height_mm=expand_ab_height,
+            resolution=resolution,
+        )
     
     all_segments.to_csv(os.path.join(tunnel_dir, 'all_segments.csv'), index=False)
     print(f"  Expanded {len(k_positions)} K positions → {len(all_segments)} total segments")

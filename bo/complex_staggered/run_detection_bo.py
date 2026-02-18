@@ -1,10 +1,11 @@
 """
-Bayesian Optimization for Detection Parameters with K-Position F1 Objective
+Bayesian Optimization for Detection Parameters with All-Segments Objective
 
-Optimizes detection parameters (line detection only) to maximize
-K-Position Weighted F1 score against ground truth K positions.
+Optimizes detection parameters (line detection + segment expansion) to minimize
+mean position error against ground truth all_segments_gt.csv.
 
-Uses forest_minimize (Random Forest surrogate) for 14D detection-only search space.
+Search space includes line detection params + k_to_b_px/ab_step_px for fixed geometry expansion.
+Uses forest_minimize (Random Forest surrogate).
 Detection reads depth_map_outlier.npy from preprocessing stage (no enhancing step).
 """
 
@@ -80,7 +81,7 @@ def get_detection_dimensions(
     Returns:
         Tuple of (dimensions list, parameter names list, fixed_params dict)
     """
-    # Default bounds (14D base + 8D complex-specific = 22D total)
+    # Default bounds (14D base + 15D complex-specific + 14D per-ring geometry)
     default_bounds = {
         # Base detection parameters (14D)
         'binary_threshold': (80, 200),
@@ -113,6 +114,21 @@ def get_detection_dimensions(
         'complex_max_subdivisions': (2, 5),
         'complex_conf_midpoint': (0.5, 0.9),
         'complex_conf_intersection': (0.7, 1.0),
+        # Per-ring expansion geometry (for up to 7 rings, 14D)
+        'k_to_b_r0': (100.0, 900.0),
+        'k_to_b_r1': (100.0, 900.0),
+        'k_to_b_r2': (100.0, 900.0),
+        'k_to_b_r3': (100.0, 900.0),
+        'k_to_b_r4': (100.0, 900.0),
+        'k_to_b_r5': (100.0, 900.0),
+        'k_to_b_r6': (100.0, 900.0),
+        'ab_step_r0': (100.0, 900.0),
+        'ab_step_r1': (100.0, 900.0),
+        'ab_step_r2': (100.0, 900.0),
+        'ab_step_r3': (100.0, 900.0),
+        'ab_step_r4': (100.0, 900.0),
+        'ab_step_r5': (100.0, 900.0),
+        'ab_step_r6': (100.0, 900.0),
     }
     
     # Load per-tunnel config if it exists
@@ -174,6 +190,21 @@ def get_detection_dimensions(
         ('complex_max_subdivisions', Integer, bounds['complex_max_subdivisions']),
         ('complex_conf_midpoint', Real, bounds['complex_conf_midpoint']),
         ('complex_conf_intersection', Real, bounds['complex_conf_intersection']),
+        # Per-ring expansion geometry (always defined; unused rings are ignored)
+        ('k_to_b_r0', Real, bounds['k_to_b_r0']),
+        ('k_to_b_r1', Real, bounds['k_to_b_r1']),
+        ('k_to_b_r2', Real, bounds['k_to_b_r2']),
+        ('k_to_b_r3', Real, bounds['k_to_b_r3']),
+        ('k_to_b_r4', Real, bounds['k_to_b_r4']),
+        ('k_to_b_r5', Real, bounds['k_to_b_r5']),
+        ('k_to_b_r6', Real, bounds['k_to_b_r6']),
+        ('ab_step_r0', Real, bounds['ab_step_r0']),
+        ('ab_step_r1', Real, bounds['ab_step_r1']),
+        ('ab_step_r2', Real, bounds['ab_step_r2']),
+        ('ab_step_r3', Real, bounds['ab_step_r3']),
+        ('ab_step_r4', Real, bounds['ab_step_r4']),
+        ('ab_step_r5', Real, bounds['ab_step_r5']),
+        ('ab_step_r6', Real, bounds['ab_step_r6']),
     ]
     
     for name, param_type, (low, high) in param_defs:
@@ -251,17 +282,99 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
             'complex_conf_intersection': float(param_dict.get('complex_conf_intersection', 0.9)),
         })
     
+    # Expansion geometry
+    # Global (legacy) geometry if present
+    if 'k_to_b_px' in param_dict:
+        result['k_to_b_px'] = float(param_dict['k_to_b_px'])
+    if 'ab_step_px' in param_dict:
+        result['ab_step_px'] = float(param_dict['ab_step_px'])
+
+    # Per-ring geometry for up to 7 rings (used by expand_k_per_ring_steps)
+    for ring_idx in range(7):
+        key_k = f'k_to_b_r{ring_idx}'
+        key_ab = f'ab_step_r{ring_idx}'
+        if key_k in param_dict and key_ab in param_dict:
+            result[key_k] = float(param_dict[key_k])
+            result[key_ab] = float(param_dict[key_ab])
+    
     return result
 
 
 # =============================================================================
-# K-Position F1 Score Computation
+# All-Segments Score Computation
 # =============================================================================
+
+def _wrap_aware_distance(x1, y1, x2, y2, img_height):
+    """Euclidean distance with Y wrap-around."""
+    dx = x1 - x2
+    dy = abs(y1 - y2)
+    dy = min(dy, img_height - dy)
+    return np.sqrt(dx**2 + dy**2)
+
+
+def match_segments(pred_df, gt_df, img_height):
+    """
+    Match predicted to GT segments by nearest position per block type
+    using Hungarian assignment with Y wrap-around.
+    
+    Returns:
+        List of (pred_idx, gt_idx, distance) for matched pairs,
+        list of unmatched GT indices, list of unmatched pred indices.
+    """
+    all_matches = []
+    all_unmatched_gt = []
+    all_unmatched_pred = []
+    
+    block_types = set(gt_df['Block'].unique()) | set(pred_df['Block'].unique())
+    
+    for block in block_types:
+        gt_block = gt_df[gt_df['Block'] == block].reset_index(drop=True)
+        pred_block = pred_df[pred_df['Block'] == block].reset_index(drop=True)
+        
+        n_gt = len(gt_block)
+        n_pred = len(pred_block)
+        
+        if n_gt == 0:
+            all_unmatched_pred.extend(pred_block.index.tolist())
+            continue
+        if n_pred == 0:
+            all_unmatched_gt.extend(gt_block.index.tolist())
+            continue
+        
+        # Build cost matrix with wrap-around Y
+        cost = np.zeros((n_gt, n_pred))
+        for i in range(n_gt):
+            for j in range(n_pred):
+                cost[i, j] = _wrap_aware_distance(
+                    gt_block.loc[i, 'X'], gt_block.loc[i, 'Y'],
+                    pred_block.loc[j, 'X'], pred_block.loc[j, 'Y'],
+                    img_height
+                )
+        
+        row_ind, col_ind = linear_sum_assignment(cost)
+        
+        matched_gt = set()
+        matched_pred = set()
+        for r, c in zip(row_ind, col_ind):
+            all_matches.append((pred_block.index[c], gt_block.index[r], cost[r, c]))
+            matched_gt.add(r)
+            matched_pred.add(c)
+        
+        for i in range(n_gt):
+            if i not in matched_gt:
+                all_unmatched_gt.append(i)
+        for j in range(n_pred):
+            if j not in matched_pred:
+                all_unmatched_pred.append(j)
+    
+    return all_matches, all_unmatched_gt, all_unmatched_pred
+
 
 def compute_kposition_f1(
     detected: pd.DataFrame,
     gt: pd.DataFrame,
-    threshold: float = 150.0
+    threshold: float = 150.0,
+    img_height: int = None,
 ) -> Dict:
     """
     Compute K-Position Weighted F1 score using Hungarian matching.
@@ -270,11 +383,12 @@ def compute_kposition_f1(
         detected: DataFrame with 'X', 'Y' columns (detected K positions)
         gt: DataFrame with 'X', 'Y' columns (ground truth K positions)
         threshold: Distance threshold in pixels for a "correct" match
+        img_height: Image height for wrap-around (if None, no wrap-around)
     
     Returns:
         Dictionary with F1, precision, recall, position_bonus, and detailed metrics
     """
-    if len(detected) == 0:
+    if len(detected) == 0 or len(gt) == 0:
         return {
             'f1': 0.0,
             'precision': 0.0,
@@ -285,39 +399,28 @@ def compute_kposition_f1(
             'fp': len(detected),
             'fn': len(gt),
             'matched_distances': [],
-            'mean_distance': 9999.0,  # Sentinel value for no matches
+            'mean_distance': 9999.0,
         }
     
-    if len(gt) == 0:
-        return {
-            'f1': 0.0,
-            'precision': 0.0,
-            'recall': 0.0,
-            'position_bonus': 0.0,
-            'weighted_f1': 0.0,
-            'tp': 0,
-            'fp': len(detected),
-            'fn': 0,
-            'matched_distances': [],
-            'mean_distance': 9999.0,  # Sentinel value for no matches
-        }
-    
-    # Build distance matrix
     n_gt = len(gt)
     n_det = len(detected)
     
-    # Compute pairwise distances
     distances = np.zeros((n_gt, n_det))
     for i, (_, gt_row) in enumerate(gt.iterrows()):
         for j, (_, det_row) in enumerate(detected.iterrows()):
-            dx = gt_row['X'] - det_row['X']
-            dy = gt_row['Y'] - det_row['Y']
-            distances[i, j] = np.sqrt(dx**2 + dy**2)
+            if img_height is not None:
+                distances[i, j] = _wrap_aware_distance(
+                    gt_row['X'], gt_row['Y'],
+                    det_row['X'], det_row['Y'],
+                    img_height
+                )
+            else:
+                dx = gt_row['X'] - det_row['X']
+                dy = gt_row['Y'] - det_row['Y']
+                distances[i, j] = np.sqrt(dx**2 + dy**2)
     
-    # Hungarian matching (optimal assignment)
     row_indices, col_indices = linear_sum_assignment(distances)
     
-    # Classify matches
     tp = 0
     matched_distances = []
     matched_gt_indices = set()
@@ -331,25 +434,19 @@ def compute_kposition_f1(
             matched_gt_indices.add(i)
             matched_det_indices.add(j)
     
-    # False negatives: GT positions not matched or matched beyond threshold
     fn = n_gt - len(matched_gt_indices)
-    
-    # False positives: Detected positions not matched or matched beyond threshold
     fp = n_det - len(matched_det_indices)
     
-    # Compute metrics
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
     
-    # Position bonus: reward tighter matches
     if matched_distances:
         mean_distance = np.mean(matched_distances)
         position_bonus = max(0.0, 1.0 - mean_distance / threshold)
     else:
         position_bonus = 0.0
     
-    # Weighted F1: F1 * (0.5 + 0.5 * position_bonus)
     weighted_f1 = f1 * (0.5 + 0.5 * position_bonus)
     
     return {
@@ -362,7 +459,77 @@ def compute_kposition_f1(
         'fp': int(fp),
         'fn': int(fn),
         'matched_distances': [float(d) for d in matched_distances],
-        'mean_distance': float(np.mean(matched_distances)) if matched_distances else 9999.0,  # Sentinel value for no matches
+        'mean_distance': float(np.mean(matched_distances)) if matched_distances else 9999.0,
+    }
+
+
+def compute_all_segments_score(
+    all_segments: pd.DataFrame,
+    gt_segments: pd.DataFrame,
+    img_height: int,
+    k_f1_threshold: float = 150.0,
+    max_dist: float = 500.0,
+    penalty_dist: float = 500.0,
+) -> Dict:
+    """
+    Composite objective: K-match F1 * 0.3 + position accuracy * 0.7.
+    
+    Matches predicted to GT segments per block type using Hungarian matching
+    with wrap-around-aware distances. Unmatched segments (both GT and pred)
+    receive a penalty distance.
+    
+    Args:
+        all_segments: Predicted segments DataFrame (Ring, Block, X, Y)
+        gt_segments: Ground truth segments DataFrame (Ring, Block, X, Y)
+        img_height: Image height for Y wrap-around
+        k_f1_threshold: Distance threshold for K-position F1
+        max_dist: Normalization distance for position accuracy component
+        penalty_dist: Penalty distance for unmatched segments
+    
+    Returns:
+        Dict with composite score and detailed metrics
+    """
+    # K-position F1 component
+    pred_k = all_segments[all_segments['Block'] == 'K'][['X', 'Y']].reset_index(drop=True)
+    gt_k = gt_segments[gt_segments['Block'] == 'K'][['X', 'Y']].reset_index(drop=True)
+    k_results = compute_kposition_f1(pred_k, gt_k, k_f1_threshold, img_height)
+    
+    # All-segments matching
+    matches, unmatched_gt, unmatched_pred = match_segments(
+        all_segments, gt_segments, img_height
+    )
+    
+    matched_dists = [d for _, _, d in matches]
+    penalty_dists = [penalty_dist] * (len(unmatched_gt) + len(unmatched_pred))
+    all_dists = matched_dists + penalty_dists
+    
+    if all_dists:
+        mean_dist = float(np.mean(all_dists))
+    else:
+        mean_dist = max_dist
+    
+    position_accuracy = max(0.0, 1.0 - mean_dist / max_dist)
+    
+    composite_score = k_results['weighted_f1'] * 0.3 + position_accuracy * 0.7
+    
+    return {
+        'composite_score': float(composite_score),
+        'k_weighted_f1': k_results['weighted_f1'],
+        'k_f1': k_results['f1'],
+        'k_precision': k_results['precision'],
+        'k_recall': k_results['recall'],
+        'k_tp': k_results['tp'],
+        'k_fp': k_results['fp'],
+        'k_fn': k_results['fn'],
+        'k_mean_distance': k_results['mean_distance'],
+        'position_accuracy': float(position_accuracy),
+        'mean_segment_distance': mean_dist,
+        'num_matched': len(matches),
+        'num_unmatched_gt': len(unmatched_gt),
+        'num_unmatched_pred': len(unmatched_pred),
+        'num_pred_segments': len(all_segments),
+        'num_gt_segments': len(gt_segments),
+        'matched_distances': [float(d) for d in matched_dists],
     }
 
 
@@ -372,7 +539,8 @@ def compute_kposition_f1(
 
 class DetectionObjective:
     """
-    Objective function that evaluates detection parameters using K-Position F1 score.
+    Objective function that evaluates detection parameters using composite
+    all-segments score (K-match F1 * 0.3 + position accuracy * 0.7).
     Detection reads depth_map_outlier.npy from preprocessing (no enhancing step).
     """
     
@@ -397,33 +565,28 @@ class DetectionObjective:
         )
         os.makedirs(self.params_dir, exist_ok=True)
         
-        # Load ground truth K positions dynamically from denoised.csv
-        # K-block = segment label 1 (confirmed from BLOCK_TO_LABEL mapping)
-        denoised_file = os.path.join(self.tunnel_dir, 'denoised.csv')
-        if not os.path.exists(denoised_file):
-            raise FileNotFoundError(f"denoised.csv not found: {denoised_file}. Run preprocessing first.")
+        # Load ground truth from all_segments_gt.csv
+        gt_file = os.path.join(self.tunnel_dir, 'all_segments_gt.csv')
+        if not os.path.exists(gt_file):
+            raise FileNotFoundError(
+                f"all_segments_gt.csv not found: {gt_file}. "
+                f"Create it by copying the ground-truth all_segments.csv."
+            )
         
-        df = pd.read_csv(denoised_file)
+        self.gt_segments = pd.read_csv(gt_file)
+        required_cols = {'Ring', 'Block', 'X', 'Y'}
+        if not required_cols.issubset(self.gt_segments.columns):
+            raise ValueError(f"all_segments_gt.csv missing columns: {required_cols - set(self.gt_segments.columns)}")
         
-        # Filter K-block points (segment=1) that were kept by preprocessing
-        k_points = df[(df['segment'] == 1) & (df['pred'] != 0)]
-        if len(k_points) == 0:
-            raise ValueError(f"No K-block points (segment=1) found in denoised.csv for {tunnel_id}")
-        
-        # Compute per-ring centroids in cylindrical coordinates
-        self.gt_cylindrical = k_points.groupby('ring').agg(
-            h_mean=('h', 'mean'),
-            theta_mean=('theta', 'mean'),
-            count=('h', 'count')
-        ).reset_index()
-        
-        # Store coordinate bounds from valid denoised points (used for pixel mapping)
-        valid = df[df['pred'] != 0]
-        self.h_bounds = (valid['h'].min(), valid['h'].max())
-        self.theta_bounds = (valid['theta'].min(), valid['theta'].max())
-        
-        # Store GT positions will be computed dynamically in __call__ based on current depth map
-        self.gt_positions = None  # Will be set dynamically
+        # Load image height from depth map for wrap-around calculations
+        depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
+        if not os.path.exists(depth_map_file):
+            raise FileNotFoundError(
+                f"depth_map_outlier.npy not found at {depth_map_file}. "
+                f"Run preprocessing first to generate depth maps."
+            )
+        depth_map = np.load(depth_map_file)
+        self.img_height = depth_map.shape[0]
         
         # Get search space (loads config if exists)
         self.dimensions, self.param_names, self.fixed_params = get_detection_dimensions(
@@ -443,25 +606,18 @@ class DetectionObjective:
         )
         os.makedirs(self.logs_dir, exist_ok=True)
         
-        # Verify depth_map_outlier.npy exists (from preprocessing)
-        depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
-        if not os.path.exists(depth_map_file):
-            raise FileNotFoundError(
-                f"depth_map_outlier.npy not found at {depth_map_file}. "
-                f"Run preprocessing first to generate depth maps."
-            )
-        
         if verbose:
+            gt_blocks = self.gt_segments['Block'].value_counts().to_dict()
             print(f"Detection BO for tunnel {tunnel_id}")
-            print(f"GT K positions: {len(self.gt_cylindrical)} (from segment=1 centroids in denoised.csv)")
-            print(f"GT coordinate bounds: h=[{self.h_bounds[0]:.4f}, {self.h_bounds[1]:.4f}], "
-                  f"theta=[{self.theta_bounds[0]:.4f}, {self.theta_bounds[1]:.4f}]")
+            print(f"GT segments: {len(self.gt_segments)} (from all_segments_gt.csv)")
+            print(f"GT block counts: {gt_blocks}")
+            print(f"Image height: {self.img_height}px (for wrap-around)")
             print(f"Parameters: {len(self.param_names)} (fixed: {len(self.fixed_params)})")
             if self.fixed_params:
                 print(f"Fixed parameters: {list(self.fixed_params.keys())}")
             print(f"Eval numbering starts at: {self.eval_offset + 1}")
             print(f"Logs directory: {self.logs_dir}")
-            print(f"Using depth_map_outlier.npy from preprocessing stage")
+            print(f"Objective: composite = K_F1*0.3 + position_accuracy*0.7")
     
     @property
     def global_eval_index(self) -> int:
@@ -470,112 +626,84 @@ class DetectionObjective:
     
     def __call__(self, params: List) -> float:
         """
-        Evaluate detection parameters.
+        Evaluate detection parameters using composite all-segments score.
         
         Args:
             params: List of parameter values in order of param_names
         
         Returns:
-            Negative weighted F1 score (for minimization)
+            Negative composite score (for minimization)
         """
         self.eval_count += 1
         start_time = time.time()
         
         try:
-            # Convert params to dict (merge with fixed params)
             param_dict = params_to_detection_json(params, self.param_names, self.fixed_params)
             
-            # Save parameters
             params_file = os.path.join(self.params_dir, 'parameters_detection.json')
             with open(params_file, 'w') as f:
                 json.dump(param_dict, f, indent=4)
             
-            # Run detection (suppress output)
-            # Detection now just loads depth_map_outlier.npy and runs line detection
             import io
             from contextlib import redirect_stdout, redirect_stderr
             
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                detected_positions = run_detection(self.tunnel_id, self.data_dir)
+                detection_result = run_detection(self.tunnel_id, self.data_dir)
             
-            # Convert GT from cylindrical (h, theta) to pixel coordinates using depth map from preprocessing
-            depth_map_file = os.path.join(self.tunnel_dir, 'depth_map_outlier.npy')
-            if not os.path.exists(depth_map_file):
-                raise FileNotFoundError(
-                    f"depth_map_outlier.npy not found at {depth_map_file}. "
-                    f"Run preprocessing first to generate depth maps."
-                )
+            # Unpack tuple return from updated run_detection()
+            if isinstance(detection_result, tuple):
+                k_positions, all_segments = detection_result
+            else:
+                # Fallback for older detection code that returns only k_positions
+                k_positions = detection_result
+                all_segments = k_positions.copy()
+                all_segments['Block'] = 'K'
             
-            depth_map = np.load(depth_map_file)
-            H, W = depth_map.shape
-            
-            # Map GT centroids to pixel coordinates
-            gt_pixels = pd.DataFrame({
-                'X': (self.gt_cylindrical['h_mean'] - self.h_bounds[0]) / 
-                     (self.h_bounds[1] - self.h_bounds[0]) * W,
-                'Y': (self.gt_cylindrical['theta_mean'] - self.theta_bounds[0]) / 
-                     (self.theta_bounds[1] - self.theta_bounds[0]) * H,
-            })
-            gt_pixels = gt_pixels.sort_values('X').reset_index(drop=True)
-            
-            # Compute F1 score
-            results = compute_kposition_f1(detected_positions, gt_pixels)
-            weighted_f1 = results['weighted_f1']
+            results = compute_all_segments_score(
+                all_segments, self.gt_segments, self.img_height
+            )
+            score = results['composite_score']
             
             runtime = time.time() - start_time
             
-            # Track best
-            if weighted_f1 > self.best_score:
-                self.best_score = weighted_f1
+            if score > self.best_score:
+                self.best_score = score
                 self.best_params = param_dict.copy()
                 if self.verbose:
-                    print(f"  [Eval {self.global_eval_index}] New best F1: {weighted_f1:.4f} "
-                          f"(P={results['precision']:.4f}, R={results['recall']:.4f}, "
-                          f"TP={results['tp']}, FP={results['fp']}, FN={results['fn']}, "
-                          f"mean_dist={results['mean_distance']:.1f}px)")
+                    print(f"  [Eval {self.global_eval_index}] New best: {score:.4f} "
+                          f"(K_F1={results['k_weighted_f1']:.3f}, pos_acc={results['position_accuracy']:.3f}, "
+                          f"mean_dist={results['mean_segment_distance']:.1f}px, "
+                          f"matched={results['num_matched']}/{results['num_gt_segments']})")
             
-            # Log trial
-            self._log_trial(
-                param_dict,
-                results,
-                len(detected_positions),
-                runtime,
-                False,  # No caching (always False now)
-            )
+            self._log_trial(param_dict, results, len(all_segments), runtime)
             
-            # Record history
             self.history.append({
                 'eval': self.global_eval_index,
                 'params': param_dict,
-                'weighted_f1': weighted_f1,
-                'f1': results['f1'],
-                'precision': results['precision'],
-                'recall': results['recall'],
-                'tp': results['tp'],
-                'fp': results['fp'],
-                'fn': results['fn'],
+                'composite_score': score,
+                'k_weighted_f1': results['k_weighted_f1'],
+                'position_accuracy': results['position_accuracy'],
+                'mean_segment_distance': results['mean_segment_distance'],
+                'num_matched': results['num_matched'],
+                'num_pred_segments': results['num_pred_segments'],
             })
             
             if self.verbose and self.eval_count % 10 == 0:
-                print(f"  [Eval {self.global_eval_index}] F1: {weighted_f1:.4f}, "
-                      f"TP={results['tp']}, FP={results['fp']}, FN={results['fn']}")
+                print(f"  [Eval {self.global_eval_index}] score={score:.4f}, "
+                      f"mean_dist={results['mean_segment_distance']:.1f}px, "
+                      f"matched={results['num_matched']}/{results['num_gt_segments']}")
             
-            return -weighted_f1  # Negative for minimization
+            return -score  # Negative for minimization
             
         except Exception as e:
             runtime = time.time() - start_time
             if self.verbose:
                 print(f"  [Eval {self.global_eval_index}] Error: {e}")
-            # Log failed trial
             self._log_trial(
                 params_to_detection_json(params, self.param_names, self.fixed_params),
-                None,
-                0,
-                runtime,
-                False,
-                error=str(e),
+                None, 0, runtime, error=str(e),
             )
-            return 0.0  # Return worst score on error
+            return 0.0
     
     def _log_trial(
         self,
@@ -583,7 +711,6 @@ class DetectionObjective:
         results: Optional[Dict],
         num_detected: int,
         runtime: float,
-        cached: bool,  # Kept for backward compatibility but always False
         error: Optional[str] = None,
     ):
         """Log trial to JSON file."""
@@ -592,7 +719,7 @@ class DetectionObjective:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         
         log_data = {
-            'schema_version': 'r4tun.detection.v1',
+            'schema_version': 'r4tun.detection.v2',
             'trial': {
                 'trial_id': trial_id,
                 'timestamp_utc': timestamp,
@@ -605,42 +732,44 @@ class DetectionObjective:
         if error:
             log_data['trace'] = {'warnings': [f"Error: {error}"]}
             log_data['bo'] = {
-                'objective_name': 'kposition_weighted_f1',
+                'objective_name': 'all_segments_composite',
                 'objective_value': 0.0,
                 'eval_index': global_idx,
                 'runtime_sec': runtime,
                 'is_feasible': False,
-                'cached_enhancing': cached,
             }
         else:
             log_data['outputs'] = {
-                'num_detected': num_detected,
-                'num_gt': len(self.gt_cylindrical),
-                'confusion': {
-                    'tp': results['tp'],
-                    'fp': results['fp'],
-                    'fn': results['fn'],
+                'num_pred_segments': results['num_pred_segments'],
+                'num_gt_segments': results['num_gt_segments'],
+                'num_matched': results['num_matched'],
+                'num_unmatched_gt': results['num_unmatched_gt'],
+                'num_unmatched_pred': results['num_unmatched_pred'],
+                'k_metrics': {
+                    'weighted_f1': results['k_weighted_f1'],
+                    'f1': results['k_f1'],
+                    'precision': results['k_precision'],
+                    'recall': results['k_recall'],
+                    'tp': results['k_tp'],
+                    'fp': results['k_fp'],
+                    'fn': results['k_fn'],
+                    'mean_distance_px': results['k_mean_distance'],
                 },
-                'metrics': {
-                    'precision': results['precision'],
-                    'recall': results['recall'],
-                    'f1': results['f1'],
-                    'position_bonus': results['position_bonus'],
-                    'weighted_f1': results['weighted_f1'],
-                    'mean_distance_px': results['mean_distance'],
+                'segment_metrics': {
+                    'composite_score': results['composite_score'],
+                    'position_accuracy': results['position_accuracy'],
+                    'mean_segment_distance_px': results['mean_segment_distance'],
                 },
                 'matched_distances_px': results['matched_distances'],
             }
             log_data['bo'] = {
-                'objective_name': 'kposition_weighted_f1',
-                'objective_value': float(results['weighted_f1']),
+                'objective_name': 'all_segments_composite',
+                'objective_value': float(results['composite_score']),
                 'eval_index': global_idx,
                 'runtime_sec': float(runtime),
                 'is_feasible': True,
-                'cached_enhancing': cached,
             }
         
-        # Save log file
         log_file = os.path.join(self.logs_dir, f"{trial_id}.json")
         with open(log_file, 'w') as f:
             json.dump(log_data, f, indent=2)
@@ -772,6 +901,9 @@ def load_best_from_logs(
         'complex_max_subdivisions': lambda p: p.get('complex_max_subdivisions', 4),
         'complex_conf_midpoint': lambda p: p.get('complex_conf_midpoint', 0.7),
         'complex_conf_intersection': lambda p: p.get('complex_conf_intersection', 0.9),
+        # Fixed expansion geometry
+        'k_to_b_px': lambda p: p.get('k_to_b_px', 500.0),
+        'ab_step_px': lambda p: p.get('ab_step_px', 500.0),
     }
     
     # Get current search space param names (to know what to include)
@@ -827,7 +959,7 @@ def run_detection_bo(
     
     print(f"\nSearch space: {len(objective.param_names)} parameters")
     print(f"N calls: {n_calls}, N initial: {n_initial_points}")
-    print(f"Objective: K-Position Weighted F1 (threshold=150px)")
+    print(f"Objective: all-segments composite (K_F1*0.3 + position_accuracy*0.7)")
     print(f"Algorithm: forest_minimize (Random Forest surrogate)")
     
     # Warm-start from best previous trial or current parameters file
@@ -872,12 +1004,12 @@ def run_detection_bo(
     
     # Results
     best_params = params_to_detection_json(result.x, objective.param_names, objective.fixed_params)
-    best_f1 = -result.fun  # Negate back
+    best_score = -result.fun  # Negate back
     
     print(f"\n{'='*70}")
     print(f"OPTIMIZATION COMPLETE")
     print(f"{'='*70}")
-    print(f"Best weighted F1 score: {best_f1:.4f}")
+    print(f"Best composite score: {best_score:.4f}")
     print(f"\nBest parameters:")
     for name, value in best_params.items():
         if isinstance(value, list):
@@ -894,7 +1026,7 @@ def run_detection_bo(
     
     return {
         'tunnel_id': tunnel_id,
-        'best_f1': best_f1,
+        'best_score': best_score,
         'best_params': best_params,
         'n_evaluations': objective.eval_count,
         'history': objective.history,
@@ -902,7 +1034,7 @@ def run_detection_bo(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Detection BO with K-Position F1 objective')
+    parser = argparse.ArgumentParser(description='Detection BO with all-segments composite objective')
     parser.add_argument('tunnel_id', type=str, help='Tunnel identifier (e.g., 1-4)')
     parser.add_argument('--data-dir', type=str, default='data', help='Data directory')
     parser.add_argument('--n-calls', type=int, default=80, help='Total evaluations')
