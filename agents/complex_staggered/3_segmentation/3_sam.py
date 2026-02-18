@@ -40,6 +40,7 @@ from tqdm import tqdm
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.transforms import ResizeLongestSide
 from matplotlib.path import Path
+from scipy.ndimage import distance_transform_edt
 
 
 # =============================================================================
@@ -62,6 +63,10 @@ DEFAULT_AB_MASK_HEIGHT = 1620.0
 # Processing defaults
 DEFAULT_PADDING = 150
 DEFAULT_CROP_MARGIN = 50
+
+# Prompt point y-bounds (mm) for filtering edge-near negative points
+DEFAULT_Y_BOUND_LOWER = 4200
+DEFAULT_Y_BOUND_UPPER = 13100
 
 # Quality weighting defaults
 DEFAULT_MIN_QUALITY_THRESHOLD = 0.3
@@ -792,6 +797,11 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     crop_expansion = get_param(params, 'crop_expansion', default=0, allow_default=True)
     use_template_fallback = get_param(params, 'use_template_fallback', default=False, allow_default=True)
     
+    # Prompt point y-bounds (mm)
+    y_bound_lower = get_param(params, 'y_bound_lower', default=DEFAULT_Y_BOUND_LOWER, allow_default=True)
+    y_bound_upper = get_param(params, 'y_bound_upper', default=DEFAULT_Y_BOUND_UPPER, allow_default=True)
+    y_bounds = [y_bound_lower, y_bound_upper]
+    
     # Print parameters
     print(f"\nInherited from preprocessing:")
     print(f"  resolution:       {resolution}")
@@ -810,6 +820,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  crop_margin:      {crop_margin}")
     print(f"  crop_expansion:   {crop_expansion}mm")
     print(f"  use_template_fallback: {use_template_fallback}")
+    print(f"  y_bounds:         [{y_bound_lower}, {y_bound_upper}] mm")
     print(f"  min_quality_threshold: {min_quality_threshold}")
     
     # Load input data
@@ -855,7 +866,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     # Load image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    y_bounds = [4200, 13100]
     
     # Load SAM model
     print("\n[Step 2] Loading SAM model...")
@@ -945,15 +955,21 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
             if use_template_fallback and template_mask is not None:
                 tmpl_slice = template_mask[:, crop_x_start:crop_x_end]
                 if tmpl_slice.shape == mask_slice.shape:
-                    combined_mask = mask_slice | (tmpl_slice > 0)
+                    combined_mask = tmpl_slice > 0
+                    
+                    dt = distance_transform_edt(combined_mask)
+                    max_dt = dt.max()
+                    composite_logits = (dt / max_dt) if max_dt > 0 else dt
                 else:
                     combined_mask = mask_slice
+                    composite_logits = logits_slice
             else:
                 combined_mask = mask_slice
+                composite_logits = logits_slice
             
-            update_mask = (logits_slice > current_logits) & combined_mask
+            update_mask = (composite_logits > current_logits) & combined_mask
             
-            logits_map[valid_slice_y, valid_slice_x][update_mask] = logits_slice[update_mask]
+            logits_map[valid_slice_y, valid_slice_x][update_mask] = composite_logits[update_mask]
             label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
             ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_id
 

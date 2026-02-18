@@ -96,6 +96,9 @@ def get_sam_dimensions(
         'ab_mask_height': (1400.0, 1800.0),
         'padding': (80, 200),
         'crop_margin': (25, 90),
+        'y_bound_lower': (3000.0, 5500.0),
+        'y_bound_upper': (11000.0, 14000.0),
+        'crop_expansion': (0, 500),
         'min_quality_threshold': (0.2, 0.6),
         # Physical params (complex_staggered)
         'k_height': (950.0, 1350.0),
@@ -146,6 +149,9 @@ def get_sam_dimensions(
         ('ab_mask_height', Real, bounds['ab_mask_height']),
         ('padding', Integer, bounds['padding']),
         ('crop_margin', Integer, bounds['crop_margin']),
+        ('y_bound_lower', Real, bounds['y_bound_lower']),
+        ('y_bound_upper', Real, bounds['y_bound_upper']),
+        ('crop_expansion', Integer, bounds['crop_expansion']),
         ('min_quality_threshold', Real, bounds['min_quality_threshold']),
         ('k_height', Real, bounds['k_height']),
         ('ab_height', Real, bounds['ab_height']),
@@ -188,7 +194,7 @@ def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict 
     
     # Override with BO-tuned params
     param_dict = dict(zip(param_names, params))
-    int_keys = {'padding', 'crop_margin'}
+    int_keys = {'padding', 'crop_margin', 'crop_expansion'}
     for key, val in param_dict.items():
         result[key] = int(val) if key in int_keys else float(val)
     
@@ -561,6 +567,9 @@ def load_best_from_logs(
         'ab_mask_height': lambda p: p.get('ab_mask_height', 1620.0),
         'padding': lambda p: p.get('padding', 150),
         'crop_margin': lambda p: p.get('crop_margin', 50),
+        'y_bound_lower': lambda p: p.get('y_bound_lower', 4200.0),
+        'y_bound_upper': lambda p: p.get('y_bound_upper', 13100.0),
+        'crop_expansion': lambda p: p.get('crop_expansion', 0),
         'min_quality_threshold': lambda p: p.get('min_quality_threshold', 0.3),
         'k_height': lambda p: p.get('k_height', 1200.0),
         'ab_height': lambda p: p.get('ab_height', 3270.0),
