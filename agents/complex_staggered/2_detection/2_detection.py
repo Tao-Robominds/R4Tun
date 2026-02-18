@@ -24,6 +24,7 @@ Physical constants (k_height_mm, ab_height_mm) are read from preprocessing stage
 import os
 import sys
 import json
+import math
 import cv2
 import numpy as np
 import pandas as pd
@@ -128,6 +129,17 @@ DEFAULT_COMPLEX_SUBDIVISION_THRESHOLD = 1.5
 DEFAULT_COMPLEX_MAX_SUBDIVISIONS = 4
 DEFAULT_COMPLEX_CONF_MIDPOINT = 0.7
 DEFAULT_COMPLEX_CONF_INTERSECTION = 0.9
+
+# Segment expansion defaults (for expand_k_to_all_segments)
+DEFAULT_WALK_ORDER = [
+    ("K", 0),
+    ("B1", 1),
+    ("A1", 1),
+    ("A2", 1),
+    ("A3", 1),
+    ("A4", 1),
+    ("B2", -1),
+]
 
 # Physical Constants - READ FROM PREPROCESSING STAGE
 # k_height_mm = π * tunnel_diameter * 1000 / 16 (for 6-segment ring)
@@ -691,15 +703,113 @@ def calculate_k_positions_complex_staggered(
 
 
 # =============================================================================
+# Segment Expansion: K → All Segments
+# =============================================================================
+
+def _normalize_walk_order(walk_order):
+    """Convert walk_order from JSON format (lists) to list of (block_name, direction)."""
+    result = []
+    for item in walk_order:
+        if isinstance(item, (list, tuple)):
+            block, direction = item[0], int(item[1])
+        else:
+            block, direction = item
+        result.append((block, direction))
+    return result
+
+
+def expand_k_to_all_segments(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    k_height_mm: float,
+    ab_height_mm: float,
+    resolution: float,
+    walk_order: list = None,
+) -> pd.DataFrame:
+    """Derive all segment positions from detected K positions.
+
+    For each K at (x, y), walks the ring using physical geometry:
+    - K→B1 step = 0.5*K_height + 0.5*AB_height
+    - subsequent AB steps = AB_height
+    - Y wraps modulo img_height (tunnel is cylindrical)
+    - X inherits from K (small variations are sub-pixel for detection)
+
+    Args:
+        k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
+        img_height: Depth map height in pixels (for Y wrap-around).
+        k_height_mm: K-block height in mm (BO-tunable).
+        ab_height_mm: AB-block height in mm (BO-tunable).
+        resolution: Depth map resolution in m/pixel.
+        walk_order: Block sequence and direction, default 5-1 layout.
+
+    Returns:
+        DataFrame with columns Ring, Block, X, Y, quality.
+    """
+    if walk_order is None:
+        walk_order = DEFAULT_WALK_ORDER
+    walk_order = _normalize_walk_order(walk_order)
+
+    px_per_mm = 1.0 / (resolution * 1000)
+    k_to_b_step_px = (0.5 * k_height_mm + 0.5 * ab_height_mm) * px_per_mm
+    ab_step_px = ab_height_mm * px_per_mm
+
+    forward_blocks = [(b, d) for b, d in walk_order if d >= 0]
+    reverse_blocks = [(b, d) for b, d in walk_order if d == -1]
+
+    rows = []
+    for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
+        k_x = k_row['X']
+        k_y = k_row['Y']
+        quality = k_row.get('Confidence', 1.0)
+
+        # Forward pass: K then downward blocks
+        map_y = k_y
+        for idx, (block, _direction) in enumerate(forward_blocks):
+            if block == 'K':
+                map_y = k_y
+            elif idx == 1:
+                map_y = k_y + k_to_b_step_px
+            else:
+                map_y = map_y + ab_step_px
+
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': map_y % img_height,
+                'quality': quality,
+            })
+
+        # Reverse pass: upward blocks from K
+        map_y = k_y
+        for idx, (block, _direction) in enumerate(reverse_blocks):
+            if idx == 0:
+                map_y = k_y - k_to_b_step_px
+            else:
+                map_y = map_y - ab_step_px
+
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': map_y % img_height,
+                'quality': quality,
+            })
+
+    return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
+
+
+# =============================================================================
 # Visualization
 # =============================================================================
 
 def visualize_detection(
     line_data: Dict,
     k_positions: pd.DataFrame,
-    tunnel_dir: str
+    tunnel_dir: str,
+    all_segments: pd.DataFrame = None,
 ) -> None:
-    """Generate visualization of detected lines and K positions."""
+    """Generate visualization of detected lines, K positions, and all segment positions."""
     dilated_edges = line_data['dilated_edges']
     L, W = line_data['image_height'], line_data['image_width']
     
@@ -728,6 +838,23 @@ def visualize_detection(
     for _, row in k_positions.iterrows():
         cv2.circle(output_image, (int(row['X']), int(row['Y'])), 8, (0, 255, 255), -1)
         cv2.line(output_image, (int(row['X']), 0), (int(row['X']), L), color_vertical, 1)
+    
+    # Draw all segment positions if provided
+    block_colors = {
+        'K': (0, 255, 255),    # Yellow (already drawn above)
+        'B1': (255, 165, 0),   # Orange
+        'A1': (0, 200, 200),   # Teal
+        'A2': (200, 0, 200),   # Purple
+        'A3': (100, 255, 100), # Light green
+        'A4': (100, 100, 255), # Light blue
+        'B2': (255, 100, 100), # Light red
+    }
+    if all_segments is not None:
+        for _, row in all_segments.iterrows():
+            if row['Block'] == 'K':
+                continue
+            color = block_colors.get(row['Block'], (200, 200, 200))
+            cv2.circle(output_image, (int(row['X']), int(row['Y'])), 5, color, -1)
     
     plt.figure(figsize=(16, 8))
     plt.imshow(output_image)
@@ -911,12 +1038,32 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
         print(f"  Average confidence: {k_positions['Confidence'].mean():.3f}")
         print(f"  Confidence range: [{k_positions['Confidence'].min():.3f}, {k_positions['Confidence'].max():.3f}]")
     
-    # Save results
+    # Save K-only results (backward compatible)
     k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
     print(f"\n  Saved: {os.path.join(tunnel_dir, 'detected.csv')}")
     
-    # Generate visualization
-    visualize_detection(line_data, k_positions, tunnel_dir)
+    # Step 3: Expand K positions to all segments
+    print(f"\n[Step 3] Expanding K positions to all segments...")
+    expand_k_height = get_param(params, 'k_height', k_height_mm)
+    expand_ab_height = get_param(params, 'ab_height', ab_height_mm)
+    walk_order = params.get('walk_order', DEFAULT_WALK_ORDER)
+    
+    all_segments = expand_k_to_all_segments(
+        k_positions,
+        img_height=L,
+        k_height_mm=expand_k_height,
+        ab_height_mm=expand_ab_height,
+        resolution=resolution,
+        walk_order=walk_order,
+    )
+    
+    all_segments.to_csv(os.path.join(tunnel_dir, 'all_segments.csv'), index=False)
+    print(f"  Expanded {len(k_positions)} K positions → {len(all_segments)} total segments")
+    print(f"  Blocks per ring: {all_segments.groupby('Ring')['Block'].count().values.tolist()}")
+    print(f"  Saved: {os.path.join(tunnel_dir, 'all_segments.csv')}")
+    
+    # Generate visualization (with all segment positions)
+    visualize_detection(line_data, k_positions, tunnel_dir, all_segments=all_segments)
     print(f"  Saved: {os.path.join(tunnel_dir, 'detected_lines.png')}")
     
     print(f"\n{'=' * 60}")
@@ -926,7 +1073,10 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     print("\nK Position Summary:")
     print(k_positions.to_string(index=False))
     
-    return k_positions
+    print(f"\nAll Segments Summary ({len(all_segments)} total):")
+    print(all_segments.to_string(index=False))
+    
+    return k_positions, all_segments
 
 
 # =============================================================================

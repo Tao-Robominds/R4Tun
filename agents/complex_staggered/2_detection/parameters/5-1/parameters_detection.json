@@ -29,5 +29,6 @@
     "complex_subdivision_threshold": 2.2,
     "complex_max_subdivisions": 3,
     "complex_conf_midpoint": 0.62,
-    "complex_conf_intersection": 0.97
+    "complex_conf_intersection": 0.97,
+    "walk_order": [["K",0],["B1",1],["A1",1],["A2",1],["A3",1],["A4",1],["B2",-1]]
 }

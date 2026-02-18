@@ -2,28 +2,29 @@
 Complex Staggered SAM Segmentation (Stage 3)
 
 SAM-based segment segmentation for COMPLEX STAGGERED tunnels (4-1, 5-1).
-Row-based processing from detected.csv K positions — NO ground truth dependency.
+Per-segment processing from all_segments.csv (produced by 2_detection.py).
 
-Key differences from simple staggered SAM:
+Key features:
 - 7 segments per ring: K, B1, A1, A2, A3, A4, B2 (vs 6)
 - Handles image wrap-around (segments crossing left/right boundaries)
 - Allows SAM to update both pred=0 and pred=7 (background + tunnel surface)
-- Same row-based approach: derive all segment positions from detected K positions
+- Each segment processed at its own position from all_segments.csv
 
 Pipeline:
     1_preprocessing.py → depth_map.png, enhanced.csv, pixel_to_point.pkl
-    2_detection.py → detected.csv (K positions only)
+    2_detection.py → detected.csv (K only) + all_segments.csv (all positions)
     3_sam.py → final.csv (segmented point cloud)
 
-CRITICAL PARAMETERS (9 tunable):
-    - Segment geometry: segment_width, angle_deg
+CRITICAL PARAMETERS (7 tunable):
     - Template masks: k_mask_width, k_mask_height_pos/neg, ab_mask_width, ab_mask_height
     - Processing: padding, crop_margin
     - Quality: min_quality_threshold
 
+INHERITED FROM DETECTION:
+    - segment_width, k_height, ab_height, angle_deg (via all_segments.csv positions)
+
 INHERITED FROM PREPROCESSING:
     - resolution (depth_map_resolution)
-    - tunnel_diameter (→ k_height_mm, ab_height_mm)
 """
 
 import os
@@ -45,9 +46,11 @@ from matplotlib.path import Path
 # DEFAULT VALUES FOR TUNABLE PARAMETERS
 # =============================================================================
 
-# Segment geometry defaults
+# Segment geometry defaults (used for crop sizing)
 DEFAULT_SEGMENT_WIDTH = 1200.0
 DEFAULT_ANGLE_DEG = 7.5
+DEFAULT_K_HEIGHT = 1079.92
+DEFAULT_AB_HEIGHT = 3239.77
 
 # Template mask defaults (in mm)
 DEFAULT_K_MASK_WIDTH = 625.0
@@ -56,10 +59,6 @@ DEFAULT_K_MASK_HEIGHT_NEG = 460.0
 DEFAULT_AB_MASK_WIDTH = 625.0
 DEFAULT_AB_MASK_HEIGHT = 1620.0
 
-# Segment physical heights defaults (in mm)
-DEFAULT_K_HEIGHT = 1079.92
-DEFAULT_AB_HEIGHT = 3239.77
-
 # Processing defaults
 DEFAULT_PADDING = 150
 DEFAULT_CROP_MARGIN = 50
@@ -67,21 +66,6 @@ DEFAULT_CROP_MARGIN = 50
 # Quality weighting defaults
 DEFAULT_MIN_QUALITY_THRESHOLD = 0.3
 DEFAULT_USE_QUALITY_WEIGHTING = True
-
-# Walk order: list of (block_name, direction_from_K)
-# direction: +1 = increasing Y (downward on depth map), -1 = decreasing Y (upward)
-# The first entry must be K with direction 0 (anchor).
-# Subsequent entries are walked cumulatively in the given direction.
-# Default: 5-1 arrangement (B1 below K, B2 above K)
-DEFAULT_WALK_ORDER = [
-    ("K", 0),       # anchor at detected position
-    ("B1", 1),      # 1 step downward from K
-    ("A1", 1),      # continues downward
-    ("A2", 1),      # continues downward
-    ("A3", 1),      # continues downward (wraps)
-    ("A4", 1),      # continues downward (wraps)
-    ("B2", -1),     # 1 step upward from K (reverse direction)
-]
 
 
 # =============================================================================
@@ -630,50 +614,53 @@ def compute_block_to_label_map(segment_per_ring):
 
 
 # =============================================================================
-# ROW PROCESSING (from detected K positions — NO ground truth)
+# PER-SEGMENT PROCESSING (from all_segments.csv)
 # =============================================================================
 
-def _normalize_walk_order(walk_order):
-    """Convert walk_order from JSON format (lists) to list of (block_name, direction)."""
-    result = []
-    for item in walk_order:
-        if isinstance(item, (list, tuple)):
-            block, direction = item[0], int(item[1])
-        else:
-            block, direction = item
-        result.append((block, direction))
-    return result
+def process_segment(segment_row, image, predictor, config):
+    """Process a single segment at its given position from all_segments.csv.
 
+    Returns result dict or None if the segment cannot be processed.
+    """
+    initial_x = segment_row['X']
+    initial_y = segment_row['Y']
+    block = segment_row['Block']
+    ring_id = segment_row['Ring']
+    quality = segment_row.get('quality', 1.0)
 
-def _run_sam_on_block(block, map_y, initial_x, delta_x, delta_y, image, predictor, config, quality):
-    """Run SAM on a single block at map_y; returns result dict or None."""
     resolution = config['resolution']
     segment_width = config['segment_width']
     K_height = config['K_height']
     AB_height = config['AB_height']
+    angle = config['angle']
+    padding = config['padding']
+    crop_margin = config['crop_margin']
     y_bounds = config['y_bounds']
     template_params = config['template_params']
 
+    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
+    if block == 'K':
+        delta_y = convert_to_pixel_coords(
+            0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
+    else:
+        delta_y = convert_to_pixel_coords(
+            0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
+
     crop_result = crop_image_and_mask_logits(
-        image, initial_x, map_y, 2 * delta_x, 2 * delta_y, block, resolution, template_params)
+        image, initial_x, initial_y, 2 * delta_x, 2 * delta_y,
+        block, resolution, template_params)
     if crop_result[0] is None:
         return None
     cropped_image, template_mask_logit, prompt_centre, crop_info = crop_result
+
+    if cropped_image.size == 0:
+        return None
+
     points, labels = generate_prompt_points(
-        prompt_centre, initial_x, map_y, block, resolution,
+        prompt_centre, initial_x, initial_y, block, resolution,
         segment_width, K_height, AB_height, image, y_bounds)
 
-    # Filter points outside crop bounds
-    if len(points) > 0 and np.any(points[:, 1] < 0):
-        within_bounds = (points[:, 1] >= 0)
-        points = points[within_bounds]
-        labels = labels[within_bounds]
-    if len(points) > 0 and np.any((points[:, 1] + map_y - delta_y) > image.shape[0]):
-        within_bounds = ((points[:, 1] + map_y - delta_y) <= image.shape[0])
-        points = points[within_bounds]
-        labels = labels[within_bounds]
-
-    if len(points) == 0 or cropped_image.size == 0:
+    if len(points) == 0:
         return None
 
     predictor.set_image(cropped_image)
@@ -685,76 +672,13 @@ def _run_sam_on_block(block, map_y, initial_x, delta_x, delta_y, image, predicto
     )
     return {
         'block': block,
+        'ring_id': ring_id,
         'mask': mask,
         'score': score,
         'logit': logit[0],
         'crop_info': crop_info,
         'quality': quality,
     }
-
-
-def process_row(df_row, image, predictor, config):
-    """Process a single row (ring) for SAM segmentation.
-
-    Uses tunable walk_order: list of (block_name, direction).
-    direction: 0 = K anchor, +1 = step downward from previous, -1 = step upward from K.
-    Two-pass: forward group (K + direction +1), then reverse group (direction -1).
-    """
-    initial_x, initial_y = df_row['X'], df_row['Y']
-    quality = df_row.get('quality', 1.0) if hasattr(df_row, 'get') else 1.0
-
-    resolution = config['resolution']
-    segment_width = config['segment_width']
-    K_height = config['K_height']
-    AB_height = config['AB_height']
-    angle = config['angle']
-    padding = config['padding']
-    crop_margin = config['crop_margin']
-    walk_order = _normalize_walk_order(config['walk_order'])
-
-    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
-    step_px = convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
-    ab_step_px = convert_to_pixel_coords(AB_height, resolution)
-    delta_y = convert_to_pixel_coords(0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
-    ab_delta_y = convert_to_pixel_coords(0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
-
-    results = []
-
-    # Split walk_order into forward (K + direction +1) and reverse (direction -1)
-    forward_blocks = [(b, d) for b, d in walk_order if d >= 0]
-    reverse_blocks = [(b, d) for b, d in walk_order if d == -1]
-
-    # Pass 1: forward group (K, then blocks with direction +1)
-    map_y = initial_y
-    for idx, (block, direction) in enumerate(forward_blocks):
-        if block == 'K':
-            map_y = initial_y
-            dy = delta_y
-        else:
-            if idx == 1:
-                map_y = initial_y + step_px
-            else:
-                map_y = map_y + ab_step_px
-            dy = ab_delta_y
-
-        r = _run_sam_on_block(block, map_y, initial_x, delta_x, dy, image, predictor, config, quality)
-        if r is not None:
-            results.append(r)
-
-    # Pass 2: reverse group (blocks with direction -1, walked upward from K)
-    map_y = initial_y
-    for idx, (block, direction) in enumerate(reverse_blocks):
-        if idx == 0:
-            map_y = initial_y - step_px
-        else:
-            map_y = map_y - ab_step_px
-        dy = ab_delta_y
-
-        r = _run_sam_on_block(block, map_y, initial_x, delta_x, dy, image, predictor, config, quality)
-        if r is not None:
-            results.append(r)
-
-    return results
 
 
 def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df):
@@ -804,17 +728,13 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     """
     Run SAM segmentation pipeline for complex staggered tunnels.
     
-    Row-based processing from detected.csv — NO ground truth dependency.
-    Same approach as simple staggered but with 7 segments and wrap-around.
+    Per-segment processing from all_segments.csv (produced by detection stage).
+    Each segment is processed at its given (X, Y) position with wrap-around support.
     
-    CRITICAL PARAMETERS (9 tunable):
-    - segment_width, angle_deg (geometry)
-    - k_mask_width, k_mask_height, ab_mask_width, ab_mask_height (template masks)
+    CRITICAL PARAMETERS (7 tunable):
+    - k_mask_width, k_mask_height_pos/neg, ab_mask_width, ab_mask_height (template masks)
     - padding, crop_margin (processing)
     - min_quality_threshold (quality weighting)
-    
-    INHERITED FROM PREPROCESSING:
-    - resolution, tunnel_diameter (→ k_height_mm, ab_height_mm)
     """
     print(f"{'=' * 60}")
     print(f"SAM Segmentation Pipeline (Complex Staggered): {tunnel_id}")
@@ -824,12 +744,10 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     # Load parameters
     params, params_loaded = load_parameters(tunnel_id, base_dir)
-    allow_defaults = not params_loaded
     
     # Load preprocessing parameters for inherited values
     preprocessing_params = load_preprocessing_params(tunnel_id, base_dir)
     
-    # Resolution: prefer SAM params over preprocessing (preprocessing can be wrong for complex)
     resolution = params.get('resolution')
     if resolution is None:
         resolution = preprocessing_params.get('depth_map_resolution', 0.005)
@@ -837,13 +755,12 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     tunnel_diameter = preprocessing_params.get('tunnel_diameter', 5.5)
     K_calc, AB_calc = calculate_segment_heights(tunnel_diameter)
     
-    # K and AB heights: prefer SAM params over calculated
     K_height = params.get('k_height', K_calc)
     AB_height = params.get('ab_height', AB_calc)
     
-    # Extract CRITICAL tunable parameters
-    segment_width = get_param(params, 'segment_width', default=DEFAULT_SEGMENT_WIDTH, allow_default=allow_defaults)
-    angle_deg = get_param(params, 'angle_deg', default=DEFAULT_ANGLE_DEG, allow_default=allow_defaults)
+    # Geometry for crop sizing (inherited from detection via all_segments.csv positions)
+    segment_width = get_param(params, 'segment_width', default=DEFAULT_SEGMENT_WIDTH, allow_default=True)
+    angle_deg = get_param(params, 'angle_deg', default=DEFAULT_ANGLE_DEG, allow_default=True)
     
     # Template mask parameters
     k_mask_width = get_param(params, 'k_mask_width', default=DEFAULT_K_MASK_WIDTH, allow_default=True)
@@ -864,9 +781,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     padding = get_param(params, 'padding', default=DEFAULT_PADDING, allow_default=True)
     crop_margin = get_param(params, 'crop_margin', default=DEFAULT_CROP_MARGIN, allow_default=True)
 
-    # Walk order (tunable segment processing sequence)
-    walk_order = params.get('walk_order', DEFAULT_WALK_ORDER)
-
     # Quality weighting
     min_quality_threshold = get_param(params, 'min_quality_threshold', default=DEFAULT_MIN_QUALITY_THRESHOLD, allow_default=True)
     use_quality_weighting = get_param(params, 'use_quality_weighting', default=DEFAULT_USE_QUALITY_WEIGHTING, allow_default=True)
@@ -875,12 +789,12 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"\nInherited from preprocessing:")
     print(f"  resolution:       {resolution}")
     print(f"  tunnel_diameter:  {tunnel_diameter}m")
-    print(f"  K_height:         {K_height:.2f}mm (calculated)")
-    print(f"  AB_height:        {AB_height:.2f}mm (calculated)")
+    print(f"  K_height:         {K_height:.2f}mm")
+    print(f"  AB_height:        {AB_height:.2f}mm")
     
-    print(f"\nCritical parameters (tunable):")
-    print(f"  segment_width:    {segment_width}")
-    print(f"  angle_deg:        {angle_deg}\u00b0")
+    print(f"\nSAM parameters (tunable):")
+    print(f"  segment_width:    {segment_width} (for crop sizing)")
+    print(f"  angle_deg:        {angle_deg}\u00b0 (for crop sizing)")
     print(f"  k_mask_width:     {k_mask_width}")
     print(f"  k_mask_height:    +{k_mask_height_pos}/-{k_mask_height_neg}")
     print(f"  ab_mask_width:    {ab_mask_width}")
@@ -891,31 +805,49 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     # Load input data
     print("\n[Step 1] Loading data...")
-    detected_csv_path = os.path.join(tunnel_dir, "detected.csv")
-    if not os.path.exists(detected_csv_path):
-        raise FileNotFoundError(f"detected.csv not found in {tunnel_dir}. Run detection first.")
+    all_segments_path = os.path.join(tunnel_dir, "all_segments.csv")
+    if not os.path.exists(all_segments_path):
+        raise FileNotFoundError(
+            f"all_segments.csv not found in {tunnel_dir}. "
+            "Run detection (2_detection.py) first to produce it.")
     
-    initial_prompt_points = pd.read_csv(detected_csv_path)
+    all_segments_df = pd.read_csv(all_segments_path)
+    
+    # Normalize column names for compatibility
+    if 'ring' in all_segments_df.columns and 'Ring' not in all_segments_df.columns:
+        all_segments_df = all_segments_df.rename(columns={'ring': 'Ring'})
+    if 'segment_name' in all_segments_df.columns and 'Block' not in all_segments_df.columns:
+        all_segments_df = all_segments_df.rename(columns={'segment_name': 'Block'})
+    
     pixel_to_point = pickle.load(open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb"))
-    df_point_cloud = pd.read_csv(os.path.join(tunnel_dir, "denoised.csv"))
+    
+    # Try enhanced.csv first (p4tun style), fall back to denoised.csv
+    enhanced_path = os.path.join(tunnel_dir, "enhanced.csv")
+    denoised_path = os.path.join(tunnel_dir, "denoised.csv")
+    if os.path.exists(enhanced_path):
+        df_point_cloud = pd.read_csv(enhanced_path)
+        print(f"  Point cloud: enhanced.csv")
+    else:
+        df_point_cloud = pd.read_csv(denoised_path)
+        print(f"  Point cloud: denoised.csv")
+    
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     
-    # Auto-detect segment count (default 7 for complex staggered)
-    segment_per_ring = detect_segment_count(tunnel_dir, default=7)
+    # Determine segment count from data
+    unique_blocks = all_segments_df['Block'].unique()
+    segment_per_ring = len(unique_blocks)
     
-    print(f"  Detected K positions: {len(initial_prompt_points)}")
-    print(f"  Ring count: {ring_count}")
-    print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
+    print(f"  Total segments to process: {len(all_segments_df)}")
+    print(f"  Rings: {all_segments_df['Ring'].nunique()}")
+    print(f"  Unique block types: {sorted(unique_blocks)} ({segment_per_ring})")
+    print(f"  Wrap-around: ENABLED")
+    print(f"  Point update: pred in [0, 7] (p4tun-style)")
     
-    print(f"\nComplex staggered differences:")
-    print(f"  Segments per ring: {segment_per_ring} (auto-detected)")
-    print(f"  Wrap-around:      ENABLED")
-    print(f"  Point update:     pred in [0, 7] (p4tun-style)")
-    
-    # Calculate y_bounds from image
+    # Load image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    y_bounds = [int(image.shape[0] * 0.3 * resolution * 1000), int(image.shape[0] * 0.95 * resolution * 1000)]
+    y_bounds = [int(image.shape[0] * 0.3 * resolution * 1000),
+                int(image.shape[0] * 0.95 * resolution * 1000)]
     
     # Load SAM model
     print("\n[Step 2] Loading SAM model...")
@@ -923,7 +855,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     sam.to(device=SAM_DEVICE)
     predictor = SamPredictor(sam)
     
-    # Build template_params for generate_template_mask (including B1/B2 heights)
     template_params = {
         'k_mask_width': k_mask_width,
         'k_mask_height_pos': k_mask_height_pos,
@@ -938,27 +869,28 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'b2_height_bottom': b2_height_bottom,
     }
     
-    # Build config
     config = {
         'resolution': resolution,
-        'segment_per_ring': segment_per_ring,
         'segment_width': segment_width,
         'K_height': K_height,
         'AB_height': AB_height,
         'angle': angle_deg,
         'padding': padding,
         'crop_margin': crop_margin,
-        'walk_order': walk_order,
         'y_bounds': y_bounds,
         'template_params': template_params,
     }
     
-    # Run SAM on each detected K position (row-based, same as simple staggered)
-    print("\n[Step 3] Running SAM segmentation...")
+    # Run SAM on each segment from all_segments.csv
+    print("\n[Step 3] Running SAM segmentation (per-segment)...")
     all_results = []
-    for _, row in tqdm(initial_prompt_points.iterrows(), total=len(initial_prompt_points), desc="Processing rings"):
-        result = process_row(row, image, predictor, config)
-        all_results.append(result)
+    for _, seg_row in tqdm(all_segments_df.iterrows(), total=len(all_segments_df),
+                           desc="Processing segments"):
+        result = process_segment(seg_row, image, predictor, config)
+        if result is not None:
+            all_results.append(result)
+    
+    print(f"  Successfully processed {len(all_results)}/{len(all_segments_df)} segments")
     
     # Aggregate results (with wrap-around support)
     print("\n[Step 4] Aggregating results...")
@@ -968,47 +900,47 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     block_to_label = compute_block_to_label_map(segment_per_ring)
 
-    for ring_index, ring in enumerate(all_results, start=0):
-        for item in ring:
-            mask = item['mask'][0]
-            logits = item['logit']
-            block = item['block']
-            crop_info = item['crop_info']
-            quality = item.get('quality', 1.0)
+    for item in all_results:
+        mask = item['mask'][0]
+        logits = item['logit']
+        block = item['block']
+        ring_id = item['ring_id']
+        crop_info = item['crop_info']
+        quality = item.get('quality', 1.0)
+        
+        new_logits = restore_sam_logits(logits, mask.shape)
+        
+        if use_quality_weighting and quality >= min_quality_threshold:
+            new_logits = new_logits * quality
+        elif quality < min_quality_threshold:
+            continue
+        
+        start_y = crop_info['y1']
+        end_y = crop_info['y2']
+        valid_slice_y = slice(start_y, end_y)
+        
+        for mapping in crop_info['mappings']:
+            crop_x_start, crop_x_end = mapping['crop_x']
+            img_x_start, img_x_end = mapping['img_x']
             
-            new_logits = restore_sam_logits(logits, mask.shape)
+            valid_slice_x = slice(img_x_start, img_x_end)
+            mask_slice = mask[:, crop_x_start:crop_x_end]
+            logits_slice = new_logits[:, crop_x_start:crop_x_end]
             
-            if use_quality_weighting and quality >= min_quality_threshold:
-                new_logits = new_logits * quality
-            elif quality < min_quality_threshold:
+            current_logits = logits_map[valid_slice_y, valid_slice_x]
+            
+            if mask_slice.shape != current_logits.shape or logits_slice.shape != current_logits.shape:
                 continue
             
-            start_y = crop_info['y1']
-            end_y = crop_info['y2']
-            valid_slice_y = slice(start_y, end_y)
+            update_mask = (logits_slice > current_logits) & mask_slice
             
-            # Handle wrap-around via crop_info mappings
-            for mapping in crop_info['mappings']:
-                crop_x_start, crop_x_end = mapping['crop_x']
-                img_x_start, img_x_end = mapping['img_x']
-                
-                valid_slice_x = slice(img_x_start, img_x_end)
-                mask_slice = mask[:, crop_x_start:crop_x_end]
-                logits_slice = new_logits[:, crop_x_start:crop_x_end]
-                
-                current_logits = logits_map[valid_slice_y, valid_slice_x]
-                
-                if mask_slice.shape != current_logits.shape or logits_slice.shape != current_logits.shape:
-                    continue
-                
-                update_mask = (logits_slice > current_logits) & mask_slice
-                
-                logits_map[valid_slice_y, valid_slice_x][update_mask] = logits_slice[update_mask]
-                label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
-                ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
+            logits_map[valid_slice_y, valid_slice_x][update_mask] = logits_slice[update_mask]
+            label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
+            ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_id
 
     # Fix ring numbering
-    fix_ring = np.where((ring_map >= 1) & (ring_map <= (ring_count-1)), ring_count - ring_map, ring_map)
+    fix_ring = np.where((ring_map >= 1) & (ring_map <= (ring_count-1)),
+                        ring_count - ring_map, ring_map)
     
     # Project back to point cloud
     print("\n[Step 5] Projecting to point cloud...")

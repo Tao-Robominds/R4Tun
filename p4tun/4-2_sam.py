@@ -802,6 +802,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data", segment_count: int = None):
     candidates = [
         os.path.join(project_root, "sam4tun", "segment-anything", "sam_vit_h_4b8939.pth"),
         os.path.join(project_root, "p4tun", "segment-anything", "sam_vit_h_4b8939.pth"),
+        os.path.join(project_root, "skills", "segment-anything", "sam_vit_h_4b8939.pth"),
         os.path.join(script_dir, "segment-anything", "sam_vit_h_4b8939.pth"),
         "sam4tun/segment-anything/sam_vit_h_4b8939.pth",
     ]

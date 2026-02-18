@@ -103,7 +103,7 @@ print(f"Processing tunnel: {tunnel_id}")
 print(f"Using individual segment processing (wrap-around mode)")
 print(f"Total segments to process: {len(all_segments_df)}")
 
-sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
+sam_checkpoint = "skills/segment-anything/sam_vit_h_4b8939.pth"
 model_type = "vit_h"
 device = "cuda"
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
