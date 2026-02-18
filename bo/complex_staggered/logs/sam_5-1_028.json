@@ -1,0 +1,96 @@
+{
+  "schema_version": "r4tun.sam.v1",
+  "trial": {
+    "trial_id": "sam_5-1_028",
+    "timestamp_utc": "2026-02-18T17:21:26Z",
+    "tunnel_id": "5-1",
+    "assembly_type": "complex_staggered"
+  },
+  "params": {
+    "resolution": 0.005,
+    "walk_order": [
+      [
+        "K",
+        0
+      ],
+      [
+        "B1",
+        1
+      ],
+      [
+        "A1",
+        1
+      ],
+      [
+        "A2",
+        1
+      ],
+      [
+        "A3",
+        1
+      ],
+      [
+        "A4",
+        1
+      ],
+      [
+        "B2",
+        -1
+      ]
+    ],
+    "segment_width": 1221.3717324797208,
+    "angle_deg": 5.507397995026886,
+    "k_mask_width": 686.5152813799612,
+    "k_mask_height_pos": 602.9155188840166,
+    "k_mask_height_neg": 406.7847220818761,
+    "ab_mask_width": 526.8960908307911,
+    "ab_mask_height": 1368.801104050023,
+    "padding": 269,
+    "crop_margin": 29,
+    "min_quality_threshold": 0.5994089858488053,
+    "k_height": 954.7796554411583,
+    "ab_height": 3117.8813996383524,
+    "b1_height_top": 1358.864091174099,
+    "b1_height_bottom_pos": 1428.733085973801,
+    "b1_height_bottom_neg": 1695.8452831620514,
+    "b2_height_top_pos": 1609.4015586637088,
+    "b2_height_top_neg": 1623.4383573819248,
+    "b2_height_bottom": 1395.7458253380057,
+    "use_quality_weighting": true
+  },
+  "outputs": {
+    "metrics": {
+      "OA": 0.3960886925607556,
+      "F1": 0.35429295471818656,
+      "mIoU": 0.2266177869611129
+    },
+    "iou_per_class": [
+      0.261718235334419,
+      0.2889577747989276,
+      0.3572158824017021,
+      0.2535024653977316,
+      0.033224911699559,
+      0.09545957758831394,
+      0.37805105170902714,
+      0.14481239675922283
+    ],
+    "classes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "bo": {
+    "objective_name": "miou",
+    "objective_value": 0.2266177869611129,
+    "eval_index": 28,
+    "runtime_sec": 101.52998518943787,
+    "is_feasible": true,
+    "cached": false
+  }
+}

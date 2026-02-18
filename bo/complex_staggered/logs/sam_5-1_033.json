@@ -1,0 +1,96 @@
+{
+  "schema_version": "r4tun.sam.v1",
+  "trial": {
+    "trial_id": "sam_5-1_033",
+    "timestamp_utc": "2026-02-18T17:29:55Z",
+    "tunnel_id": "5-1",
+    "assembly_type": "complex_staggered"
+  },
+  "params": {
+    "resolution": 0.005,
+    "walk_order": [
+      [
+        "K",
+        0
+      ],
+      [
+        "B1",
+        1
+      ],
+      [
+        "A1",
+        1
+      ],
+      [
+        "A2",
+        1
+      ],
+      [
+        "A3",
+        1
+      ],
+      [
+        "A4",
+        1
+      ],
+      [
+        "B2",
+        -1
+      ]
+    ],
+    "segment_width": 1094.24689580014,
+    "angle_deg": 5.674529727858736,
+    "k_mask_width": 515.3623139855321,
+    "k_mask_height_pos": 685.3541609767311,
+    "k_mask_height_neg": 616.3400883588585,
+    "ab_mask_width": 623.1351181662793,
+    "ab_mask_height": 1670.7415601978948,
+    "padding": 285,
+    "crop_margin": 31,
+    "min_quality_threshold": 0.5898988326639878,
+    "k_height": 1253.268902073918,
+    "ab_height": 3148.1688254288015,
+    "b1_height_top": 1758.8147054646429,
+    "b1_height_bottom_pos": 1404.3104304226129,
+    "b1_height_bottom_neg": 1816.9960097414184,
+    "b2_height_top_pos": 1514.3194214232094,
+    "b2_height_top_neg": 1781.7553389758389,
+    "b2_height_bottom": 1345.7523480364457,
+    "use_quality_weighting": true
+  },
+  "outputs": {
+    "metrics": {
+      "OA": 0.4213311180091266,
+      "F1": 0.3886811558409181,
+      "mIoU": 0.25774244149252934
+    },
+    "iou_per_class": [
+      0.281018566880907,
+      0.5157897647666101,
+      0.3188084395078378,
+      0.22557942104082448,
+      0.028701388519444593,
+      0.09317741810578486,
+      0.3713264650864115,
+      0.2275380680324146
+    ],
+    "classes": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ]
+  },
+  "bo": {
+    "objective_name": "miou",
+    "objective_value": 0.25774244149252934,
+    "eval_index": 33,
+    "runtime_sec": 101.50965094566345,
+    "is_feasible": true,
+    "cached": false
+  }
+}

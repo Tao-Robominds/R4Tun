@@ -1,52 +1,27 @@
 {
   "resolution": 0.005,
-  "b1_height_top": 1500,
-  "b1_height_bottom_pos": 1540.69,
-  "b1_height_bottom_neg": 1699.08,
-  "b2_height_top_pos": 1540.69,
-  "b2_height_top_neg": 1699.08,
-  "b2_height_bottom": 1500,
   "use_quality_weighting": true,
   "walk_order": [
-    [
-      "K",
-      0
-    ],
-    [
-      "B1",
-      1
-    ],
-    [
-      "A1",
-      1
-    ],
-    [
-      "A2",
-      1
-    ],
-    [
-      "A3",
-      1
-    ],
-    [
-      "A4",
-      1
-    ],
-    [
-      "B2",
-      -1
-    ]
+    ["K", 0],
+    ["B1", 1],
+    ["A1", 1],
+    ["A2", 1],
+    ["A3", 1],
+    ["A4", 1],
+    ["B2", -1]
   ],
-  "k_height": 1079.92,
-  "ab_height": 3239.77,
-  "segment_width": 1200,
-  "angle_deg": 7.52,
-  "k_mask_width": 625,
-  "k_mask_height_pos": 620,
-  "k_mask_height_neg": 460,
-  "ab_mask_width": 625,
-  "ab_mask_height": 1620,
-  "padding": 200,
+  "segment_width": 1166.5092888716206,
+  "k_height": 950.0,
+  "ab_height": 3100.0,
+  "angle_deg": 7.288866593734656,
+  "k_mask_width": 563.2380525390691,
+  "k_mask_height_pos": 706.6101542435606,
+  "k_mask_height_neg": 582.5225909865225,
+  "ab_mask_width": 550.0,
+  "ab_mask_height": 1567.222728749811,
+  "padding": 150,
   "crop_margin": 50,
-  "min_quality_threshold": 0.3
+  "min_quality_threshold": 0.3,
+  "crop_expansion": 0,
+  "use_template_fallback": false
 }

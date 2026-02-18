@@ -975,7 +975,13 @@ def detect_outlier_points(
     radial_values: np.ndarray,
     neighbor_indices: np.ndarray,
     h_min: float,
-    ring_spacing: float
+    ring_spacing: float,
+    depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
+    depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
+    high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
+    high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
+    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
+    bidirectional: int = 0,
 ) -> np.ndarray:
     """Detect outlier points with significant local depth variation."""
     n_points = len(points)
@@ -983,20 +989,24 @@ def detect_outlier_points(
 
     for i in prange(n_points):
         neighbors = neighbor_indices[i, 1:]
-        if len(neighbors) < FIXED_OUTLIER_NEIGHBORS:
+        if len(neighbors) < outlier_neighbors:
             continue
         
         neighbor_depths = radial_values[neighbors]
         avg_diff = points[i, 2] - np.mean(neighbor_depths)
         
         h_coord = points[i, 0]
-        in_high_density = (h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_START <= h_coord <= 
-                          h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_END)
+        in_high_density = (h_min + ring_spacing * high_density_ring_start <= h_coord <= 
+                          h_min + ring_spacing * high_density_ring_end)
         
-        threshold = FIXED_DEPTH_THRESHOLD_HIGH if in_high_density else FIXED_DEPTH_THRESHOLD_LOW
+        threshold = depth_threshold_high if in_high_density else depth_threshold_low
         
-        if avg_diff > threshold:
-            outlier_mask[i] = True
+        if bidirectional == 1:
+            if abs(avg_diff) > threshold:
+                outlier_mask[i] = True
+        else:
+            if avg_diff > threshold:
+                outlier_mask[i] = True
     
     return outlier_mask
 
@@ -1005,11 +1015,15 @@ def detect_outlier_points(
 def interpolate_between_outliers(
     outlier_indices: np.ndarray,
     points: np.ndarray,
-    resolution: float
+    resolution: float,
+    interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
+    num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
+    duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
 ) -> np.ndarray:
     """Interpolate new points between pairs of outlier points."""
     n_outliers = len(outlier_indices)
-    max_new = n_outliers * n_outliers * FIXED_NUM_INTERPOLATIONS
+    # Cap pre-allocation to avoid OOM; in practice, only nearby pairs produce points
+    max_new = min(n_outliers * n_outliers * num_interpolations, 10_000_000)
     new_points = np.zeros((max_new, 4))
     count = 0
     
@@ -1022,28 +1036,20 @@ def interpolate_between_outliers(
             p2 = points[idx2]
             
             dist = np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
-            if not (resolution < dist < FIXED_INTERPOLATION_RADIUS):
+            if not (resolution < dist < interpolation_radius):
                 continue
             
-            for k in range(1, FIXED_NUM_INTERPOLATIONS + 1):
-                t = k / (FIXED_NUM_INTERPOLATIONS + 1)
+            for k in range(1, num_interpolations + 1):
+                t = k / (num_interpolations + 1)
                 new_h = (1 - t) * p1[0] + t * p2[0]
                 new_theta = (1 - t) * p1[1] + t * p2[1]
                 new_r = (1 - t) * p1[2] + t * p2[2]
                 new_intensity = (1 - t) * p1[3] + t * p2[3]
                 
-                is_duplicate = False
-                if count > 0:
-                    for m in range(count):
-                        d = np.sqrt((new_points[m, 0] - new_h)**2 + 
-                                   (new_points[m, 1] - new_theta)**2)
-                        if d < FIXED_DUPLICATE_THRESHOLD:
-                            is_duplicate = True
-                            break
-                
-                if not is_duplicate:
-                    new_points[count] = np.array([new_h, new_theta, new_r, new_intensity])
-                    count += 1
+                new_points[count] = np.array([new_h, new_theta, new_r, new_intensity])
+                count += 1
+                if count >= max_new:
+                    return new_points[:count]
     
     return new_points[:count]
 
@@ -1051,7 +1057,17 @@ def interpolate_between_outliers(
 def enhance_outlier_boundaries(
     df: pd.DataFrame,
     depth_map_resolution: float,
-    ring_spacing: float
+    ring_spacing: float,
+    depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
+    depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
+    high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
+    high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
+    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
+    max_outlier_points: int = FIXED_MAX_OUTLIER_POINTS,
+    interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
+    num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
+    duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
+    bidirectional: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Detect outlier points and interpolate around them."""
     start_time = time.time()
@@ -1061,12 +1077,18 @@ def enhance_outlier_boundaries(
     coords_2d = points[:, :2]
     tree = cKDTree(coords_2d)
     
-    _, indices = tree.query(coords_2d, k=FIXED_OUTLIER_NEIGHBORS + 1)
+    _, indices = tree.query(coords_2d, k=outlier_neighbors + 1)
     h_min = np.min(points[:, 0])
     
     print('Detecting outlier points...')
     outlier_mask = detect_outlier_points(
-        points[:, :3], points[:, 2], indices, h_min, ring_spacing
+        points[:, :3], points[:, 2], indices, h_min, ring_spacing,
+        depth_threshold_low=depth_threshold_low,
+        depth_threshold_high=depth_threshold_high,
+        high_density_ring_start=high_density_ring_start,
+        high_density_ring_end=high_density_ring_end,
+        outlier_neighbors=outlier_neighbors,
+        bidirectional=1 if bidirectional else 0,
     )
     
     outlier_indices = np.where(outlier_mask)[0]
@@ -1074,27 +1096,34 @@ def enhance_outlier_boundaries(
     
     outlier_df = df.iloc[outlier_indices].copy()
     
-    # Filter out high-density region for interpolation
-    print("Filtering high-density region...")
-    h_low = h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_START
-    h_high = h_min + ring_spacing * FIXED_HIGH_DENSITY_RING_END
+    # Filter out high-density region for interpolation (skip if disabled via start=-1)
+    if high_density_ring_start >= 0:
+        print("Filtering high-density region...")
+        h_low = h_min + ring_spacing * high_density_ring_start
+        h_high = h_min + ring_spacing * high_density_ring_end
+        
+        filtered_indices = []
+        for idx in outlier_indices:
+            h = points[idx, 0]
+            if not (h_low <= h <= h_high):
+                filtered_indices.append(idx)
+        
+        filtered_indices = np.array(filtered_indices, dtype=np.int64)
+    else:
+        print("High-density filter disabled — using ALL outlier points for interpolation")
+        filtered_indices = outlier_indices.copy()
     
-    filtered_indices = []
-    for idx in outlier_indices:
-        h = points[idx, 0]
-        if not (h_low <= h <= h_high):
-            filtered_indices.append(idx)
-    
-    filtered_indices = np.array(filtered_indices, dtype=np.int64)
-    
-    if len(filtered_indices) > FIXED_MAX_OUTLIER_POINTS:
-        print(f"Warning: Limiting to {FIXED_MAX_OUTLIER_POINTS} outlier points")
+    if len(filtered_indices) > max_outlier_points:
+        print(f"Warning: Limiting to {max_outlier_points} outlier points (from {len(filtered_indices)})")
         np.random.seed(42)
-        filtered_indices = np.random.choice(filtered_indices, FIXED_MAX_OUTLIER_POINTS, replace=False)
+        filtered_indices = np.random.choice(filtered_indices, max_outlier_points, replace=False)
     
     print(f"Interpolating around {len(filtered_indices)} outlier points...")
     new_points = interpolate_between_outliers(
-        filtered_indices, points, depth_map_resolution
+        filtered_indices, points, depth_map_resolution,
+        interpolation_radius=interpolation_radius,
+        num_interpolations=num_interpolations,
+        duplicate_threshold=duplicate_threshold,
     )
     
     new_df = pd.DataFrame(new_points, columns=['h', 'theta', 'r', 'intensity'])
@@ -1306,7 +1335,18 @@ def enhance_point_cloud(
     target_distances: List[float],
     curvature_neighbors: int,
     depth_map_resolution: float,
-    interpolation_window: int = DEFAULT_INTERPOLATION_WINDOW
+    interpolation_window: int = DEFAULT_INTERPOLATION_WINDOW,
+    outlier_depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
+    outlier_depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
+    outlier_high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
+    outlier_high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
+    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
+    max_outlier_points: int = FIXED_MAX_OUTLIER_POINTS,
+    outlier_interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
+    outlier_num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
+    outlier_duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
+    outlier_bidirectional: bool = False,
+    outlier_depth_map_window: int = 1,
 ) -> pd.DataFrame:
     """
     Execute Stage 3: Enhancing.
@@ -1316,6 +1356,7 @@ def enhance_point_cloud(
     - curvature_neighbors: Affects surface smoothness (MEDIUM impact)
     - depth_map_resolution: Affects all downstream stages (HIGH impact)
     - interpolation_window: Gap filling window for main depth_map (LOW impact)
+    - outlier_*: Outlier boundary detection and interpolation (HIGH impact on depth_map_outlier density)
     """
     df_valid = df[df['pred'] != 0].copy()
     
@@ -1327,7 +1368,17 @@ def enhance_point_cloud(
     
     # Outlier boundary enhancement
     outlier_df, boundary_points = enhance_outlier_boundaries(
-        df_with_curvature, depth_map_resolution, ring_spacing
+        df_with_curvature, depth_map_resolution, ring_spacing,
+        depth_threshold_low=outlier_depth_threshold_low,
+        depth_threshold_high=outlier_depth_threshold_high,
+        high_density_ring_start=outlier_high_density_ring_start,
+        high_density_ring_end=outlier_high_density_ring_end,
+        outlier_neighbors=outlier_neighbors,
+        max_outlier_points=max_outlier_points,
+        interpolation_radius=outlier_interpolation_radius,
+        num_interpolations=outlier_num_interpolations,
+        duplicate_threshold=outlier_duplicate_threshold,
+        bidirectional=outlier_bidirectional,
     )
     df_boundary = pd.concat([outlier_df, boundary_points], ignore_index=False)
     
@@ -1352,7 +1403,7 @@ def enhance_point_cloud(
     
     depth_map, pixel_mapping = generate_depth_map(
         surface_data, boundary_data, resolution=depth_map_resolution,
-        window_size=interpolation_window  # Tunable for main depth_map
+        window_size=interpolation_window
     )
     
     with open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), 'wb') as f:
@@ -1372,7 +1423,7 @@ def enhance_point_cloud(
     depth_map_outlier, _ = generate_depth_map(
         surface_data, outlier_data,
         resolution=depth_map_resolution, record_mapping=False, outlier_mode=True,
-        window_size=1  # No gap interpolation for outlier depth map (matches original p4tun)
+        window_size=outlier_depth_map_window
     )
     np.save(os.path.join(tunnel_dir, "depth_map_outlier.npy"), depth_map_outlier)
     
@@ -1440,6 +1491,19 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     depth_map_resolution = get_param(params, 'depth_map_resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
     interpolation_window = get_param(params, 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=True)  # Always allow default (LOW impact)
     
+    # Outlier enhancement parameters (new tunable params)
+    outlier_depth_threshold_low = params.get('outlier_depth_threshold_low', FIXED_DEPTH_THRESHOLD_LOW)
+    outlier_depth_threshold_high = params.get('outlier_depth_threshold_high', FIXED_DEPTH_THRESHOLD_HIGH)
+    outlier_high_density_ring_start = int(params.get('outlier_high_density_ring_start', FIXED_HIGH_DENSITY_RING_START))
+    outlier_high_density_ring_end = int(params.get('outlier_high_density_ring_end', FIXED_HIGH_DENSITY_RING_END))
+    outlier_neighbors = int(params.get('outlier_neighbors', FIXED_OUTLIER_NEIGHBORS))
+    max_outlier_points = int(params.get('max_outlier_points', FIXED_MAX_OUTLIER_POINTS))
+    outlier_interpolation_radius = float(params.get('outlier_interpolation_radius', FIXED_INTERPOLATION_RADIUS))
+    outlier_num_interpolations = int(params.get('outlier_num_interpolations', FIXED_NUM_INTERPOLATIONS))
+    outlier_duplicate_threshold = float(params.get('outlier_duplicate_threshold', FIXED_DUPLICATE_THRESHOLD))
+    outlier_bidirectional = bool(params.get('outlier_bidirectional', False))
+    outlier_depth_map_window = int(params.get('outlier_depth_map_window', 1))
+    
     print("\nCritical parameters:")
     print(f"  ring_spacing:       {ring_spacing}")
     print(f"  tunnel_diameter:    {tunnel_diameter}")
@@ -1450,6 +1514,17 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     print(f"  curvature_neighbors: {curvature_neighbors}")
     print(f"  depth_map_resolution: {depth_map_resolution}")
     print(f"  interpolation_window: {interpolation_window} (LOW impact)")
+    print(f"\nOutlier enhancement parameters:")
+    print(f"  outlier_depth_threshold_low:  {outlier_depth_threshold_low}")
+    print(f"  outlier_depth_threshold_high: {outlier_depth_threshold_high}")
+    print(f"  outlier_high_density_ring_start: {outlier_high_density_ring_start} (-1=disabled)")
+    print(f"  outlier_high_density_ring_end:   {outlier_high_density_ring_end}")
+    print(f"  outlier_neighbors:       {outlier_neighbors}")
+    print(f"  max_outlier_points:      {max_outlier_points}")
+    print(f"  outlier_interpolation_radius: {outlier_interpolation_radius}")
+    print(f"  outlier_num_interpolations:   {outlier_num_interpolations}")
+    print(f"  outlier_bidirectional:   {outlier_bidirectional}")
+    print(f"  outlier_depth_map_window: {outlier_depth_map_window}")
     
     # ---- Stage 1: Unfolding ----
     print("\n[Stage 1] Unfolding...")
@@ -1481,7 +1556,18 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
         target_distances=target_distances,
         curvature_neighbors=curvature_neighbors,
         depth_map_resolution=depth_map_resolution,
-        interpolation_window=interpolation_window
+        interpolation_window=interpolation_window,
+        outlier_depth_threshold_low=outlier_depth_threshold_low,
+        outlier_depth_threshold_high=outlier_depth_threshold_high,
+        outlier_high_density_ring_start=outlier_high_density_ring_start,
+        outlier_high_density_ring_end=outlier_high_density_ring_end,
+        outlier_neighbors=outlier_neighbors,
+        max_outlier_points=max_outlier_points,
+        outlier_interpolation_radius=outlier_interpolation_radius,
+        outlier_num_interpolations=outlier_num_interpolations,
+        outlier_duplicate_threshold=outlier_duplicate_threshold,
+        outlier_bidirectional=outlier_bidirectional,
+        outlier_depth_map_window=outlier_depth_map_window,
     )
     
     print(f"\n{'=' * 60}")

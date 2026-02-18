@@ -466,11 +466,12 @@ def generate_prompt_points_ab(x, y, block_type):
     return points_real, labels
 
 
-def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
-                           segment_width, K_height, AB_height, image, y_bounds):
+def generate_prompt_points(prompt_centre, map_y, block, crop_shape, resolution,
+                           segment_width, K_height, AB_height, y_bounds):
     """Generate prompt points for SAM.
     
-    Same interface as simple staggered but works for complex 7-segment rings.
+    Matches p4tun logic: filters negative points near image edges by y_bounds,
+    then clips all points to the crop window.
     """
     prompt_centre_x, prompt_centre_y = prompt_centre
     x = prompt_centre_x * (resolution * 1000)
@@ -482,7 +483,6 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
     else:
         points_real, labels = generate_prompt_points_ab(x, y, block)
 
-    # Filter points based on y_bounds
     keep_mask = np.ones(len(labels), dtype=bool)
     for i in range(len(labels)):
         if labels[i] == 0:
@@ -499,12 +499,13 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution,
     
     points = points_real / (resolution * 1000)
 
-    # Filter points outside image bounds
-    if image is not None:
-        padding = 150
-        within_bounds = (points[:, 0] >= 0) & ((points[:, 0] + initial_x - (segment_width*0.5+padding)/(resolution*1000)) <= image.shape[1])
-        points = points[within_bounds]
-        labels = labels[within_bounds]
+    crop_height_px, crop_width_px = crop_shape
+    within_bounds = (
+        (points[:, 0] >= 0) & (points[:, 0] < crop_width_px) &
+        (points[:, 1] >= 0) & (points[:, 1] < crop_height_px)
+    )
+    points = points[within_bounds]
+    labels = labels[within_bounds]
         
     return points, labels
 
@@ -576,7 +577,7 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
         prompt_centre_x = cx - x1
 
     if cropped_image.shape[0] == 0 or cropped_image.shape[1] == 0:
-        return None, None, None, None
+        return None, None, None, None, None
 
     prompt_centre_y = cy - y1
     prompt_centre = (prompt_centre_x, prompt_centre_y)
@@ -594,7 +595,7 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
         "mappings": crop_mappings,
     }
 
-    return cropped_image, template_mask_logits, prompt_centre, crop_info
+    return cropped_image, template_mask_logits, prompt_centre, crop_info, cropped_template_mask
 
 
 def compute_block_label(segment_per_ring):
@@ -635,30 +636,31 @@ def process_segment(segment_row, image, predictor, config):
     angle = config['angle']
     padding = config['padding']
     crop_margin = config['crop_margin']
+    crop_expansion = config.get('crop_expansion', 0)
     y_bounds = config['y_bounds']
     template_params = config['template_params']
 
-    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding, resolution)
+    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding + crop_expansion, resolution)
     if block == 'K':
         delta_y = convert_to_pixel_coords(
-            0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
+            0.5 * K_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin + crop_expansion, resolution)
     else:
         delta_y = convert_to_pixel_coords(
-            0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin, resolution)
+            0.5 * AB_height + math.tan(math.radians(angle)) * 700 + 100 + crop_margin + crop_expansion, resolution)
 
     crop_result = crop_image_and_mask_logits(
         image, initial_x, initial_y, 2 * delta_x, 2 * delta_y,
         block, resolution, template_params)
     if crop_result[0] is None:
         return None
-    cropped_image, template_mask_logit, prompt_centre, crop_info = crop_result
+    cropped_image, template_mask_logit, prompt_centre, crop_info, template_mask_binary = crop_result
 
     if cropped_image.size == 0:
         return None
 
     points, labels = generate_prompt_points(
-        prompt_centre, initial_x, initial_y, block, resolution,
-        segment_width, K_height, AB_height, image, y_bounds)
+        prompt_centre, initial_y, block, cropped_image.shape[:2], resolution,
+        segment_width, K_height, AB_height, y_bounds)
 
     if len(points) == 0:
         return None
@@ -678,6 +680,7 @@ def process_segment(segment_row, image, predictor, config):
         'logit': logit[0],
         'crop_info': crop_info,
         'quality': quality,
+        'template_mask': template_mask_binary,
     }
 
 
@@ -785,6 +788,10 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     min_quality_threshold = get_param(params, 'min_quality_threshold', default=DEFAULT_MIN_QUALITY_THRESHOLD, allow_default=True)
     use_quality_weighting = get_param(params, 'use_quality_weighting', default=DEFAULT_USE_QUALITY_WEIGHTING, allow_default=True)
     
+    # Hybrid mask parameters
+    crop_expansion = get_param(params, 'crop_expansion', default=0, allow_default=True)
+    use_template_fallback = get_param(params, 'use_template_fallback', default=False, allow_default=True)
+    
     # Print parameters
     print(f"\nInherited from preprocessing:")
     print(f"  resolution:       {resolution}")
@@ -801,6 +808,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  ab_mask_height:   {ab_mask_height}")
     print(f"  padding:          {padding}")
     print(f"  crop_margin:      {crop_margin}")
+    print(f"  crop_expansion:   {crop_expansion}mm")
+    print(f"  use_template_fallback: {use_template_fallback}")
     print(f"  min_quality_threshold: {min_quality_threshold}")
     
     # Load input data
@@ -846,8 +855,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     # Load image
     image = cv2.imread(os.path.join(tunnel_dir, 'depth_map.png'))
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    y_bounds = [int(image.shape[0] * 0.3 * resolution * 1000),
-                int(image.shape[0] * 0.95 * resolution * 1000)]
+    y_bounds = [4200, 13100]
     
     # Load SAM model
     print("\n[Step 2] Loading SAM model...")
@@ -877,6 +885,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'angle': angle_deg,
         'padding': padding,
         'crop_margin': crop_margin,
+        'crop_expansion': crop_expansion,
         'y_bounds': y_bounds,
         'template_params': template_params,
     }
@@ -907,6 +916,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         ring_id = item['ring_id']
         crop_info = item['crop_info']
         quality = item.get('quality', 1.0)
+        template_mask = item.get('template_mask')
         
         new_logits = restore_sam_logits(logits, mask.shape)
         
@@ -932,7 +942,16 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
             if mask_slice.shape != current_logits.shape or logits_slice.shape != current_logits.shape:
                 continue
             
-            update_mask = (logits_slice > current_logits) & mask_slice
+            if use_template_fallback and template_mask is not None:
+                tmpl_slice = template_mask[:, crop_x_start:crop_x_end]
+                if tmpl_slice.shape == mask_slice.shape:
+                    combined_mask = mask_slice | (tmpl_slice > 0)
+                else:
+                    combined_mask = mask_slice
+            else:
+                combined_mask = mask_slice
+            
+            update_mask = (logits_slice > current_logits) & combined_mask
             
             logits_map[valid_slice_y, valid_slice_x][update_mask] = logits_slice[update_mask]
             label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
