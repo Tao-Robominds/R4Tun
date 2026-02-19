@@ -1,0 +1,19 @@
+{
+  "K_half_height": 153,
+  "B1_half_height": 418,
+  "B2_half_height": 377,
+  "A1_half_height": 351,
+  "A2_half_height": 371,
+  "A3_half_height": 380,
+  "A4_half_height": 377,
+  "K_centre_offset": -3,
+  "B1_centre_offset": -31,
+  "B2_centre_offset": 14,
+  "A1_centre_offset": 1,
+  "A2_centre_offset": -26,
+  "A3_centre_offset": -22,
+  "A4_centre_offset": -17,
+  "segment_half_width": 197,
+  "shrink_x": 4,
+  "shrink_y": 2
+}
