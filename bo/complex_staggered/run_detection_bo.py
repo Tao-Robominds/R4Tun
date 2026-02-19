@@ -308,6 +308,11 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
     if 'ring_spacing_px' in param_dict:
         result['ring_spacing_px'] = float(param_dict['ring_spacing_px'])
 
+    # Per-ring per-block Y offsets (expansion_method=offsets)
+    for key, val in param_dict.items():
+        if '_offset_r' in key:
+            result[key] = float(val)
+
     # Pass through any fixed_params not in result (e.g. reverse_ring_order)
     for key, val in fixed_params.items():
         if key not in result:
@@ -582,6 +587,81 @@ def compute_k_centroid_score(
     }
 
 
+# Offset block names (must match detection.OFFSET_BLOCKS)
+SEGMENTS_RING_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+
+
+def _wrap_aware_y_distance(y1: float, y2: float, img_height: int) -> float:
+    """Y-only wrap-aware distance (for spacing penalty)."""
+    dy = abs(y1 - y2)
+    return min(dy, img_height - dy)
+
+
+def compute_segments_ring_score(
+    all_segments: pd.DataFrame,
+    gt_segments: pd.DataFrame,
+    img_height: int,
+    ring_index: int,
+    min_spacing_px: float = 147.0,
+    spacing_penalty_weight: float = 2.0,
+) -> Dict:
+    """
+    Ring-specific objective: mean wrap-aware distance for the 6 non-K blocks
+    in the ring vs GT, plus soft spacing penalty for block overlap.
+
+    Penalty: for all 21 pairs among 7 blocks in the ring, if wrap-aware Y distance
+    < min_spacing_px, add weight * (min_spacing_px - distance) to the score.
+    """
+    pred_ring = all_segments[all_segments['Ring'] == ring_index].copy()
+    gt_ring = gt_segments[gt_segments['Ring'] == ring_index].copy()
+    if len(pred_ring) == 0 or len(gt_ring) == 0:
+        return {
+            'mean_distance': 9999.0,
+            'spacing_penalty': 0.0,
+            'total_score': 9999.0,
+            'num_matched': 0,
+        }
+
+    # Mean distance for 6 non-K blocks (match by block name)
+    dists = []
+    for block in SEGMENTS_RING_BLOCKS:
+        p = pred_ring[pred_ring['Block'] == block]
+        g = gt_ring[gt_ring['Block'] == block]
+        if len(p) and len(g):
+            d = _wrap_aware_distance(
+                float(p.iloc[0]['X']), float(p.iloc[0]['Y']),
+                float(g.iloc[0]['X']), float(g.iloc[0]['Y']),
+                img_height,
+            )
+            dists.append(d)
+    mean_distance = float(np.mean(dists)) if dists else 9999.0
+
+    # Spacing penalty: 7 block Y positions (K + 6 others)
+    ys = []
+    for block in ['K'] + SEGMENTS_RING_BLOCKS:
+        row = pred_ring[pred_ring['Block'] == block]
+        if len(row):
+            ys.append(float(row.iloc[0]['Y']))
+    if len(ys) < 7:
+        spacing_penalty = 1000.0  # missing blocks -> large penalty
+    else:
+        violation_sum = 0.0
+        for i in range(7):
+            for j in range(i + 1, 7):
+                d = _wrap_aware_y_distance(ys[i], ys[j], img_height)
+                if d < min_spacing_px:
+                    violation_sum += (min_spacing_px - d)
+        spacing_penalty = spacing_penalty_weight * violation_sum
+
+    total_score = mean_distance + spacing_penalty
+    return {
+        'mean_distance': mean_distance,
+        'spacing_penalty': spacing_penalty,
+        'total_score': total_score,
+        'num_matched': len(dists),
+    }
+
+
 # =============================================================================
 # Objective Function
 # =============================================================================
@@ -601,12 +681,18 @@ class DetectionObjective:
         eval_offset: int = 0,
         agent_type: str = DEFAULT_AGENT_TYPE,
         objective_type: str = 'composite',
+        ring_index: Optional[int] = None,
+        min_spacing_px: float = 147.0,
+        spacing_penalty_weight: float = 2.0,
     ):
         self.tunnel_id = tunnel_id
         self.data_dir = data_dir
         self.verbose = verbose
         self.agent_type = agent_type
-        self.objective_type = objective_type  # 'composite' or 'k_only'
+        self.objective_type = objective_type  # 'composite', 'k_only', or 'segments_ring'
+        self.ring_index = ring_index
+        self.min_spacing_px = min_spacing_px
+        self.spacing_penalty_weight = spacing_penalty_weight
 
         self.tunnel_dir = os.path.join(data_dir, tunnel_id)
         self.params_dir = os.path.join(
@@ -648,7 +734,7 @@ class DetectionObjective:
         # Tracking
         self.eval_offset = eval_offset
         self.eval_count = 0
-        self.best_score = np.inf if objective_type == 'k_only' else -np.inf  # k_only: minimize distance
+        self.best_score = np.inf if objective_type in ('k_only', 'segments_ring') else -np.inf  # minimize distance for k_only and segments_ring
         self.best_params = None
         self.history = []
         self.logs_dir = os.path.join(
@@ -670,7 +756,14 @@ class DetectionObjective:
                 print(f"Fixed parameters: {list(self.fixed_params.keys())}")
             print(f"Eval numbering starts at: {self.eval_offset + 1}")
             print(f"Logs directory: {self.logs_dir}")
-            print(f"Objective: {objective_type} (={'mean K distance (minimize)' if objective_type == 'k_only' else 'composite = K_F1*0.3 + position_accuracy*0.7'})")
+            obj_desc = objective_type
+            if objective_type == 'k_only':
+                obj_desc = 'mean K distance (minimize)'
+            elif objective_type == 'segments_ring':
+                obj_desc = f'ring {ring_index} segment Y distance + spacing penalty (minimize)'
+            else:
+                obj_desc = 'composite = K_F1*0.3 + position_accuracy*0.7'
+            print(f"Objective: {objective_type} (={obj_desc})")
     
     @property
     def global_eval_index(self) -> int:
@@ -742,6 +835,39 @@ class DetectionObjective:
                 if self.verbose and self.eval_count % 10 == 0:
                     print(f"  [Eval {self.global_eval_index}] mean_K_dist={score:.1f}px")
                 return score  # minimize mean K distance
+            elif self.objective_type == 'segments_ring':
+                ring_results = compute_segments_ring_score(
+                    all_segments,
+                    self.gt_segments,
+                    self.img_height,
+                    self.ring_index,
+                    min_spacing_px=self.min_spacing_px,
+                    spacing_penalty_weight=self.spacing_penalty_weight,
+                )
+                score = ring_results['total_score']  # minimize
+                results = {
+                    'mean_distance': ring_results['mean_distance'],
+                    'spacing_penalty': ring_results['spacing_penalty'],
+                    'total_score': score,
+                    'num_matched': ring_results['num_matched'],
+                }
+                if score < self.best_score:
+                    self.best_score = score
+                    self.best_params = param_dict.copy()
+                    if self.verbose:
+                        print(f"  [Eval {self.global_eval_index}] New best: total={score:.1f}px "
+                              f"(mean_dist={ring_results['mean_distance']:.1f}, penalty={ring_results['spacing_penalty']:.1f})")
+                self._log_trial(param_dict, results, len(all_segments), runtime, objective_type='segments_ring')
+                self.history.append({
+                    'eval': self.global_eval_index,
+                    'params': param_dict,
+                    'total_score': score,
+                    'mean_distance': ring_results['mean_distance'],
+                    'spacing_penalty': ring_results['spacing_penalty'],
+                })
+                if self.verbose and self.eval_count % 10 == 0:
+                    print(f"  [Eval {self.global_eval_index}] total={score:.1f}px, mean_dist={ring_results['mean_distance']:.1f}px")
+                return score  # minimize
             else:
                 results = compute_all_segments_score(
                     all_segments, self.gt_segments, self.img_height
@@ -781,7 +907,7 @@ class DetectionObjective:
                 None, 0, runtime, error=str(e),
                 objective_type=self.objective_type,
             )
-            return 9999.0 if self.objective_type == 'k_only' else 0.0
+            return 9999.0 if self.objective_type in ('k_only', 'segments_ring') else 0.0
     
     def _log_trial(
         self,
@@ -810,9 +936,10 @@ class DetectionObjective:
 
         if error:
             log_data['trace'] = {'warnings': [f"Error: {error}"]}
+            obj_val = 0.0 if objective_type == 'composite' else 9999.0
             log_data['bo'] = {
                 'objective_name': objective_type,
-                'objective_value': 0.0 if objective_type == 'composite' else 9999.0,
+                'objective_value': obj_val,
                 'eval_index': global_idx,
                 'runtime_sec': runtime,
                 'is_feasible': False,
@@ -831,6 +958,22 @@ class DetectionObjective:
             log_data['bo'] = {
                 'objective_name': 'k_centroid_mean_distance',
                 'objective_value': float(results['mean_k_distance']),
+                'eval_index': global_idx,
+                'runtime_sec': float(runtime),
+                'is_feasible': True,
+            }
+        elif objective_type == 'segments_ring' and results:
+            log_data['outputs'] = {
+                'num_matched': results['num_matched'],
+                'ring_metrics': {
+                    'mean_distance_px': results['mean_distance'],
+                    'spacing_penalty_px': results['spacing_penalty'],
+                    'total_score_px': results['total_score'],
+                },
+            }
+            log_data['bo'] = {
+                'objective_name': 'segments_ring_total_score',
+                'objective_value': float(results['total_score']),
                 'eval_index': global_idx,
                 'runtime_sec': float(runtime),
                 'is_feasible': True,
@@ -1032,8 +1175,12 @@ def run_detection_bo(
     verbose: bool = True,
     agent_type: str = DEFAULT_AGENT_TYPE,
     objective_type: str = 'composite',
+    ring_index: Optional[int] = None,
 ) -> Dict:
     """Run Bayesian Optimization for detection parameters."""
+    if objective_type == 'segments_ring' and ring_index is None:
+        raise ValueError("--objective segments_ring requires --ring-index N (0-6)")
+
     print(f"\n{'='*70}")
     print(f"DETECTION BAYESIAN OPTIMIZATION - Tunnel {tunnel_id} ({agent_type})")
     print(f"{'='*70}")
@@ -1047,6 +1194,17 @@ def run_detection_bo(
     # Determine eval offset from existing logs
     eval_offset = find_max_trial_index(logs_dir, tunnel_id)
 
+    # Load config for spacing penalty if segments_ring
+    min_spacing_px = 147.0
+    spacing_penalty_weight = 2.0
+    if tunnel_id and objective_type == 'segments_ring':
+        config_file = PROJECT_ROOT / 'bo' / agent_type / 'configs' / f'detect_{tunnel_id}.json'
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            min_spacing_px = float(config.get('min_spacing_px', min_spacing_px))
+            spacing_penalty_weight = float(config.get('spacing_penalty_weight', spacing_penalty_weight))
+
     # Initialize objective
     objective = DetectionObjective(
         tunnel_id=tunnel_id,
@@ -1055,6 +1213,9 @@ def run_detection_bo(
         eval_offset=eval_offset,
         agent_type=agent_type,
         objective_type=objective_type,
+        ring_index=ring_index,
+        min_spacing_px=min_spacing_px,
+        spacing_penalty_weight=spacing_penalty_weight,
     )
 
     # K-only: restrict search space to ring_offset and ring_spacing_px; fix the rest from current params
@@ -1079,15 +1240,70 @@ def run_detection_bo(
         objective.fixed_params.pop('ring_offset', None)
         objective.fixed_params.pop('ring_spacing_px', None)
 
+    # Segments-ring: 6D search space (per-block Y offsets for one ring); fix all other params from current file
+    if objective_type == 'segments_ring':
+        params_file = os.path.join(
+            PROJECT_ROOT,
+            'agents', agent_type, '2_detection',
+            'parameters', tunnel_id, 'parameters_detection.json'
+        )
+        if not os.path.exists(params_file):
+            raise FileNotFoundError(
+                f"parameters_detection.json not found: {params_file}. "
+                "Run with geometric K and expansion_method=offsets first (e.g. from config)."
+            )
+        with open(params_file, 'r') as f:
+            current_params = json.load(f)
+        objective.fixed_params = {**current_params, **objective.fixed_params}
+        objective.fixed_params['k_detection_method'] = 'geometric'
+        objective.fixed_params['expansion_method'] = 'offsets'
+        # Remove the 6 offset keys for this ring so BO tunes them
+        for block in SEGMENTS_RING_BLOCKS:
+            key = f"{block.lower()}_offset_r{ring_index}"
+            objective.fixed_params.pop(key, None)
+        objective.param_names = [f"{b.lower()}_offset_r{ring_index}" for b in SEGMENTS_RING_BLOCKS]
+        objective.dimensions = [
+            Real(-2400.0, 2400.0, name=name) for name in objective.param_names
+        ]
+
     print(f"\nSearch space: {len(objective.param_names)} parameters")
     print(f"N calls: {n_calls}, N initial: {n_initial_points}")
-    print(f"Objective: {objective_type} (={'mean K distance' if objective_type == 'k_only' else 'all-segments composite'})")
+    obj_label = 'mean K distance' if objective_type == 'k_only' else (
+        f'ring {ring_index} segment Y + spacing penalty' if objective_type == 'segments_ring' else 'all-segments composite'
+    )
+    print(f"Objective: {objective_type} (={obj_label})")
     print(f"Algorithm: forest_minimize (Random Forest surrogate)")
     
     # Warm-start from best previous trial or current parameters file
     x0 = None
     y0 = None
-    if objective_type == 'k_only':
+    if objective_type == 'segments_ring':
+        warm_start = None  # use x0/y0 from GT below if available
+        # Warm-start from GT offsets for this ring
+        gt_ring = objective.gt_segments[objective.gt_segments['Ring'] == ring_index]
+        gt_k_row = gt_ring[gt_ring['Block'] == 'K']
+        if len(gt_k_row):
+            k_y = float(gt_k_row.iloc[0]['Y'])
+            x0_vals = []
+            for block in SEGMENTS_RING_BLOCKS:
+                br = gt_ring[gt_ring['Block'] == block]
+                if len(br):
+                    by = float(br.iloc[0]['Y'])
+                    offset = (by - k_y) % objective.img_height
+                    if offset > objective.img_height / 2:
+                        offset -= objective.img_height
+                    offset = max(-2400, min(2400, offset))
+                    x0_vals.append(offset)
+                else:
+                    x0_vals.append(0.0)
+            if len(x0_vals) == 6:
+                x0 = [x0_vals]
+                # Initial score unknown; use a moderate value so BO can improve
+                y0 = [500.0]
+                print(f"\nWarm-starting from GT offsets for ring {ring_index}:")
+                for name, val in zip(objective.param_names, x0_vals):
+                    print(f"  {name}: {val:.1f}")
+    elif objective_type == 'k_only':
         # Use current params file for ring_offset and ring_spacing_px only
         params_file = os.path.join(
             PROJECT_ROOT, 'agents', agent_type, '2_detection',
@@ -1107,6 +1323,7 @@ def run_detection_bo(
             print(f"  ring_offset: {x0_vals[0]:.1f}, ring_spacing_px: {x0_vals[1]:.1f}")
         warm_start = None
     else:
+        # composite
         warm_start = load_best_from_logs(
             logs_dir, tunnel_id, agent_type, objective.fixed_params, objective_type=objective_type
         )
@@ -1145,12 +1362,16 @@ def run_detection_bo(
     
     # Results
     best_params = params_to_detection_json(result.x, objective.param_names, objective.fixed_params)
-    best_score = result.fun if objective_type == 'k_only' else -result.fun  # k_only: minimize distance
+    minimize_obj = objective_type in ('k_only', 'segments_ring')
+    best_score = result.fun if minimize_obj else -result.fun  # k_only and segments_ring: minimize
 
     print(f"\n{'='*70}")
     print(f"OPTIMIZATION COMPLETE")
     print(f"{'='*70}")
-    print(f"Best {'mean K distance (px)' if objective_type == 'k_only' else 'composite score'}: {best_score:.4f}")
+    score_label = 'mean K distance (px)' if objective_type == 'k_only' else (
+        f'ring {ring_index} total score (px)' if objective_type == 'segments_ring' else 'composite score'
+    )
+    print(f"Best {score_label}: {best_score:.4f}")
     print(f"\nBest parameters:")
     for name, value in best_params.items():
         if isinstance(value, list):
@@ -1185,8 +1406,10 @@ if __name__ == "__main__":
                        choices=['complex_staggered', 'continuous', 'complex_staggered'],
                        help='Agent type (default: complex_staggered)')
     parser.add_argument('--objective', type=str, default='composite',
-                       choices=['composite', 'k_only'],
-                       help='Objective: composite (all segments) or k_only (mean K centroid distance)')
+                       choices=['composite', 'k_only', 'segments_ring'],
+                       help='Objective: composite, k_only (mean K distance), or segments_ring (per-ring Y offsets)')
+    parser.add_argument('--ring-index', type=int, default=None, metavar='N',
+                       help='Ring index 0-6 for --objective segments_ring (required when using segments_ring)')
     args = parser.parse_args()
 
     run_detection_bo(
@@ -1197,4 +1420,5 @@ if __name__ == "__main__":
         verbose=args.verbose,
         agent_type=args.agent_type,
         objective_type=args.objective,
+        ring_index=args.ring_index,
     )

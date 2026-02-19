@@ -1,7 +1,10 @@
 {
   "fixed_params": {
     "reverse_ring_order": true,
-    "k_detection_method": "dbscan",
+    "k_detection_method": "geometric",
+    "expansion_method": "offsets",
+    "ring_offset": 157.2320545465917,
+    "ring_spacing_px": 363.4734829630978,
     "binary_threshold": 178,
     "dilation_kernel_size": 4,
     "dilation_iterations": 3,
@@ -47,5 +50,7 @@
     "ab_step_r4": [400, 4500],
     "ab_step_r5": [400, 4500],
     "ab_step_r6": [400, 4500]
-  }
+  },
+  "min_spacing_px": 147,
+  "spacing_penalty_weight": 2.0
 }

@@ -1229,6 +1229,62 @@ def expand_k_with_template(
     return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
 
+# Non-K block names for offset expansion (order for consistent row output)
+OFFSET_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+
+
+def expand_k_with_offsets(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    offsets_dict: Dict[str, float],
+) -> pd.DataFrame:
+    """Derive all segment positions from K using direct per-ring per-block Y offsets.
+
+    X for every segment in a ring = K's X. Y = (K_Y + offset) % img_height.
+    offsets_dict keys: "{block}_offset_r{ring}" e.g. b1_offset_r0, a2_offset_r3.
+    Missing keys default to 0 (block at K Y).
+
+    Args:
+        k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
+        img_height: Depth map height in pixels (for Y wrap-around).
+        offsets_dict: Maps e.g. "b1_offset_r0" -> signed pixel offset from K.
+
+    Returns:
+        DataFrame with columns Ring, Block, X, Y, quality.
+    """
+    rows = []
+    for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
+        k_x = float(k_row['X'])
+        k_y = float(k_row['Y'])
+        quality = float(k_row.get('Confidence', 1.0))
+
+        # K segment
+        rows.append({
+            'Ring': ring_idx,
+            'Block': 'K',
+            'X': k_x,
+            'Y': k_y % img_height,
+            'quality': quality,
+        })
+
+        # Non-K blocks: Y = (K_Y + offset) % img_height
+        for block in OFFSET_BLOCKS:
+            key = f"{block.lower()}_offset_r{ring_idx}"
+            offset = offsets_dict.get(key, 0.0)
+            y = (k_y + offset) % img_height
+            if y < 0:
+                y += img_height
+            rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': k_x,
+                'Y': y,
+                'quality': quality,
+            })
+
+    return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
+
+
 # =============================================================================
 # Visualization
 # =============================================================================
@@ -1495,7 +1551,20 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     param_ab_step_px = params.get('ab_step_px', None)
     n_rings_detected = len(k_positions)
 
-    if expansion_method == 'template':
+    if expansion_method == 'offsets':
+        # Direct per-ring per-block Y offsets from K (keys: b1_offset_r0, ..., a4_offset_r6)
+        offsets_dict = {}
+        for ring_idx in range(n_rings_detected):
+            for block in OFFSET_BLOCKS:
+                key = f"{block.lower()}_offset_r{ring_idx}"
+                if key in params:
+                    offsets_dict[key] = float(params[key])
+        all_segments = expand_k_with_offsets(
+            k_positions,
+            img_height=L,
+            offsets_dict=offsets_dict,
+        )
+    elif expansion_method == 'template':
         # 7 steps: K->B1, B1->A1, A1->A2, A2->A3, A3->A4, A4->B2, B2->K; sum = img_height
         k_px = (get_param(params, 'k_height', k_height_mm) / 1000.0) / resolution
         ab_px = (get_param(params, 'ab_height', ab_height_mm) / 1000.0) / resolution
