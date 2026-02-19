@@ -710,20 +710,289 @@ def run_sam_bo(
     }
 
 
+# =============================================================================
+# Geometric BO — groove-guided boundary correction
+# =============================================================================
+
+geo_spec = importlib.util.spec_from_file_location(
+    "geometric",
+    os.path.join(sam_dir, "3_geometric.py"),
+)
+geo_module = importlib.util.module_from_spec(geo_spec)
+geo_spec.loader.exec_module(geo_module)
+
+run_geometric = geo_module.run_geometric
+
+
+def get_geometric_dimensions(
+    tunnel_id: str = None,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+) -> Tuple[List, List[str], Dict]:
+    """
+    Define search space for the 20 geometric parameters.
+
+    Returns (dimensions, param_names, fixed_params) exactly like
+    get_sam_dimensions so the same BO machinery can be reused.
+    """
+    default_bounds = {
+        'K_half_height': (100.0, 250.0),
+        'B1_half_height': (300.0, 550.0),
+        'B2_half_height': (250.0, 500.0),
+        'A1_half_height': (250.0, 500.0),
+        'A2_half_height': (250.0, 500.0),
+        'A3_half_height': (250.0, 500.0),
+        'A4_half_height': (250.0, 500.0),
+        'K_centre_offset': (-80.0, 80.0),
+        'B1_centre_offset': (-80.0, 80.0),
+        'B2_centre_offset': (-80.0, 80.0),
+        'A1_centre_offset': (-80.0, 80.0),
+        'A2_centre_offset': (-80.0, 80.0),
+        'A3_centre_offset': (-80.0, 80.0),
+        'A4_centre_offset': (-80.0, 80.0),
+        'segment_half_width': (150.0, 250.0),
+        'shrink_x': (0.0, 20.0),
+        'shrink_y': (0.0, 20.0),
+        'snap_radius': (0, 200),
+        'groove_threshold': (10.0, 100.0),
+        'snap_weight': (0.0, 1.0),
+    }
+
+    fixed_params = {}
+    narrowed_bounds = {}
+
+    if tunnel_id:
+        config_file = PROJECT_ROOT / 'bo' / agent_type / 'configs' / f'geometric_{tunnel_id}.json'
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            fixed_params = config.get('fixed_params', {})
+            for key, value in config.get('narrowed_bounds', {}).items():
+                narrowed_bounds[key] = tuple(value) if isinstance(value, list) else value
+
+    bounds = default_bounds.copy()
+    bounds.update(narrowed_bounds)
+
+    dimensions = []
+    param_names = []
+
+    int_params = {'snap_radius'}
+    for name, (lo, hi) in bounds.items():
+        if name in fixed_params:
+            continue
+        ptype = Integer if name in int_params else Real
+        dimensions.append(ptype(lo, hi, name=name))
+        param_names.append(name)
+
+    return dimensions, param_names, fixed_params
+
+
+class GeometricObjective:
+    """Objective function for geometric BO: maximise intrinsic groove score."""
+
+    def __init__(
+        self,
+        tunnel_id: str,
+        data_dir: str = 'data',
+        segments_file: str = None,
+        verbose: bool = True,
+        agent_type: str = DEFAULT_AGENT_TYPE,
+    ):
+        self.tunnel_id = tunnel_id
+        self.data_dir = data_dir
+        self.segments_file = segments_file
+        self.verbose = verbose
+        self.agent_type = agent_type
+
+        self.tunnel_dir = os.path.join(data_dir, tunnel_id)
+        self.params_dir = os.path.join(
+            PROJECT_ROOT, 'agents', agent_type,
+            '3_segmentation', 'parameters', tunnel_id,
+        )
+        os.makedirs(self.params_dir, exist_ok=True)
+
+        self.logs_dir = os.path.join(PROJECT_ROOT, 'bo', agent_type, 'logs_geometric')
+        os.makedirs(self.logs_dir, exist_ok=True)
+
+        self.dimensions, self.param_names, self.fixed_params = get_geometric_dimensions(
+            tunnel_id, agent_type,
+        )
+
+        self.segment_count = 7
+        self.best_score = -1.0
+        self.best_params = None
+        self.eval_count = 0
+
+        if verbose:
+            print(f"Geometric BO for tunnel {tunnel_id}")
+            print(f"  Parameters: {len(self.param_names)} tunable, {len(self.fixed_params)} fixed")
+            print(f"  Segments file: {segments_file or 'all_segments.csv (default)'}")
+
+    def __call__(self, params: List) -> float:
+        self.eval_count += 1
+        start_time = time.time()
+
+        try:
+            param_dict = dict(self.fixed_params)
+            for name, val in zip(self.param_names, params):
+                param_dict[name] = int(val) if name == 'snap_radius' else float(val)
+
+            result = run_geometric(
+                self.tunnel_id,
+                base_dir=self.data_dir,
+                segments_file=self.segments_file,
+                override_params=param_dict,
+            )
+
+            groove_score = result['groove_score']
+            runtime = time.time() - start_time
+
+            miou_str = ''
+            df = result['df']
+            if 'segment' in df.columns:
+                gt = np.nan_to_num(df['segment'].values, nan=-1).astype(int)
+                pr = np.nan_to_num(df['pred'].values, nan=-1).astype(int)
+                mask = (gt >= 1) & (gt <= 7) & (pr >= 0) & (pr <= 7)
+                if mask.sum() > 0:
+                    from sklearn.metrics import jaccard_score as _js
+                    miou = _js(gt[mask], pr[mask], average='macro',
+                               labels=np.arange(1, 8), zero_division=0)
+                    miou_str = f', mIoU={miou:.4f}'
+
+            if groove_score > self.best_score:
+                self.best_score = groove_score
+                self.best_params = param_dict.copy()
+
+            if self.verbose and (self.eval_count <= 5 or self.eval_count % 5 == 0):
+                print(f"  [Eval {self.eval_count}] groove={groove_score:.2f}{miou_str}"
+                      f"  ({runtime:.1f}s)")
+
+            trial_id = f"geo_{self.tunnel_id}_{self.eval_count:03d}"
+            log_file = os.path.join(self.logs_dir, f"{trial_id}.json")
+            with open(log_file, 'w') as f:
+                json.dump({
+                    'trial_id': trial_id,
+                    'params': param_dict,
+                    'groove_score': groove_score,
+                    'runtime_sec': runtime,
+                }, f, indent=2)
+
+            return -groove_score
+
+        except Exception as e:
+            if self.verbose:
+                print(f"  [Eval {self.eval_count}] Error: {e}")
+            return 0.0
+
+    def save_best_params(self) -> Optional[str]:
+        if self.best_params is None:
+            return None
+        params_file = os.path.join(self.params_dir, 'parameters_geometric.json')
+        with open(params_file, 'w') as f:
+            json.dump(self.best_params, f, indent=4)
+        return params_file
+
+
+def run_geometric_bo(
+    tunnel_id: str,
+    data_dir: str = 'data',
+    segments_file: str = None,
+    n_calls: int = 60,
+    n_initial_points: int = 15,
+    verbose: bool = True,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+) -> Dict:
+    """
+    Run Bayesian Optimization for geometric segmentation parameters.
+
+    Optimises the intrinsic boundary-groove alignment score (no GT needed).
+    When GT is available, also reports mIoU for validation.
+    """
+    print(f"\n{'='*70}")
+    print(f"GEOMETRIC BAYESIAN OPTIMIZATION — Tunnel {tunnel_id} ({agent_type})")
+    print(f"{'='*70}")
+
+    objective = GeometricObjective(
+        tunnel_id=tunnel_id,
+        data_dir=data_dir,
+        segments_file=segments_file,
+        verbose=verbose,
+        agent_type=agent_type,
+    )
+
+    print(f"\nSearch space: {len(objective.param_names)} parameters")
+    print(f"N calls: {n_calls}, N initial: {n_initial_points}")
+    print(f"Objective: intrinsic groove alignment score")
+    print(f"Algorithm: forest_minimize (Random Forest surrogate)")
+    print(f"\nStarting optimization...")
+
+    result = forest_minimize(
+        objective,
+        objective.dimensions,
+        n_calls=n_calls,
+        n_initial_points=n_initial_points,
+        random_state=42,
+        verbose=False,
+    )
+
+    best_groove = -result.fun
+    best_params_dict = dict(objective.fixed_params)
+    for name, val in zip(objective.param_names, result.x):
+        best_params_dict[name] = int(val) if name == 'snap_radius' else float(val)
+
+    print(f"\n{'='*70}")
+    print(f"OPTIMIZATION COMPLETE")
+    print(f"{'='*70}")
+    print(f"Best groove alignment score: {best_groove:.4f}")
+    print(f"\nBest parameters:")
+    for name, value in sorted(best_params_dict.items()):
+        if isinstance(value, float):
+            print(f"  {name}: {value:.4f}")
+        else:
+            print(f"  {name}: {value}")
+
+    filepath = objective.save_best_params()
+    if filepath:
+        print(f"\nSaved parameters to: {filepath}")
+
+    return {
+        'tunnel_id': tunnel_id,
+        'best_groove_score': best_groove,
+        'best_params': best_params_dict,
+    }
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SAM Bayesian Optimization")
+    parser = argparse.ArgumentParser(description="SAM / Geometric Bayesian Optimization")
     parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4)")
     parser.add_argument("--data-dir", default="data", help="Base data directory")
     parser.add_argument("--n-calls", type=int, default=60, help="Number of BO iterations")
     parser.add_argument("--n-initial", type=int, default=10, help="Number of initial random points")
     parser.add_argument("--agent-type", default=DEFAULT_AGENT_TYPE, help="Agent type")
-    
-    args = parser.parse_args()
-    
-    run_sam_bo(
-        tunnel_id=args.tunnel_id,
-        data_dir=args.data_dir,
-        n_calls=args.n_calls,
-        n_initial_points=args.n_initial,
-        agent_type=args.agent_type,
+    parser.add_argument(
+        "--mode", choices=["sam", "geometric"], default="sam",
+        help="Optimisation mode: 'sam' (SAM mIoU) or 'geometric' (groove alignment)",
     )
+    parser.add_argument(
+        "--segments-file", default=None,
+        help="Segments CSV for geometric mode (default: all_segments.csv)",
+    )
+
+    args = parser.parse_args()
+
+    if args.mode == "geometric":
+        run_geometric_bo(
+            tunnel_id=args.tunnel_id,
+            data_dir=args.data_dir,
+            segments_file=args.segments_file,
+            n_calls=args.n_calls,
+            n_initial_points=args.n_initial,
+            agent_type=args.agent_type,
+        )
+    else:
+        run_sam_bo(
+            tunnel_id=args.tunnel_id,
+            data_dir=args.data_dir,
+            n_calls=args.n_calls,
+            n_initial_points=args.n_initial,
+            agent_type=args.agent_type,
+        )

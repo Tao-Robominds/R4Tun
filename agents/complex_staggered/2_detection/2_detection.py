@@ -808,6 +808,141 @@ def calculate_k_positions_banded(
     return df.sort_values(by='X').reset_index(drop=True)
 
 
+def _line_crossing_y_at_x(x1: float, y1: float, x2: float, y2: float, x: float) -> Optional[float]:
+    """Y coordinate where the line through (x1,y1)-(x2,y2) crosses vertical x. Extrapolates if needed."""
+    if x2 == x1:
+        return None
+    t = (x - x1) / (x2 - x1)
+    return y1 + t * (y2 - y1)
+
+
+def _cluster_1d_gap(values: np.ndarray, gap_px: float = 150.0) -> List[np.ndarray]:
+    """Cluster 1D values by gap; consecutive values within gap_px stay in same cluster."""
+    if len(values) == 0:
+        return []
+    s = np.sort(values)
+    clusters = []
+    current = [s[0]]
+    for i in range(1, len(s)):
+        if s[i] - current[-1] <= gap_px:
+            current.append(s[i])
+        else:
+            clusters.append(np.array(current))
+            current = [s[i]]
+    clusters.append(np.array(current))
+    return clusters
+
+
+def calculate_k_positions_geometric(
+    line_data: Dict,
+    ring_count: int,
+    k_height_mm: float,
+    resolution: float,
+    params: Dict,
+) -> pd.DataFrame:
+    """
+    K positions: X from tunable ring_offset + ring_spacing_px; Y from midpoint of
+    positive/negative oblique line crossings at that X. Fallback to banded when no local lines.
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+
+    ring_offset = params.get('ring_offset', W / (2 * ring_count))
+    ring_spacing_px = params.get('ring_spacing_px', W / ring_count)
+    half_width = ring_spacing_px * 0.5
+
+    half_K_height_px = (k_height_mm / 1000.0) / resolution / 2.0
+
+    positive_lines, negative_lines = detect_oblique_lines_wide_angle(
+        line_data['dilated_edges'], L, W, params
+    )
+
+    # Fallback: banded result for rings with no local lines
+    banded_df = calculate_k_positions_banded(line_data, ring_count, params)
+
+    k_positions = []
+    for i in range(ring_count):
+        band_center = ring_offset + i * ring_spacing_px
+        band_left = band_center - half_width
+        band_right = band_center + half_width
+
+        # Local lines: midpoint X within band
+        local_pos = [
+            (x1, y1, x2, y2)
+            for x1, y1, x2, y2 in positive_lines
+            if band_left <= (x1 + x2) / 2 <= band_right
+        ]
+        local_neg = [
+            (x1, y1, x2, y2)
+            for x1, y1, x2, y2 in negative_lines
+            if band_left <= (x1 + x2) / 2 <= band_right
+        ]
+
+        pos_crossings = []
+        for x1, y1, x2, y2 in local_pos:
+            y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+            if y_c is not None and 0 <= y_c <= L:
+                pos_crossings.append(y_c)
+        neg_crossings = []
+        for x1, y1, x2, y2 in local_neg:
+            y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+            if y_c is not None and 0 <= y_c <= L:
+                neg_crossings.append(y_c)
+
+        # Cluster to remove outliers
+        pos_clusters = _cluster_1d_gap(np.array(pos_crossings)) if pos_crossings else []
+        neg_clusters = _cluster_1d_gap(np.array(neg_crossings)) if neg_crossings else []
+
+        # Choose the pair (pos_cluster, neg_cluster) whose medians are closest in wrap-aware sense (K boundaries)
+        def wrap_dist(a, b, period=L):
+            d = abs(a - b)
+            return min(d, period - d)
+
+        pos_cluster = None
+        neg_cluster = None
+        if pos_clusters and neg_clusters:
+            best_pair = None
+            best_dist = float('inf')
+            for pc in pos_clusters:
+                pm = float(np.median(pc))
+                for nc in neg_clusters:
+                    nm = float(np.median(nc))
+                    d = wrap_dist(pm, nm)
+                    if d < best_dist:
+                        best_dist = d
+                        best_pair = (pc, nc)
+            if best_pair is not None:
+                pos_cluster, neg_cluster = best_pair
+        elif pos_clusters:
+            pos_cluster = max(pos_clusters, key=len)
+        elif neg_clusters:
+            neg_cluster = max(neg_clusters, key=len)
+
+        if pos_cluster is not None and neg_cluster is not None:
+            y_k = float(np.mean([np.median(pos_cluster), np.median(neg_cluster)]))
+            conf = 0.95
+            det_type = 'geometric_midpoint'
+        elif pos_cluster is not None:
+            y_k = float(np.median(pos_cluster)) - half_K_height_px
+            conf = 0.7
+            det_type = 'geometric_pos_only'
+        elif neg_cluster is not None:
+            y_k = float(np.median(neg_cluster)) + half_K_height_px
+            conf = 0.7
+            det_type = 'geometric_neg_only'
+        else:
+            # Fallback: use banded Y for this ring, keep geometric X
+            row = banded_df.iloc[i]
+            y_k = row['Y']
+            conf = float(row['Confidence']) * 0.5
+            det_type = 'geometric_fallback_banded'
+
+        k_positions.append((det_type, band_center, y_k, conf))
+
+    df = pd.DataFrame(k_positions, columns=['Type', 'X', 'Y', 'Confidence'])
+    return df.sort_values(by='X').reset_index(drop=True)
+
+
 # =============================================================================
 # Segment Expansion: K → All Segments
 # =============================================================================
@@ -1323,69 +1458,100 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     print(f"  Horizontal lines: {len(line_data['horizontal_lines'])}")
     print(f"  Vertical lines: {len(line_data['vertical_lines'])}")
     
-    print(f"\n[Step 2] Calculating K positions (DBSCAN)...")
-    k_positions = calculate_k_positions_complex_staggered(
-        line_data, ring_count, k_height_mm, ab_height_mm, resolution, complex_params
-    )
+    k_detection_method = params.get('k_detection_method', 'dbscan')
+    print(f"\n[Step 2] Calculating K positions ({k_detection_method})...")
+    if k_detection_method == 'banded':
+        k_positions = calculate_k_positions_banded(line_data, ring_count, params)
+    elif k_detection_method == 'geometric':
+        k_positions = calculate_k_positions_geometric(
+            line_data, ring_count, k_height_mm, resolution, params
+        )
+    else:
+        k_positions = calculate_k_positions_complex_staggered(
+            line_data, ring_count, k_height_mm, ab_height_mm, resolution, complex_params
+        )
     print(f"  Calculated {len(k_positions)} K positions")
     print(f"  Detection types: {k_positions['Type'].value_counts().to_dict()}")
     if 'Confidence' in k_positions.columns:
         print(f"  Average confidence: {k_positions['Confidence'].mean():.3f}")
         print(f"  Confidence range: [{k_positions['Confidence'].min():.3f}, {k_positions['Confidence'].max():.3f}]")
     
+    # Optional: reverse ring order so ring 0 = right (high X), ring N-1 = left (low X), matching GT convention
+    reverse_ring_order = params.get('reverse_ring_order', False)
+    if reverse_ring_order:
+        k_positions = k_positions.iloc[::-1].reset_index(drop=True)
+        print(f"  Reversed ring order (ring 0 = right / high X)")
+    
     # Save K-only results (backward compatible)
     k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
     print(f"\n  Saved: {os.path.join(tunnel_dir, 'detected.csv')}")
     
-    # Step 3: Expand K positions to all segments (fixed expansion)
-    print(f"\n[Step 3] Expanding K positions to all segments...")
+    # Step 3: Expand K positions to all segments
+    expansion_method = params.get('expansion_method', 'physical')
+    print(f"\n[Step 3] Expanding K positions to all segments ({expansion_method})...")
 
     walk_order = params.get('walk_order', DEFAULT_WALK_ORDER)
     param_k_to_b_px = params.get('k_to_b_px', None)
     param_ab_step_px = params.get('ab_step_px', None)
-
-    # Optional per-ring expansion parameters: k_to_b_r0..rN, ab_step_r0..rN
-    per_ring_k = []
-    per_ring_ab = []
-    have_per_ring = True
     n_rings_detected = len(k_positions)
-    for ring_idx in range(n_rings_detected):
-        key_k = f'k_to_b_r{ring_idx}'
-        key_ab = f'ab_step_r{ring_idx}'
-        if key_k in params and key_ab in params:
-            per_ring_k.append(float(params[key_k]))
-            per_ring_ab.append(float(params[key_ab]))
-        else:
-            have_per_ring = False
-            break
 
-    if have_per_ring and n_rings_detected > 0:
-        all_segments = expand_k_per_ring_steps(
+    if expansion_method == 'template':
+        # 7 steps: K->B1, B1->A1, A1->A2, A2->A3, A3->A4, A4->B2, B2->K; sum = img_height
+        k_px = (get_param(params, 'k_height', k_height_mm) / 1000.0) / resolution
+        ab_px = (get_param(params, 'ab_height', ab_height_mm) / 1000.0) / resolution
+        raw = [k_px, ab_px, ab_px, ab_px, ab_px, ab_px, k_px]
+        scale = L / sum(raw)
+        step_template = [s * scale for s in raw]
+        stagger_shift = int(params.get('template_stagger_shift', 1))
+        all_segments = expand_k_with_template(
             k_positions,
             img_height=L,
-            k_to_b_per_ring=per_ring_k,
-            ab_step_per_ring=per_ring_ab,
-            walk_order=walk_order,
-        )
-    elif param_k_to_b_px is not None and param_ab_step_px is not None:
-        all_segments = expand_k_to_all_segments(
-            k_positions,
-            img_height=L,
-            walk_order=walk_order,
-            k_to_b_px=float(param_k_to_b_px),
-            ab_step_px=float(param_ab_step_px),
+            step_template=step_template,
+            stagger_shift=stagger_shift,
+            line_data=line_data,
         )
     else:
-        expand_k_height = get_param(params, 'k_height', k_height_mm)
-        expand_ab_height = get_param(params, 'ab_height', ab_height_mm)
-        all_segments = expand_k_to_all_segments(
-            k_positions,
-            img_height=L,
-            walk_order=walk_order,
-            k_height_mm=expand_k_height,
-            ab_height_mm=expand_ab_height,
-            resolution=resolution,
-        )
+        # Optional per-ring expansion parameters: k_to_b_r0..rN, ab_step_r0..rN
+        per_ring_k = []
+        per_ring_ab = []
+        have_per_ring = True
+        for ring_idx in range(n_rings_detected):
+            key_k = f'k_to_b_r{ring_idx}'
+            key_ab = f'ab_step_r{ring_idx}'
+            if key_k in params and key_ab in params:
+                per_ring_k.append(float(params[key_k]))
+                per_ring_ab.append(float(params[key_ab]))
+            else:
+                have_per_ring = False
+                break
+
+        if have_per_ring and n_rings_detected > 0:
+            all_segments = expand_k_per_ring_steps(
+                k_positions,
+                img_height=L,
+                k_to_b_per_ring=per_ring_k,
+                ab_step_per_ring=per_ring_ab,
+                walk_order=walk_order,
+            )
+        elif param_k_to_b_px is not None and param_ab_step_px is not None:
+            all_segments = expand_k_to_all_segments(
+                k_positions,
+                img_height=L,
+                walk_order=walk_order,
+                k_to_b_px=float(param_k_to_b_px),
+                ab_step_px=float(param_ab_step_px),
+            )
+        else:
+            expand_k_height = get_param(params, 'k_height', k_height_mm)
+            expand_ab_height = get_param(params, 'ab_height', ab_height_mm)
+            all_segments = expand_k_to_all_segments(
+                k_positions,
+                img_height=L,
+                walk_order=walk_order,
+                k_height_mm=expand_k_height,
+                ab_height_mm=expand_ab_height,
+                resolution=resolution,
+            )
     
     all_segments.to_csv(os.path.join(tunnel_dir, 'all_segments.csv'), index=False)
     print(f"  Expanded {len(k_positions)} K positions → {len(all_segments)} total segments")

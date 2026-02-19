@@ -1,5 +1,7 @@
 {
-  "ring_spacing": 1.4,
+  "ring_spacing": 1.816,
+  "num_slicing_planes": 9,
+  "samples_per_ring": 1210,
   "radius_min": 3.5256521861234806,
   "radius_max": 4.051146607999439,
   "gradient_threshold": 0.44820542442065314,
@@ -9,7 +11,7 @@
     0.02
   ],
   "curvature_neighbors": 9,
-  "depth_map_resolution": 0.009212317422539225,
+  "depth_map_resolution": 0.005,
   "interpolation_window": 5,
   "tunnel_diameter": 7.5
 }

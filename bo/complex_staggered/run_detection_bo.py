@@ -98,6 +98,9 @@ def get_detection_dimensions(
         'hough_horizontal_max_gap': (3, 30),
         'horizontal_angle_tolerance': (0.5, 3.0),
         'merge_distance_threshold': (1, 10),
+        # Geometric K: ring X position (tunable when using k_detection_method=geometric)
+        'ring_offset': (50.0, 400.0),
+        'ring_spacing_px': (300.0, 500.0),
         # Complex-specific parameters (8D)
         'complex_hough_threshold': (10, 50),
         'complex_hough_min_length': (15, 100),
@@ -174,6 +177,8 @@ def get_detection_dimensions(
         ('hough_horizontal_max_gap', Integer, bounds['hough_horizontal_max_gap']),
         ('horizontal_angle_tolerance', Real, bounds['horizontal_angle_tolerance']),
         ('merge_distance_threshold', Real, bounds['merge_distance_threshold']),
+        ('ring_offset', Real, bounds['ring_offset']),
+        ('ring_spacing_px', Real, bounds['ring_spacing_px']),
         # Complex-specific parameters
         ('complex_hough_threshold', Integer, bounds['complex_hough_threshold']),
         ('complex_hough_min_length', Integer, bounds['complex_hough_min_length']),
@@ -296,6 +301,17 @@ def params_to_detection_json(params: List, param_names: List[str], fixed_params:
         if key_k in param_dict and key_ab in param_dict:
             result[key_k] = float(param_dict[key_k])
             result[key_ab] = float(param_dict[key_ab])
+    
+    # Geometric K params (for k_detection_method=geometric)
+    if 'ring_offset' in param_dict:
+        result['ring_offset'] = float(param_dict['ring_offset'])
+    if 'ring_spacing_px' in param_dict:
+        result['ring_spacing_px'] = float(param_dict['ring_spacing_px'])
+
+    # Pass through any fixed_params not in result (e.g. reverse_ring_order)
+    for key, val in fixed_params.items():
+        if key not in result:
+            result[key] = val
     
     return result
 
@@ -533,6 +549,39 @@ def compute_all_segments_score(
     }
 
 
+def compute_k_centroid_score(
+    k_positions: pd.DataFrame,
+    gt_k: pd.DataFrame,
+    img_height: int,
+    penalty_dist: float = 500.0,
+) -> Dict:
+    """
+    K-only objective: mean wrap-aware distance between detected and GT K (by ring order).
+    Both are assumed to be 7 rows, ring 0..6 in same order. Missing K get penalty_dist.
+    """
+    n_gt = len(gt_k)
+    n_pred = len(k_positions)
+    if n_gt == 0:
+        return {'mean_k_distance': penalty_dist, 'k_score': 0.0, 'num_matched': 0}
+    dists = []
+    for i in range(min(n_gt, n_pred)):
+        gx, gy = gt_k.iloc[i]['X'], gt_k.iloc[i]['Y']
+        dx, dy = k_positions.iloc[i]['X'], k_positions.iloc[i]['Y']
+        d = _wrap_aware_distance(gx, gy, dx, dy, img_height)
+        dists.append(d)
+    for _ in range(n_gt - n_pred):
+        dists.append(penalty_dist)
+    mean_k_distance = float(np.mean(dists))
+    max_dist = 500.0
+    k_score = max(0.0, 1.0 - mean_k_distance / max_dist)  # higher is better, for logging
+    return {
+        'mean_k_distance': mean_k_distance,
+        'k_score': k_score,
+        'num_matched': min(n_gt, n_pred),
+        'k_distances': dists[:n_gt],
+    }
+
+
 # =============================================================================
 # Objective Function
 # =============================================================================
@@ -551,12 +600,14 @@ class DetectionObjective:
         verbose: bool = True,
         eval_offset: int = 0,
         agent_type: str = DEFAULT_AGENT_TYPE,
+        objective_type: str = 'composite',
     ):
         self.tunnel_id = tunnel_id
         self.data_dir = data_dir
         self.verbose = verbose
         self.agent_type = agent_type
-        
+        self.objective_type = objective_type  # 'composite' or 'k_only'
+
         self.tunnel_dir = os.path.join(data_dir, tunnel_id)
         self.params_dir = os.path.join(
             PROJECT_ROOT,
@@ -597,7 +648,7 @@ class DetectionObjective:
         # Tracking
         self.eval_offset = eval_offset
         self.eval_count = 0
-        self.best_score = -np.inf
+        self.best_score = np.inf if objective_type == 'k_only' else -np.inf  # k_only: minimize distance
         self.best_params = None
         self.history = []
         self.logs_dir = os.path.join(
@@ -605,7 +656,9 @@ class DetectionObjective:
             'bo', agent_type, 'logs'
         )
         os.makedirs(self.logs_dir, exist_ok=True)
-        
+
+        self.gt_k = self.gt_segments[self.gt_segments['Block'] == 'K'].sort_values('Ring').reset_index(drop=True) if objective_type == 'k_only' else None
+
         if verbose:
             gt_blocks = self.gt_segments['Block'].value_counts().to_dict()
             print(f"Detection BO for tunnel {tunnel_id}")
@@ -617,7 +670,7 @@ class DetectionObjective:
                 print(f"Fixed parameters: {list(self.fixed_params.keys())}")
             print(f"Eval numbering starts at: {self.eval_offset + 1}")
             print(f"Logs directory: {self.logs_dir}")
-            print(f"Objective: composite = K_F1*0.3 + position_accuracy*0.7")
+            print(f"Objective: {objective_type} (={'mean K distance (minimize)' if objective_type == 'k_only' else 'composite = K_F1*0.3 + position_accuracy*0.7'})")
     
     @property
     def global_eval_index(self) -> int:
@@ -654,46 +707,70 @@ class DetectionObjective:
             if isinstance(detection_result, tuple):
                 k_positions, all_segments = detection_result
             else:
-                # Fallback for older detection code that returns only k_positions
                 k_positions = detection_result
                 all_segments = k_positions.copy()
                 all_segments['Block'] = 'K'
-            
-            results = compute_all_segments_score(
-                all_segments, self.gt_segments, self.img_height
-            )
-            score = results['composite_score']
-            
+
             runtime = time.time() - start_time
-            
-            if score > self.best_score:
-                self.best_score = score
-                self.best_params = param_dict.copy()
-                if self.verbose:
-                    print(f"  [Eval {self.global_eval_index}] New best: {score:.4f} "
-                          f"(K_F1={results['k_weighted_f1']:.3f}, pos_acc={results['position_accuracy']:.3f}, "
+
+            if self.objective_type == 'k_only':
+                k_results = compute_k_centroid_score(
+                    k_positions, self.gt_k, self.img_height
+                )
+                score = k_results['mean_k_distance']  # minimize
+                results = {
+                    'mean_k_distance': score,
+                    'k_score': k_results['k_score'],
+                    'num_matched': k_results['num_matched'],
+                    'num_gt_segments': len(self.gt_k),
+                    'num_pred_segments': len(k_positions),
+                    'k_distances': k_results.get('k_distances', []),
+                }
+                if score < self.best_score:
+                    self.best_score = score
+                    self.best_params = param_dict.copy()
+                    if self.verbose:
+                        print(f"  [Eval {self.global_eval_index}] New best: mean_K_dist={score:.1f}px "
+                              f"(k_score={k_results['k_score']:.3f})")
+                self._log_trial(param_dict, results, len(k_positions), runtime, objective_type='k_only')
+                self.history.append({
+                    'eval': self.global_eval_index,
+                    'params': param_dict,
+                    'mean_k_distance': score,
+                    'k_score': k_results['k_score'],
+                })
+                if self.verbose and self.eval_count % 10 == 0:
+                    print(f"  [Eval {self.global_eval_index}] mean_K_dist={score:.1f}px")
+                return score  # minimize mean K distance
+            else:
+                results = compute_all_segments_score(
+                    all_segments, self.gt_segments, self.img_height
+                )
+                score = results['composite_score']
+                if score > self.best_score:
+                    self.best_score = score
+                    self.best_params = param_dict.copy()
+                    if self.verbose:
+                        print(f"  [Eval {self.global_eval_index}] New best: {score:.4f} "
+                              f"(K_F1={results['k_weighted_f1']:.3f}, pos_acc={results['position_accuracy']:.3f}, "
+                              f"mean_dist={results['mean_segment_distance']:.1f}px, "
+                              f"matched={results['num_matched']}/{results['num_gt_segments']})")
+                self._log_trial(param_dict, results, len(all_segments), runtime)
+                self.history.append({
+                    'eval': self.global_eval_index,
+                    'params': param_dict,
+                    'composite_score': score,
+                    'k_weighted_f1': results['k_weighted_f1'],
+                    'position_accuracy': results['position_accuracy'],
+                    'mean_segment_distance': results['mean_segment_distance'],
+                    'num_matched': results['num_matched'],
+                    'num_pred_segments': results['num_pred_segments'],
+                })
+                if self.verbose and self.eval_count % 10 == 0:
+                    print(f"  [Eval {self.global_eval_index}] score={score:.4f}, "
                           f"mean_dist={results['mean_segment_distance']:.1f}px, "
-                          f"matched={results['num_matched']}/{results['num_gt_segments']})")
-            
-            self._log_trial(param_dict, results, len(all_segments), runtime)
-            
-            self.history.append({
-                'eval': self.global_eval_index,
-                'params': param_dict,
-                'composite_score': score,
-                'k_weighted_f1': results['k_weighted_f1'],
-                'position_accuracy': results['position_accuracy'],
-                'mean_segment_distance': results['mean_segment_distance'],
-                'num_matched': results['num_matched'],
-                'num_pred_segments': results['num_pred_segments'],
-            })
-            
-            if self.verbose and self.eval_count % 10 == 0:
-                print(f"  [Eval {self.global_eval_index}] score={score:.4f}, "
-                      f"mean_dist={results['mean_segment_distance']:.1f}px, "
-                      f"matched={results['num_matched']}/{results['num_gt_segments']}")
-            
-            return -score  # Negative for minimization
+                          f"matched={results['num_matched']}/{results['num_gt_segments']}")
+                return -score  # Negative for minimization
             
         except Exception as e:
             runtime = time.time() - start_time
@@ -702,8 +779,9 @@ class DetectionObjective:
             self._log_trial(
                 params_to_detection_json(params, self.param_names, self.fixed_params),
                 None, 0, runtime, error=str(e),
+                objective_type=self.objective_type,
             )
-            return 0.0
+            return 9999.0 if self.objective_type == 'k_only' else 0.0
     
     def _log_trial(
         self,
@@ -712,12 +790,13 @@ class DetectionObjective:
         num_detected: int,
         runtime: float,
         error: Optional[str] = None,
+        objective_type: str = 'composite',
     ):
         """Log trial to JSON file."""
         global_idx = self.global_eval_index
         trial_id = f"detect_{self.tunnel_id}_{global_idx:03d}"
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        
+
         log_data = {
             'schema_version': 'r4tun.detection.v2',
             'trial': {
@@ -728,15 +807,33 @@ class DetectionObjective:
             },
             'params': params,
         }
-        
+
         if error:
             log_data['trace'] = {'warnings': [f"Error: {error}"]}
             log_data['bo'] = {
-                'objective_name': 'all_segments_composite',
-                'objective_value': 0.0,
+                'objective_name': objective_type,
+                'objective_value': 0.0 if objective_type == 'composite' else 9999.0,
                 'eval_index': global_idx,
                 'runtime_sec': runtime,
                 'is_feasible': False,
+            }
+        elif objective_type == 'k_only' and results:
+            log_data['outputs'] = {
+                'num_pred_segments': results['num_pred_segments'],
+                'num_gt_segments': results['num_gt_segments'],
+                'num_matched': results['num_matched'],
+                'k_metrics': {
+                    'mean_k_distance_px': results['mean_k_distance'],
+                    'k_score': results['k_score'],
+                    'k_distances_px': results.get('k_distances', []),
+                },
+            }
+            log_data['bo'] = {
+                'objective_name': 'k_centroid_mean_distance',
+                'objective_value': float(results['mean_k_distance']),
+                'eval_index': global_idx,
+                'runtime_sec': float(runtime),
+                'is_feasible': True,
             }
         else:
             log_data['outputs'] = {
@@ -810,43 +907,43 @@ def load_best_from_logs(
     logs_dir: str,
     tunnel_id: str,
     agent_type: str = DEFAULT_AGENT_TYPE,
-    fixed_params: Dict = None
+    fixed_params: Dict = None,
+    objective_type: str = 'composite',
 ) -> Optional[Tuple[List[float], float]]:
     """
     Load the best trial from existing logs to use as warm-start x0/y0.
     Falls back to current parameters_detection.json if no logs exist.
-    
-    Args:
-        logs_dir: Directory containing BO log files
-        tunnel_id: Tunnel identifier
-        agent_type: Agent type
-        fixed_params: Dict of fixed parameters (to exclude from warm-start vector)
-    
-    Returns:
-        Tuple of (param_values_list, negative_weighted_f1) or None if no params found.
-        param_values_list is in the order of get_detection_dimensions() (excluding fixed params).
+    For composite: maximize objective_value. For k_only: minimize objective_value.
     """
     if fixed_params is None:
         fixed_params = {}
-    
+
     pattern = os.path.join(logs_dir, f"detect_{tunnel_id}_*.json")
     log_files = glob.glob(pattern)
-    
-    best_f1 = -1
+
+    minimize_obj = objective_type == 'k_only'
+    target_name = 'k_centroid_mean_distance' if minimize_obj else 'all_segments_composite'
+    best_f1 = float('inf') if minimize_obj else -1
     best_params = None
-    
-    # First, try to load from previous BO logs
+
+    # First, try to load from previous BO logs (same objective type)
     for log_file in log_files:
         with open(log_file, 'r') as f:
             data = json.load(f)
-        
         if 'bo' not in data or 'objective_value' not in data['bo']:
             continue
-        
+        obj_name = data['bo'].get('objective_name', '')
+        if target_name and obj_name != target_name:
+            continue
         f1 = data['bo']['objective_value']
-        if f1 > best_f1:
-            best_f1 = f1
-            best_params = data.get('params', {})
+        if minimize_obj:
+            if f1 < best_f1:
+                best_f1 = f1
+                best_params = data.get('params', {})
+        else:
+            if f1 > best_f1:
+                best_f1 = f1
+                best_params = data.get('params', {})
     
     # If no logs found, try to load from current parameters file
     if best_params is None or best_f1 <= 0:
@@ -859,11 +956,8 @@ def load_best_from_logs(
         if os.path.exists(params_file):
             with open(params_file, 'r') as f:
                 best_params = json.load(f)
-            # Use a conservative F1 estimate (0.5) for parameters file
-            # This allows BO to explore but starts from a reasonable point
-            best_f1 = 0.5
+            best_f1 = 58.0 if minimize_obj else 0.5  # k_only: current baseline ~58px
             print(f"  No previous BO logs found, using current parameters_detection.json as warm-start")
-    
     if best_params is None:
         return None
     
@@ -904,6 +998,9 @@ def load_best_from_logs(
         # Fixed expansion geometry
         'k_to_b_px': lambda p: p.get('k_to_b_px', 500.0),
         'ab_step_px': lambda p: p.get('ab_step_px', 500.0),
+        # Geometric K
+        'ring_offset': lambda p: p.get('ring_offset', 182.0),
+        'ring_spacing_px': lambda p: p.get('ring_spacing_px', 364.0),
     }
     
     # Get current search space param names (to know what to include)
@@ -918,7 +1015,9 @@ def load_best_from_logs(
             # Fallback (shouldn't happen if param_names matches param_extractors)
             param_values.append(0.0)
     
-    return param_values, -best_f1  # negative for minimization
+    # For composite we minimize -score; for k_only we minimize mean distance
+    y0 = best_f1 if minimize_obj else -best_f1
+    return param_values, y0
 
 
 # =============================================================================
@@ -932,22 +1031,22 @@ def run_detection_bo(
     n_initial_points: int = 15,
     verbose: bool = True,
     agent_type: str = DEFAULT_AGENT_TYPE,
+    objective_type: str = 'composite',
 ) -> Dict:
     """Run Bayesian Optimization for detection parameters."""
-    
     print(f"\n{'='*70}")
     print(f"DETECTION BAYESIAN OPTIMIZATION - Tunnel {tunnel_id} ({agent_type})")
     print(f"{'='*70}")
-    
+
     logs_dir = os.path.join(
         PROJECT_ROOT,
         'bo', agent_type, 'logs'
     )
     os.makedirs(logs_dir, exist_ok=True)
-    
+
     # Determine eval offset from existing logs
     eval_offset = find_max_trial_index(logs_dir, tunnel_id)
-    
+
     # Initialize objective
     objective = DetectionObjective(
         tunnel_id=tunnel_id,
@@ -955,30 +1054,72 @@ def run_detection_bo(
         verbose=verbose,
         eval_offset=eval_offset,
         agent_type=agent_type,
+        objective_type=objective_type,
     )
-    
+
+    # K-only: restrict search space to ring_offset and ring_spacing_px; fix the rest from current params
+    if objective_type == 'k_only':
+        params_file = os.path.join(
+            PROJECT_ROOT,
+            'agents', agent_type, '2_detection',
+            'parameters', tunnel_id, 'parameters_detection.json'
+        )
+        if os.path.exists(params_file):
+            with open(params_file, 'r') as f:
+                current_params = json.load(f)
+            objective.fixed_params = {**current_params, **objective.fixed_params}
+            objective.fixed_params['k_detection_method'] = 'geometric'
+            objective.fixed_params['reverse_ring_order'] = True
+        objective.param_names = ['ring_offset', 'ring_spacing_px']
+        objective.dimensions = [
+            Real(50.0, 400.0, name='ring_offset'),
+            Real(300.0, 500.0, name='ring_spacing_px'),
+        ]
+        # Remove from fixed_params so they are tuned
+        objective.fixed_params.pop('ring_offset', None)
+        objective.fixed_params.pop('ring_spacing_px', None)
+
     print(f"\nSearch space: {len(objective.param_names)} parameters")
     print(f"N calls: {n_calls}, N initial: {n_initial_points}")
-    print(f"Objective: all-segments composite (K_F1*0.3 + position_accuracy*0.7)")
+    print(f"Objective: {objective_type} (={'mean K distance' if objective_type == 'k_only' else 'all-segments composite'})")
     print(f"Algorithm: forest_minimize (Random Forest surrogate)")
     
     # Warm-start from best previous trial or current parameters file
     x0 = None
     y0 = None
-    warm_start = load_best_from_logs(logs_dir, tunnel_id, agent_type, objective.fixed_params)
+    if objective_type == 'k_only':
+        # Use current params file for ring_offset and ring_spacing_px only
+        params_file = os.path.join(
+            PROJECT_ROOT, 'agents', agent_type, '2_detection',
+            'parameters', tunnel_id, 'parameters_detection.json'
+        )
+        if os.path.exists(params_file):
+            with open(params_file, 'r') as f:
+                cp = json.load(f)
+            x0_vals = [float(cp.get('ring_offset', 182)), float(cp.get('ring_spacing_px', 364))]
+            clamped_x0 = [
+                max(50, min(400, x0_vals[0])),
+                max(300, min(500, x0_vals[1])),
+            ]
+            x0 = [clamped_x0]
+            y0 = [58.0]  # baseline mean K distance
+            print(f"\nWarm-starting from current parameters (mean_K_dist~58px):")
+            print(f"  ring_offset: {x0_vals[0]:.1f}, ring_spacing_px: {x0_vals[1]:.1f}")
+        warm_start = None
+    else:
+        warm_start = load_best_from_logs(
+            logs_dir, tunnel_id, agent_type, objective.fixed_params, objective_type=objective_type
+        )
     if warm_start is not None:
         x0_vals, y0_val = warm_start
-        # Clamp warm-start values to current search space bounds
         clamped_x0 = []
         for i, (name, val) in enumerate(zip(objective.param_names, x0_vals)):
             dim = objective.dimensions[i]
-            # Get bounds from dimension
             if hasattr(dim, 'low') and hasattr(dim, 'high'):
                 clamped_val = max(dim.low, min(dim.high, val))
                 clamped_x0.append(clamped_val)
             else:
                 clamped_x0.append(val)
-        
         x0 = [clamped_x0]
         y0 = [y0_val]
         source = "previous BO logs" if eval_offset > 0 else "current parameters_detection.json"
@@ -1004,12 +1145,12 @@ def run_detection_bo(
     
     # Results
     best_params = params_to_detection_json(result.x, objective.param_names, objective.fixed_params)
-    best_score = -result.fun  # Negate back
-    
+    best_score = result.fun if objective_type == 'k_only' else -result.fun  # k_only: minimize distance
+
     print(f"\n{'='*70}")
     print(f"OPTIMIZATION COMPLETE")
     print(f"{'='*70}")
-    print(f"Best composite score: {best_score:.4f}")
+    print(f"Best {'mean K distance (px)' if objective_type == 'k_only' else 'composite score'}: {best_score:.4f}")
     print(f"\nBest parameters:")
     for name, value in best_params.items():
         if isinstance(value, list):
@@ -1043,9 +1184,11 @@ if __name__ == "__main__":
     parser.add_argument('--agent-type', type=str, default='complex_staggered',
                        choices=['complex_staggered', 'continuous', 'complex_staggered'],
                        help='Agent type (default: complex_staggered)')
-    
+    parser.add_argument('--objective', type=str, default='composite',
+                       choices=['composite', 'k_only'],
+                       help='Objective: composite (all segments) or k_only (mean K centroid distance)')
     args = parser.parse_args()
-    
+
     run_detection_bo(
         tunnel_id=args.tunnel_id,
         data_dir=args.data_dir,
@@ -1053,4 +1196,5 @@ if __name__ == "__main__":
         n_initial_points=args.n_initial,
         verbose=args.verbose,
         agent_type=args.agent_type,
+        objective_type=args.objective,
     )

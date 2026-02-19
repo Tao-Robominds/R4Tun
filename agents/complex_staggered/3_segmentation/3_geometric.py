@@ -4,6 +4,7 @@ Complex Staggered Geometric Segmentation (Stage 3 — no SAM)
 Pure geometric pixel assignment from segment centres (all_segments.csv).
 Uses per-block-type bounding boxes with tunable half-heights and half-width.
 Y-axis wraps (cylindrical projection). Overlaps resolved by nearest centre.
+Optionally snaps boundaries to groove edges detected in the depth map.
 No GPU, no SAM — fast evaluation for BO.
 
 Pipeline:
@@ -11,12 +12,13 @@ Pipeline:
     2_detection.py or GT → all_segments.csv (Ring, Block, X, Y in pixels)
     3_geometric.py → final.csv (segmented point cloud)
 
-Tunable parameters (17):
+Tunable parameters (20):
     K_half_height, B1_half_height, B2_half_height,
     A1_half_height, A2_half_height, A3_half_height, A4_half_height,
     K_centre_offset, B1_centre_offset, B2_centre_offset,
     A1_centre_offset, A2_centre_offset, A3_centre_offset, A4_centre_offset,
-    segment_half_width, shrink_x, shrink_y.
+    segment_half_width, shrink_x, shrink_y,
+    snap_radius, groove_threshold, snap_weight.
 """
 
 import os
@@ -26,6 +28,7 @@ import argparse
 import pickle
 import numpy as np
 import pandas as pd
+import cv2
 
 from importlib.util import spec_from_file_location, module_from_spec
 _sam_path = os.path.join(os.path.dirname(__file__), "3_sam.py")
@@ -56,6 +59,9 @@ DEFAULTS = {
     "segment_half_width": 197,
     "shrink_x": 4,
     "shrink_y": 2,
+    "snap_radius": 100,
+    "groove_threshold": 25.0,
+    "snap_weight": 1.0,
 }
 
 
@@ -76,16 +82,112 @@ def get_param(params: dict, key: str):
     return params[key] if key in params else DEFAULTS[key]
 
 
+# ---------------------------------------------------------------------------
+# Groove edge map
+# ---------------------------------------------------------------------------
+
+def compute_groove_map(depth_path: str, blur_ksize: int = 5) -> np.ndarray:
+    """
+    Compute per-pixel groove confidence from the depth map.
+    Grooves are narrow bands of high depth gradient (discontinuities between blocks).
+
+    Returns float32 array (h, w) with higher values at groove locations.
+    """
+    img = cv2.imread(depth_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise FileNotFoundError(f"Cannot read depth map: {depth_path}")
+
+    if blur_ksize > 1:
+        img = cv2.GaussianBlur(img, (blur_ksize, blur_ksize), 0)
+
+    sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+    grad_mag = np.sqrt(sobelx ** 2 + sobely ** 2).astype(np.float32)
+    return grad_mag
+
+
+# ---------------------------------------------------------------------------
+# Boundary snapping helpers
+# ---------------------------------------------------------------------------
+
+def _snap_one_boundary(
+    y_raw: int,
+    cx: float,
+    groove_map: np.ndarray,
+    snap_radius: int,
+    groove_threshold: float,
+    snap_weight: float,
+    half_strip: int = 20,
+) -> int:
+    """
+    Snap a single Y-boundary to the nearest groove within *snap_radius*.
+
+    Searches a horizontal strip centred on *cx* (±half_strip pixels) for the
+    row with strongest groove signal within [y_raw - snap_radius, y_raw + snap_radius].
+    """
+    h, w = groove_map.shape
+
+    x_lo = max(0, int(cx) - half_strip)
+    x_hi = min(w, int(cx) + half_strip + 1)
+    if x_hi <= x_lo:
+        return y_raw
+
+    y_search_lo = y_raw - snap_radius
+    y_search_hi = y_raw + snap_radius + 1
+
+    rows = np.arange(y_search_lo, y_search_hi)
+    rows_mod = rows % h
+
+    strip = groove_map[rows_mod, x_lo:x_hi]
+    profile = strip.mean(axis=1)
+
+    best_idx = int(np.argmax(profile))
+    if profile[best_idx] < groove_threshold:
+        return y_raw
+
+    groove_y = int(rows[best_idx]) % h
+    snapped = int(round(y_raw * (1.0 - snap_weight) + groove_y * snap_weight)) % h
+    return snapped
+
+
+def compute_boundary_groove_score(
+    label_map: np.ndarray,
+    groove_map: np.ndarray,
+) -> float:
+    """
+    Intrinsic boundary-groove alignment score (no GT needed).
+
+    Extracts all boundary pixels (where adjacent labels differ) and returns
+    the mean groove-map value at those pixels.  Higher = boundaries sit on
+    grooves = better segmentation.
+    """
+    shifted_down = np.roll(label_map, -1, axis=0)
+    shifted_right = np.roll(label_map, -1, axis=1)
+    boundary = (label_map != shifted_down) | (label_map != shifted_right)
+    boundary[-1, :] = False
+    boundary[:, -1] = False
+
+    boundary_px = np.where(boundary)
+    if len(boundary_px[0]) == 0:
+        return 0.0
+
+    return float(groove_map[boundary_px].mean())
+
+
 def build_geometric_label_map(
     segments_df: pd.DataFrame,
     height: int,
     width: int,
     params: dict,
     block_to_label: dict,
+    groove_map: np.ndarray = None,
 ) -> tuple:
     """
     Build label_map and ring_map from segment centres + per-block-type half-heights.
     Y-axis wraps (cylindrical projection). Overlaps resolved by nearest centre.
+
+    When *groove_map* is provided and snap_radius > 0, each block's top/bottom
+    boundary is snapped to the nearest groove edge before pixel assignment.
     """
     half_heights = {
         "K": get_param(params, "K_half_height"),
@@ -107,6 +209,11 @@ def build_geometric_label_map(
     }
     half_w = max(0.0, float(get_param(params, "segment_half_width")) - get_param(params, "shrink_x"))
     shrink_y = get_param(params, "shrink_y")
+
+    snap_radius = int(get_param(params, "snap_radius"))
+    groove_threshold = float(get_param(params, "groove_threshold"))
+    snap_weight = float(get_param(params, "snap_weight"))
+    do_snap = groove_map is not None and snap_radius > 0
 
     label_map = np.zeros((height, width), dtype=np.int32)
     ring_map = np.full((height, width), -1, dtype=np.int32)
@@ -131,6 +238,14 @@ def build_geometric_label_map(
 
         y_lo_raw = int(np.round(cy_shifted - half_y))
         y_hi_raw = int(np.round(cy_shifted + half_y))
+
+        if do_snap:
+            y_lo_raw = _snap_one_boundary(
+                y_lo_raw, cx, groove_map, snap_radius, groove_threshold, snap_weight,
+            )
+            y_hi_raw = _snap_one_boundary(
+                y_hi_raw, cx, groove_map, snap_radius, groove_threshold, snap_weight,
+            )
 
         px_int = np.arange(x_lo, x_hi + 1, dtype=np.intp)
         dx_arr = px_int.astype(np.float64) - cx
@@ -167,7 +282,16 @@ def run_geometric(
     base_dir: str = "data",
     segments_file: str = None,
     override_params: dict = None,
-) -> pd.DataFrame:
+) -> dict:
+    """
+    Run geometric segmentation with optional groove-based boundary snapping.
+
+    Returns dict with keys:
+        'df'             – final DataFrame (also saved to final.csv)
+        'groove_score'   – intrinsic boundary-groove alignment score (float)
+        'label_map'      – 2D label map (h x w int32)
+        'groove_map'     – 2D groove confidence map (h x w float32)
+    """
     tunnel_dir = os.path.join(base_dir, tunnel_id)
 
     params = load_parameters(tunnel_id, base_dir)
@@ -190,9 +314,10 @@ def run_geometric(
     depth_path = os.path.join(tunnel_dir, "depth_map.png")
     if not os.path.exists(depth_path):
         raise FileNotFoundError(f"Depth map not found: {depth_path}")
-    import cv2
     img = cv2.imread(depth_path)
     height, width = img.shape[:2]
+
+    groove_map = compute_groove_map(depth_path)
 
     pixel_to_point_path = os.path.join(tunnel_dir, "pixel_to_point.pkl")
     with open(pixel_to_point_path, "rb") as f:
@@ -213,7 +338,10 @@ def run_geometric(
     block_to_label = compute_block_to_label_map(SEGMENT_COUNT)
     label_map, ring_map = build_geometric_label_map(
         segments_df, height, width, params, block_to_label,
+        groove_map=groove_map,
     )
+
+    groove_score = compute_boundary_groove_score(label_map, groove_map)
 
     ring_count = int(open(os.path.join(tunnel_dir, "ring_count.txt"), "r").read())
     fix_ring = np.where(
@@ -235,7 +363,12 @@ def run_geometric(
             "pred_rings": updated_df["pred_ring"],
         }).to_csv(only_path, index=False)
 
-    return updated_df
+    return {
+        "df": updated_df,
+        "groove_score": groove_score,
+        "label_map": label_map,
+        "groove_map": groove_map,
+    }
 
 
 if __name__ == "__main__":
@@ -248,4 +381,5 @@ if __name__ == "__main__":
         help="Segments CSV (default: <data_dir>/<tunnel_id>/all_segments.csv)",
     )
     args = parser.parse_args()
-    run_geometric(args.tunnel_id, base_dir=args.data_dir, segments_file=args.segments_file)
+    result = run_geometric(args.tunnel_id, base_dir=args.data_dir, segments_file=args.segments_file)
+    print(f"Groove alignment score: {result['groove_score']:.4f}")

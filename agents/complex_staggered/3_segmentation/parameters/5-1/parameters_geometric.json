@@ -15,5 +15,8 @@
   "A4_centre_offset": -17,
   "segment_half_width": 197,
   "shrink_x": 4,
-  "shrink_y": 2
+  "shrink_y": 2,
+  "snap_radius": 100,
+  "groove_threshold": 25.0,
+  "snap_weight": 1.0
 }

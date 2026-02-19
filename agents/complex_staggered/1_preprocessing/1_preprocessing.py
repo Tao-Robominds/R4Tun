@@ -223,26 +223,25 @@ def generate_slicing_planes(
     center1: np.ndarray,
     center2: np.ndarray,
     points_xyz: np.ndarray,
-    ring_spacing: float
+    num_planes: int
 ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
     """Generate slicing planes perpendicular to tunnel axis."""
     total_distance = np.linalg.norm(center2 - center1)
-    num_rings = round(total_distance / ring_spacing)
     direction_2d = (center2 - center1) / total_distance
     
-    first_distance = total_distance / (2 * num_rings)
+    first_distance = total_distance / (2 * num_planes)
     last_distance = total_distance - first_distance
     
     origins = []
     planes = []
     
-    for i in range(num_rings):
+    for i in range(num_planes):
         if i == 0:
             segment_length = first_distance
-        elif i == num_rings - 1:
+        elif i == num_planes - 1:
             segment_length = last_distance
         else:
-            segment_length = first_distance + i * (last_distance - first_distance) / (num_rings - 1)
+            segment_length = first_distance + i * (last_distance - first_distance) / (num_planes - 1)
         
         point_on_plane = center1 + (segment_length / total_distance) * (center2 - center1)
         origins.append(np.array([point_on_plane[0], point_on_plane[1], 0.0]))
@@ -579,12 +578,13 @@ def transform_to_cylindrical(
     x_params: np.ndarray,
     y_params: np.ndarray,
     z_params: np.ndarray,
-    ring_count: int,
-    tunnel_diameter: float
+    n_planes: int,
+    tunnel_diameter: float,
+    samples_per_ring: int = FIXED_SAMPLES_PER_RING
 ) -> np.ndarray:
     """Transform points to cylindrical coordinates (r, θ, h)."""
-    num_samples = ring_count * FIXED_SAMPLES_PER_RING
-    t_samples = np.linspace(-20, ring_count + 20, num_samples)
+    num_samples = n_planes * samples_per_ring
+    t_samples = np.linspace(-20, n_planes + 20, num_samples)
     
     curve_points = evaluate_curve(t_samples, x_params, y_params, z_params)
     tangent_vectors = evaluate_curve_derivative(t_samples, x_params, y_params, z_params)
@@ -629,28 +629,36 @@ def transform_to_cylindrical(
 def unfold_point_cloud(
     df: pd.DataFrame,
     ring_spacing: float,
-    tunnel_diameter: float
-) -> Tuple[pd.DataFrame, int]:
+    tunnel_diameter: float,
+    num_slicing_planes: int = None,
+    samples_per_ring: int = FIXED_SAMPLES_PER_RING
+) -> Tuple[pd.DataFrame, int, int]:
     """
     Execute Stage 1: Unfolding.
     
-    CRITICAL PARAMETERS:
-    - ring_spacing: Controls number of rings detected
-    - tunnel_diameter: Used for θ calculation
+    Returns (df_out, ring_count, n_planes) where:
+    - ring_count = physical rings (from ring_spacing)
+    - n_planes = slicing planes used for curve fitting
     """
     points_xyz = df[['x', 'y', 'z']].values
     
     center1, center2 = compute_tunnel_direction(points_xyz[:, :2])
+    total_distance = np.linalg.norm(center2 - center1)
+    ring_count = round(total_distance / ring_spacing)
+    n_planes = num_slicing_planes if num_slicing_planes else ring_count
+    
+    print(f"  total_distance={total_distance:.3f}m, ring_count={ring_count}, num_slicing_planes={n_planes}")
+    
     origins, planes, sliced_clouds = generate_slicing_planes(
-        center1, center2, points_xyz, ring_spacing
+        center1, center2, points_xyz, n_planes
     )
-    ring_count = len(sliced_clouds)
     
     centers_3d = fit_ellipse_centers(sliced_clouds, origins, planes)
     x_params, y_params, z_params = fit_centerline_curve(centers_3d)
     
     cylindrical = transform_to_cylindrical(
-        points_xyz, x_params, y_params, z_params, ring_count, tunnel_diameter
+        points_xyz, x_params, y_params, z_params,
+        len(sliced_clouds), tunnel_diameter, samples_per_ring
     )
     
     df_out = df.copy()
@@ -658,7 +666,7 @@ def unfold_point_cloud(
     df_out['theta'] = cylindrical[:, 1]
     df_out['h'] = cylindrical[:, 2]
     
-    return df_out, ring_count
+    return df_out, ring_count, n_planes
 
 
 # =============================================================================
@@ -1491,6 +1499,12 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     depth_map_resolution = get_param(params, 'depth_map_resolution', default=DEFAULT_DEPTH_MAP_RESOLUTION, allow_default=allow_defaults)
     interpolation_window = get_param(params, 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=True)  # Always allow default (LOW impact)
     
+    # Slicing / sampling parameters (decoupled from ring_spacing)
+    num_slicing_planes = params.get('num_slicing_planes', None)
+    if num_slicing_planes is not None:
+        num_slicing_planes = int(num_slicing_planes)
+    samples_per_ring = int(params.get('samples_per_ring', FIXED_SAMPLES_PER_RING))
+    
     # Outlier enhancement parameters (new tunable params)
     outlier_depth_threshold_low = params.get('outlier_depth_threshold_low', FIXED_DEPTH_THRESHOLD_LOW)
     outlier_depth_threshold_high = params.get('outlier_depth_threshold_high', FIXED_DEPTH_THRESHOLD_HIGH)
@@ -1506,6 +1520,8 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     
     print("\nCritical parameters:")
     print(f"  ring_spacing:       {ring_spacing}")
+    print(f"  num_slicing_planes: {num_slicing_planes} (None=auto from ring_spacing)")
+    print(f"  samples_per_ring:   {samples_per_ring}")
     print(f"  tunnel_diameter:    {tunnel_diameter}")
     print(f"  radius_min:         {radius_min}")
     print(f"  radius_max:         {radius_max}")
@@ -1530,17 +1546,26 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     print("\n[Stage 1] Unfolding...")
     filepath = os.path.join(base_dir, f"{tunnel_id}.txt")
     df_raw = load_point_cloud(filepath)
-    df_unwrapped, ring_count = unfold_point_cloud(df_raw, ring_spacing, tunnel_diameter)
+    df_unwrapped, ring_count, n_planes = unfold_point_cloud(
+        df_raw, ring_spacing, tunnel_diameter,
+        num_slicing_planes=num_slicing_planes,
+        samples_per_ring=samples_per_ring
+    )
     
     df_unwrapped.to_csv(os.path.join(tunnel_dir, "unwrapped.csv"), index=False)
     with open(os.path.join(tunnel_dir, "ring_count.txt"), 'w') as f:
         f.write(str(ring_count))
     print(f"  Saved unwrapped.csv, ring_count={ring_count}")
     
+    # Effective spacing for denoising/enhancement (based on slicing planes, not ring_spacing)
+    h_vals = df_unwrapped['h'].values
+    effective_spacing = (h_vals.max() - h_vals.min()) / n_planes
+    print(f"  effective_spacing={effective_spacing:.4f} (from n_planes={n_planes})")
+    
     # ---- Stage 2: Denoising ----
     print("\n[Stage 2] Denoising...")
     df_denoised = denoise_point_cloud(
-        df_unwrapped, ring_count,
+        df_unwrapped, n_planes,
         radius_min=radius_min, radius_max=radius_max,
         gradient_threshold=gradient_threshold
     )
@@ -1552,7 +1577,7 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     print("\n[Stage 3] Enhancing...")
     df_enhanced = enhance_point_cloud(
         df_denoised, tunnel_dir,
-        ring_spacing=ring_spacing,
+        ring_spacing=effective_spacing,
         target_distances=target_distances,
         curvature_neighbors=curvature_neighbors,
         depth_map_resolution=depth_map_resolution,
