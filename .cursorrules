@@ -1,0 +1,102 @@
+# Bayesian-R4Tun Project Rules
+
+## Project Conventions
+
+1. Always use the local `./venv` Python environment. Never install a new virtual environment.
+2. Save all experiment outputs under `data/{tunnel_id}/`. Never overwrite existing results such as `data/baseline` or `data/bo`.
+3. The `segment` and `ring` columns in the raw point cloud are ground truth labels. Any metric that reads these columns is GT-dependent and cannot serve as an intrinsic metric for new tunnels without GT.
+
+## Reverse Engineering from Ground Truth
+
+For tunnels that have GT labels (`segment`, `ring`), always reverse-engineer optimal parameter values directly from GT before running BO or manual tuning. This establishes the theoretical ceiling for each stage and identifies structural bottlenecks.
+
+**Method**: Load GT labels, compute what the parameter value *should* be, and compare against current values. Any gap between the GT-derived optimum and the current value is recoverable.
+
+**Examples of what can be reverse-engineered from GT**:
+- `radius_min` / `radius_max`: min/max of `r` across all GT-labeled points. Current 5-1 values exclude 163k valid BG points (r < 3.526) with zero noise cost.
+- `gradient_threshold`: the threshold that retains all GT surface points without cutting real block edges.
+- Geometric segmentation params (`*_half_height`, `*_centre_offset`): compute exact bounding boxes per (segment, ring) from GT pixel coordinates.
+- `pixel_to_point.pkl` coverage: verify all GT-labeled points have pixel mappings. On 5-1, 22.4% of GT points (337k) were unmapped because denoising excluded them before depth map projection. Fix: retroactively project pred=0 points to pixel coordinates and add to mapping.
+- Detection segment centres: compute GT centroids per (segment, ring) as the perfect detection target.
+- SAM crop windows: derive ideal crop boundaries from GT block extents.
+
+**Workflow**: Always run the GT reverse-engineering analysis FIRST for a new tunnel/stage, THEN use the derived values as either fixed parameters or as upper-bound references for BO search ranges.
+
+## Project Structure
+
+- `sam4tun/` -- Original 5-stage pipeline (upfolding, denoising, enhancing, detection, SAM).
+- `agents/{agent_type}/` -- Agent-wrapped pipeline stages per tunnel pattern type:
+  - `complex_staggered` (tunnels 4-1, 5-1): 7 block types (K, B1, B2, A1-A4)
+  - `simple_staggered` (tunnels 1-4, 2-2): 6 block types (K, B1, A1-A3, B2)
+  - `continuous` (tunnel 3-1): 6 block types
+- `bo/{agent_type}/` -- Bayesian optimization scripts per stage.
+- `p4tun/bo/` -- Cross-tunnel BO infrastructure: predictor, proxy BO, no-GT optimizer.
+- `agents/{agent_type}/{stage}/knowledge/` -- Knowledge docs (intrinsics, tuning guides).
+- `agents/{agent_type}/{stage}/scripts/` -- Extraction and analysis scripts.
+- `agents/{agent_type}/{stage}/memory/` -- Run logs with outcomes.
+- `docs/journal_*.md` -- Daily journals with experiments, results, and plans.
+
+## Guiding Methodology: BO to Intrinsic Metrics Pipeline
+
+The project follows a systematic methodology to enable Bayesian optimization on new tunnels where ground-truth mIoU is unavailable.
+
+### Stage 1: BO with Ground Truth
+Run BO per pipeline stage on tunnels that have GT labels. Objectives:
+- Preprocessing: Retention F2 score (beta=2.0, recall-weighted). Search space 9D.
+- Detection: Composite score, K-only distance, or per-ring segment distance. Search space 13-14D.
+- SAM: mIoU against GT labels. Search space 10D.
+
+### Stage 2: Identify Critical Parameters
+From BO logs, determine which parameters have the most impact. Record in `knowledge/tuning.md`.
+
+### Stage 3: Define Intrinsic Metric Candidates
+Define metrics computable from pipeline outputs alone (no GT):
+- Preprocessing: `pre_theta_coverage_pct`, `pre_depth_map_valid_pixels`, `pre_point_retention_pct`, `pre_theta_gap_max_deg`, `pre_depth_map_row_fill_ratio`.
+- Detection: `det_k_count_match`, `det_midpoint_ratio`, `det_real_detection_ratio`, `det_x_spacing_cv`.
+- SAM: `sam_mask_fill_rate`, `sam_template_coverage`, `sam_segment_count_match`.
+
+### Stage 4: Correlation and Ablation
+Correlate intrinsic metrics with true mIoU across BO trials. Find which intrinsics are predictive.
+
+### Stage 5: Learned mIoU Predictor (Layer B)
+Train regressor to predict mIoU from intrinsic metrics + tunnel context. See `p4tun/bo/predictor.py`.
+
+### Stage 6: Guardrails (Layer A) + Proxy BO
+Hard thresholds on intrinsic metrics + predicted mIoU as BO objective. Validate proxy-BO vs true-BO. See `p4tun/bo/no_gt_optimizer.py` and `p4tun/bo/proxy_bo_experiment.py`.
+
+### Stage 7: Deploy on New Tunnels
+Run pipeline, extract intrinsics, check guardrails, use predictor as BO objective. No GT needed.
+
+## Current State (updated 2026-02-21)
+
+### Preprocessing
+- BO with GT completed for simple_staggered and continuous tunnels.
+- Intrinsic metrics implemented in `agents/*/1_preprocessing/scripts/extract_intrinsics.py`.
+- Proxy objective designed: hard gate on `pre_ready_for_detection`, margin tie-break (retention 0.5, depth 0.4, theta 0.1).
+- Knowledge docs complete for complex_staggered: `intrinsics.md`, `tuning.md`, `intrinsic_metrics_analysis.md`.
+- **5-1 pixel_to_point.pkl:** Enhanced (1.5M entries, 100% GT coverage) but hurts SAM by ~0.08 mIoU (246k BG points misclassified). Original backed up to `pixel_to_point_original.pkl`. Should revert to original for SAM, handle pred=0 points post-segmentation.
+
+### Detection
+- BO with GT completed for complex_staggered (4-1, 5-1). For 5-1: offset BO, mean drift 948px → 317px; rings 1, 5, 6 higher drift.
+- **Skipped for now:** Using `all_segments_gt.csv` (GT centres) to isolate segmentation quality.
+
+### SAM
+- BO with GT completed for multiple tunnels. Geometric BO (intrinsic groove alignment, no GT) implemented.
+- **SAM real masks fail (0.176 mIoU):** SAM's vision model cannot reliably segment tunnel blocks from depth map. Template fallback (rectangular masks + distance-transform logits) consistently outperforms SAM's actual predictions.
+- **Template fallback with non-wrap P90 params: 0.429 mIoU** (0.506 excluding pred=0 points). Still below geometric bboxes (0.672). Gap explained by shared per-type templates vs per-instance GT boxes.
+- **Geometric bboxes remain strongest baseline: 0.672 mIoU.**
+- Wrap-around (8/49 blocks) is not the main bottleneck; SAM approach itself is weaker than geometric.
+
+### Active Work
+- Journal: `docs/journal_2026-02-21.md`.
+- Next: revert pixel_to_point to original for SAM; try per-instance template sizes; investigate SAM mask quality; or pivot to improving geometric segmentation approach.
+
+## Available Tunnels
+
+| Tunnel | Pattern | Segments/Ring | Agent Type |
+|--------|---------|---------------|------------|
+| 1-4 | simple_staggered | 6 | simple_staggered |
+| 2-2 | simple_staggered | 6 | simple_staggered |
+| 3-1 | continuous | 6 | continuous |
+| 4-1 | complex_staggered | 7 | complex_staggered |
+| 5-1 | complex_staggered | 7 | complex_staggered |
