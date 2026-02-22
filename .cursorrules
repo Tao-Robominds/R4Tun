@@ -67,20 +67,48 @@ Hard thresholds on intrinsic metrics + predicted mIoU as BO objective. Validate 
 ### Stage 7: Deploy on New Tunnels
 Run pipeline, extract intrinsics, check guardrails, use predictor as BO objective. No GT needed.
 
-## Current State (updated 2026-02-21)
+## Current State (updated 2026-02-22)
 
-### Preprocessing
-- BO with GT completed for simple_staggered and continuous tunnels.
+### Regular Agent Pipeline (Simple Staggered: 1-4, 2-2, 3-1)
+**Status: ✅ Complete with intrinsic metrics for all stages**
+
+#### Preprocessing
+- Intrinsic metrics implemented: `pre_theta_coverage_pct` [98%, 108%], `pre_point_retention_pct` [65%, 98%], `pre_depth_map_valid_pixels` [8k, 35k], `pre_depth_map_max_empty_row_run` [<=100 rows]
+- Guardrails validated on all 3 tunnels (1-4, 2-2, 3-1)
+- Tunnel 3-1: Fixed `tunnel_diameter` misconfiguration (5.5m → 5.89m), `theta_coverage` now 105.6% (within range)
+- Implementation: `agents/regular/1_preprocessing/scripts/extract_intrinsics.py`
+- Documentation: `agents/regular/1_preprocessing/knowledge/intrinsics.md`
+
+#### Detection
+- Fixed `compute_ring_centers` to ensure exactly `ring_count` positions (was stopping at ring_count-1)
+- Intrinsic metrics implemented: `det_k_count_match` (== ring_count), `det_x_spacing_cv` [<=0.15], `det_midpoint_ratio` [>=0.50], `det_y_pattern_consistency` [<=3.0%]
+- Tunnel 1-4: Fixed to produce 10 uniform K positions (was 9)
+- All tunnels pass guardrails
+- Implementation: `agents/regular/2_detection/scripts/extract_intrinsics.py`
+- Documentation: `agents/regular/2_detection/knowledge/intrinsics.md`
+
+#### SAM Segmentation
+- Intrinsic metrics implemented: `sam_segment_type_completeness` (== True), `sam_ring_completeness_avg` [>=0.85], `sam_mask_coverage_pct` [55%, 90%], `sam_k_size_ratio` [3%, 20%]
+- Metrics validated with correlation data from `reports/INTRINSIC_METRICS_REPORT.md` (sam_mask_fill_rate r=-0.82, ring_completeness r≈0.80)
+- All tunnels pass guardrails
+- Implementation: `agents/regular/3_segmentation/scripts/extract_intrinsics.py`
+- Documentation: `agents/regular/3_segmentation/knowledge/intrinsics.md`
+
+**Release:** `v0.1.0-regular-pipeline` (2026-02-22)
+
+### Complex Staggered Agent (4-1, 5-1)
+#### Preprocessing
+- BO with GT completed for complex_staggered tunnels.
 - Intrinsic metrics implemented in `agents/*/1_preprocessing/scripts/extract_intrinsics.py`.
 - Proxy objective designed: hard gate on `pre_ready_for_detection`, margin tie-break (retention 0.5, depth 0.4, theta 0.1).
-- Knowledge docs complete for complex_staggered: `intrinsics.md`, `tuning.md`, `intrinsic_metrics_analysis.md`.
+- Knowledge docs complete: `intrinsics.md`, `tuning.md`, `intrinsic_metrics_analysis.md`.
 - **5-1 pixel_to_point.pkl:** Enhanced (1.5M entries, 100% GT coverage) but hurts SAM by ~0.08 mIoU (246k BG points misclassified). Original backed up to `pixel_to_point_original.pkl`. Should revert to original for SAM, handle pred=0 points post-segmentation.
 
-### Detection
+#### Detection
 - BO with GT completed for complex_staggered (4-1, 5-1). For 5-1: offset BO, mean drift 948px → 317px; rings 1, 5, 6 higher drift.
 - **Skipped for now:** Using `all_segments_gt.csv` (GT centres) to isolate segmentation quality.
 
-### SAM
+#### SAM
 - BO with GT completed for multiple tunnels. Geometric BO (intrinsic groove alignment, no GT) implemented.
 - **SAM real masks fail (0.176 mIoU):** SAM's vision model cannot reliably segment tunnel blocks from depth map. Template fallback (rectangular masks + distance-transform logits) consistently outperforms SAM's actual predictions.
 - **Template fallback with non-wrap P90 params: 0.429 mIoU** (0.506 excluding pred=0 points). Still below geometric bboxes (0.672). Gap explained by shared per-type templates vs per-instance GT boxes.
@@ -88,8 +116,9 @@ Run pipeline, extract intrinsics, check guardrails, use predictor as BO objectiv
 - Wrap-around (8/49 blocks) is not the main bottleneck; SAM approach itself is weaker than geometric.
 
 ### Active Work
-- Journal: `docs/journal_2026-02-21.md`.
-- Next: revert pixel_to_point to original for SAM; try per-instance template sizes; investigate SAM mask quality; or pivot to improving geometric segmentation approach.
+- Journal: `docs/journal_2026-02-22.md`.
+- **Next for regular agent:** Bayesian optimization for tunnel 3-1 (detection and SAM stages only) to recover mIoU from 0.6362 to >= 0.6866 baseline.
+- **Next for complex agent:** Revert pixel_to_point to original for SAM; try per-instance template sizes; investigate SAM mask quality; or pivot to improving geometric segmentation approach.
 
 ## Available Tunnels
 
