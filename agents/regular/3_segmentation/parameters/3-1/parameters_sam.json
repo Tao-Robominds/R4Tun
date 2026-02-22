@@ -1,0 +1,21 @@
+{
+    "resolution": 0.005,
+    "segment_width": 1173.8518119314012,
+    "k_height": 1182.748658549405,
+    "ab_height": 3412.747161340345,
+    "angle_deg": 6.56927274912035,
+    "k_mask_width": 689.1762183170966,
+    "k_mask_height_pos": 666.5096744242014,
+    "k_mask_height_neg": 669.0353372126206,
+    "ab_mask_width": 626.1815352812997,
+    "ab_mask_height": 1741.367975125928,
+    "b1_height_top": 1741.367975125928,
+    "b1_height_bottom_pos": 1650.07899,
+    "b1_height_bottom_neg": 1819.7146799999998,
+    "b2_height_top_pos": 1650.07899,
+    "b2_height_top_neg": 1819.7146799999998,
+    "b2_height_bottom": 1741.367975125928,
+    "padding": 140,
+    "crop_margin": 78,
+    "min_quality_threshold": 0.3646236274007616
+}

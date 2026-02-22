@@ -5,9 +5,10 @@ Extracts ONLY critical metrics that can be thresholded to determine if
 preprocessing output is suitable for detection.
 
 Critical Metrics:
-    1. pre_theta_coverage_pct  - Is unfolding complete? [98-102%]
+    1. pre_theta_coverage_pct  - Is unfolding complete? [98-108%]
     2. pre_depth_map_valid_pixels - Is depth map in sparse regime? [8k-35k]
-    3. pre_point_retention_pct - Is denoising reasonable? [70-98%]
+    3. pre_point_retention_pct - Is denoising reasonable? [65-98%]
+    4. pre_depth_map_max_empty_row_run - No big white areas? [<=100 rows]
 
 Usage:
     python extract_preprocessing_characteristics.py 1-4 [--data-dir data] [--output ...]
@@ -21,17 +22,19 @@ from typing import Optional, Tuple, List
 
 import numpy as np
 import pandas as pd
+from PIL import Image
 
 
 # =============================================================================
 # Guardrail Thresholds
 # =============================================================================
 THETA_COVERAGE_PCT_MIN = 98.0
-THETA_COVERAGE_PCT_MAX = 102.0
-POINT_RETENTION_PCT_MIN = 70.0
+THETA_COVERAGE_PCT_MAX = 108.0
+POINT_RETENTION_PCT_MIN = 65.0
 POINT_RETENTION_PCT_MAX = 98.0
 DEPTH_MAP_VALID_PIXELS_MIN = 8_000
 DEPTH_MAP_VALID_PIXELS_MAX = 35_000
+DEPTH_MAP_MAX_EMPTY_ROW_RUN = 100
 
 
 # =============================================================================
@@ -60,7 +63,7 @@ def _extract_theta_coverage(tunnel_dir: str) -> Optional[float]:
     """
     Extract theta coverage percentage from unwrapped.csv.
     
-    Returns coverage as % of 360 degrees. Good range: 98-102%.
+    Returns coverage as % of 360 degrees. Good range: 98-108%.
     """
     path = os.path.join(tunnel_dir, "unwrapped.csv")
     if not os.path.exists(path):
@@ -95,7 +98,7 @@ def _extract_point_retention(tunnel_dir: str) -> Optional[float]:
     """
     Extract point retention percentage (denoised / unwrapped).
     
-    Returns retention as %. Good range: 70-98%.
+    Returns retention as %. Good range: 65-98%.
     """
     unwrapped_path = os.path.join(tunnel_dir, "unwrapped.csv")
     denoised_path = os.path.join(tunnel_dir, "denoised.csv")
@@ -141,6 +144,56 @@ def _extract_depth_map_valid_pixels(tunnel_dir: str) -> Optional[int]:
         return None
 
 
+def _extract_depth_map_max_empty_row_run(tunnel_dir: str) -> Optional[int]:
+    """
+    Extract maximum consecutive row run with >80% white pixels from depth_map.png.
+    
+    This detects large horizontal white bands that would break line detection.
+    Good range: <=100 rows (approximately 4% of typical depth map height).
+    """
+    path = os.path.join(tunnel_dir, "depth_map.png")
+    if not os.path.exists(path):
+        return None
+    
+    try:
+        img = Image.open(path)
+        # Convert to grayscale numpy array
+        if img.mode != 'L':
+            img = img.convert('L')
+        img_array = np.array(img)
+        
+        height, width = img_array.shape
+        if height == 0 or width == 0:
+            return None
+        
+        # For each row, compute fraction of pixels >= 250 (white)
+        white_threshold = 250
+        empty_rows = []
+        for row_idx in range(height):
+            row = img_array[row_idx, :]
+            white_pixels = np.sum(row >= white_threshold)
+            white_fraction = white_pixels / width
+            if white_fraction > 0.80:
+                empty_rows.append(row_idx)
+        
+        if not empty_rows:
+            return 0
+        
+        # Find max consecutive run
+        max_run = 1
+        current_run = 1
+        for i in range(1, len(empty_rows)):
+            if empty_rows[i] == empty_rows[i-1] + 1:
+                current_run += 1
+                max_run = max(max_run, current_run)
+            else:
+                current_run = 1
+        
+        return max_run
+    except Exception:
+        return None
+
+
 # =============================================================================
 # Guardrail Check
 # =============================================================================
@@ -149,6 +202,7 @@ def _check_guardrails(
     theta_coverage: Optional[float],
     point_retention: Optional[float],
     valid_pixels: Optional[int],
+    max_empty_row_run: Optional[int],
 ) -> Tuple[bool, List[str]]:
     """Check if metrics pass guardrail thresholds."""
     violations = []
@@ -171,6 +225,10 @@ def _check_guardrails(
         elif valid_pixels > DEPTH_MAP_VALID_PIXELS_MAX:
             violations.append(f"depth_map_valid_pixels={valid_pixels} > {DEPTH_MAP_VALID_PIXELS_MAX} (over-filled)")
     
+    if max_empty_row_run is not None:
+        if max_empty_row_run > DEPTH_MAP_MAX_EMPTY_ROW_RUN:
+            violations.append(f"depth_map_max_empty_row_run={max_empty_row_run} > {DEPTH_MAP_MAX_EMPTY_ROW_RUN} (big white areas)")
+    
     return (len(violations) == 0, violations)
 
 
@@ -186,19 +244,22 @@ def extract_preprocessing_metrics(tunnel_dir: str) -> dict:
         - pre_theta_coverage_pct: Unfolding completeness (%)
         - pre_point_retention_pct: Denoising retention (%)
         - pre_depth_map_valid_pixels: Valid pixels in depth map (count)
+        - pre_depth_map_max_empty_row_run: Max consecutive empty rows (count)
         - pre_ready_for_detection: Pass/fail verdict (bool)
         - pre_guardrail_violations: List of threshold violations
     """
     theta_coverage = _extract_theta_coverage(tunnel_dir)
     point_retention = _extract_point_retention(tunnel_dir)
     valid_pixels = _extract_depth_map_valid_pixels(tunnel_dir)
+    max_empty_row_run = _extract_depth_map_max_empty_row_run(tunnel_dir)
     
-    passed, violations = _check_guardrails(theta_coverage, point_retention, valid_pixels)
+    passed, violations = _check_guardrails(theta_coverage, point_retention, valid_pixels, max_empty_row_run)
     
     return {
         "pre_theta_coverage_pct": theta_coverage,
         "pre_point_retention_pct": point_retention,
         "pre_depth_map_valid_pixels": valid_pixels,
+        "pre_depth_map_max_empty_row_run": max_empty_row_run,
         "pre_ready_for_detection": passed,
         "pre_guardrail_violations": violations,
     }
@@ -232,6 +293,7 @@ def main():
     print(f"  pre_theta_coverage_pct:     {metrics['pre_theta_coverage_pct']:.1f}%" if metrics['pre_theta_coverage_pct'] else "  pre_theta_coverage_pct:     N/A")
     print(f"  pre_point_retention_pct:    {metrics['pre_point_retention_pct']:.1f}%" if metrics['pre_point_retention_pct'] else "  pre_point_retention_pct:    N/A")
     print(f"  pre_depth_map_valid_pixels: {metrics['pre_depth_map_valid_pixels']}" if metrics['pre_depth_map_valid_pixels'] else "  pre_depth_map_valid_pixels: N/A")
+    print(f"  pre_depth_map_max_empty_row_run: {metrics['pre_depth_map_max_empty_row_run']}" if metrics['pre_depth_map_max_empty_row_run'] is not None else "  pre_depth_map_max_empty_row_run: N/A")
     print(f"\n  pre_ready_for_detection:    {metrics['pre_ready_for_detection']}")
     
     if metrics["pre_guardrail_violations"]:

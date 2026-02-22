@@ -1,0 +1,18 @@
+{
+    "binary_threshold": 154,
+    "dilation_kernel_size": 2,
+    "dilation_iterations": 1,
+    "hough_oblique_threshold": 74,
+    "hough_oblique_min_length": 76,
+    "hough_oblique_max_gap": 73,
+    "angle_positive_min": 4.269990237917155,
+    "angle_positive_max": 8.236108435235563,
+    "angle_negative_min": -8.236108435235563,
+    "angle_negative_max": -4.269990237917155,
+    "hough_vertical_threshold": 780,
+    "hough_horizontal_threshold": 29,
+    "hough_horizontal_min_length": 63,
+    "hough_horizontal_max_gap": 22,
+    "horizontal_angle_tolerance": 1.5068366168366027,
+    "merge_distance_threshold": 1.442772520632532
+}

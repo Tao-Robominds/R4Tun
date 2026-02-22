@@ -373,15 +373,26 @@ def compute_ring_centers(
             all_mid_lines.insert(0, (x, leftmost_theta))
             x -= avg_distance
         
-        # Extend right
+        # Extend right - continue until we have enough or exceed W
         rightmost_x, rightmost_theta = mid_lines[-1]
         x = rightmost_x + avg_distance
         while x <= W:
             all_mid_lines.append((x, rightmost_theta))
             x += avg_distance
     
+    # Ensure we have exactly ring_count positions
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
     x_positions = [x for x, _ in all_mid_lines]
+    
+    # If we still don't have enough, add more positions using uniform spacing
+    if len(x_positions) < ring_count:
+        # Use uniform spacing from the first position
+        if x_positions:
+            first_x = x_positions[0]
+            # Generate all positions from first_x with uniform spacing
+            x_positions = [first_x + i * avg_distance for i in range(ring_count)]
+            # Filter to only positions within [0, W]
+            x_positions = [x for x in x_positions if 0 <= x <= W]
     
     return x_positions
 
@@ -687,6 +698,9 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     print(f"\n[Step 2] Computing ring centers...")
     ring_centers = compute_ring_centers(line_data, ring_count, ring_spacing, resolution)
     print(f"  Found {len(ring_centers)} ring centers")
+    if len(ring_centers) != ring_count:
+        print(f"  WARNING: Expected {ring_count} ring centers, got {len(ring_centers)}")
+        print(f"  Ring centers: {[f'{x:.1f}' for x in ring_centers]}")
     
     print(f"\n[Step 3] Calculating K positions...")
     k_positions = calculate_k_positions(
