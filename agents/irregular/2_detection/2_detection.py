@@ -943,6 +943,358 @@ def calculate_k_positions_geometric(
     return df.sort_values(by='X').reset_index(drop=True)
 
 
+# =============================================================================
+# Multi-Source K Y Detection Helpers
+# =============================================================================
+
+def _column_profile_candidates(
+    depth_map: np.ndarray,
+    band_center: float,
+    strip_half_width: float,
+    k_expected_height_px: float,
+    k_gap_tolerance_px: float,
+    col_grad_threshold: float,
+    col_blur_ksize: int,
+    img_height: int,
+) -> List[Tuple[float, float, float]]:
+    """Extract K Y candidates from depth map column gradient profile.
+    
+    Args:
+        depth_map: 2D depth map (H x W)
+        band_center: X coordinate of ring band center
+        strip_half_width: Half-width of column strip to analyze
+        k_expected_height_px: Expected K block height in pixels
+        k_gap_tolerance_px: Max allowed deviation from expected height
+        col_grad_threshold: Threshold for gradient peaks (groove detection)
+        col_blur_ksize: Gaussian blur kernel size (odd, >= 1)
+        img_height: Image height for wrap-aware distance
+        
+    Returns:
+        List of (gap_err, gap, midpoint_y) candidates sorted by gap_err
+    """
+    H, W = depth_map.shape
+    x_center = int(band_center)
+    x_lo = max(0, int(x_center - strip_half_width))
+    x_hi = min(W, int(x_center + strip_half_width))
+    
+    if x_hi <= x_lo:
+        return []
+    
+    # Extract column strip
+    column_strip = depth_map[:, x_lo:x_hi].mean(axis=1).astype(np.float32)
+    
+    # Apply Gaussian blur if requested
+    if col_blur_ksize > 1 and col_blur_ksize % 2 == 1:
+        column_strip = cv2.GaussianBlur(column_strip.reshape(-1, 1), (col_blur_ksize, 1), 0).flatten()
+    
+    # Compute vertical gradient (Sobel-Y)
+    grad = np.abs(np.diff(column_strip))
+    
+    # Find gradient peaks (groove locations)
+    peaks = np.where(grad > col_grad_threshold)[0]
+    
+    if len(peaks) < 2:
+        return []
+    
+    # Cluster nearby peaks
+    clusters = [[peaks[0]]]
+    for p in peaks[1:]:
+        if p - clusters[-1][-1] < 20:  # Merge peaks within 20px
+            clusters[-1].append(p)
+        else:
+            clusters.append([p])
+    
+    groove_ys = [float(np.mean(c)) for c in clusters]
+    
+    # Find pairs matching K block height
+    candidates = []
+    
+    def _wrap_dist_y(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, img_height - d)
+    
+    def _wrap_midpoint(a: float, b: float) -> float:
+        if abs(a - b) <= img_height / 2:
+            return (a + b) / 2.0
+        return ((a + b) / 2.0 + img_height / 2.0) % img_height
+    
+    for i, py in enumerate(groove_ys):
+        for j, ny in enumerate(groove_ys):
+            if i >= j:
+                continue
+            gap = _wrap_dist_y(py, ny)
+            gap_err = abs(gap - k_expected_height_px)
+            if gap_err <= k_gap_tolerance_px:
+                mid = _wrap_midpoint(py, ny)
+                candidates.append((gap_err, gap, mid))
+    
+    # Sort by gap error
+    candidates.sort(key=lambda c: c[0])
+    return candidates
+
+
+def _hline_density_candidates(
+    line_data: Dict,
+    band_center: float,
+    half_width: float,
+    k_expected_height_px: float,
+    k_gap_tolerance_px: float,
+    img_height: int,
+    density_window: int = 50,
+) -> List[Tuple[float, float, float]]:
+    """Extract K Y candidates from horizontal line density voting.
+    
+    Args:
+        line_data: Output from detect_lines() containing horizontal_lines
+        band_center: X coordinate of ring band center
+        half_width: Half-width of band
+        k_expected_height_px: Expected K block height in pixels
+        k_gap_tolerance_px: Max allowed deviation from expected height
+        img_height: Image height for wrap-aware distance
+        density_window: Y window size for density computation
+        
+    Returns:
+        List of (gap_err, gap, midpoint_y) candidates sorted by gap_err
+    """
+    horizontal_lines = line_data.get('horizontal_lines', [])
+    if len(horizontal_lines) < 2:
+        return []
+    
+    # Collect horizontal line Y positions within band
+    hline_ys = []
+    for x1, y1, x2, y2 in horizontal_lines:
+        # Check if line intersects the band
+        x_min, x_max = min(x1, x2), max(x1, x2)
+        if x_min <= band_center + half_width and x_max >= band_center - half_width:
+            # Use midpoint Y
+            y_mid = (y1 + y2) / 2.0
+            if 0 <= y_mid < img_height:
+                hline_ys.append(y_mid)
+    
+    if len(hline_ys) < 2:
+        return []
+    
+    # Compute density histogram
+    bins = np.arange(0, img_height + density_window, density_window)
+    hist, bin_edges = np.histogram(hline_ys, bins=bins)
+    
+    # Find density peaks (regions with many horizontal lines)
+    peak_bins = []
+    for i in range(1, len(hist) - 1):
+        if hist[i] > hist[i-1] and hist[i] > hist[i+1] and hist[i] > 0:
+            peak_bins.append((bin_edges[i] + bin_edges[i+1]) / 2.0)
+    
+    if len(peak_bins) < 2:
+        return []
+    
+    # Find pairs matching K block height
+    candidates = []
+    
+    def _wrap_dist_y(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, img_height - d)
+    
+    def _wrap_midpoint(a: float, b: float) -> float:
+        if abs(a - b) <= img_height / 2:
+            return (a + b) / 2.0
+        return ((a + b) / 2.0 + img_height / 2.0) % img_height
+    
+    for i, py in enumerate(peak_bins):
+        for j, ny in enumerate(peak_bins):
+            if i >= j:
+                continue
+            gap = _wrap_dist_y(py, ny)
+            gap_err = abs(gap - k_expected_height_px)
+            if gap_err <= k_gap_tolerance_px:
+                mid = _wrap_midpoint(py, ny)
+                # Use density as confidence (higher density = better)
+                bin_i = int(py / density_window)
+                bin_j = int(ny / density_window)
+                density_score = (hist[bin_i] if bin_i < len(hist) else 0) + (hist[bin_j] if bin_j < len(hist) else 0)
+                candidates.append((gap_err, gap, mid, density_score))
+    
+    # Sort by gap error, then by density
+    candidates.sort(key=lambda c: (c[0], -c[3]))
+    # Return without density score for consistency
+    return [(c[0], c[1], c[2]) for c in candidates]
+
+
+def _fuse_candidates(
+    groove_pair_candidates: List[Tuple[float, float, float]],
+    column_candidates: List[Tuple[float, float, float]],
+    hline_candidates: List[Tuple[float, float, float]],
+    groove_ys: List[float],
+    ring_idx: int,
+    ring_to_group: Dict[int, str],
+    group_offsets: Dict[str, float],
+    expansion_blocks: List[str],
+    groove_snap_px: float,
+    img_height: int,
+    w_gap: float,
+    w_groove: float,
+    w_column: float,
+    w_hline: float,
+    top_n: int,
+) -> List[Tuple[float, float, float, float]]:
+    """Fuse candidates from multiple sources with weighted scoring.
+    
+    Returns:
+        List of (fusion_score, gap_err, gap, midpoint_y) sorted by fusion_score descending
+    """
+    def _wrap_dist_y(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, img_height - d)
+    
+    def _groove_alignment_score(
+        k_y: float,
+        ring_idx: int,
+        groove_ys: List[float],
+    ) -> float:
+        """Compute groove alignment score (same as groove_pair method)."""
+        default_group = list(ring_to_group.values())[0] if ring_to_group else "A"
+        group = ring_to_group.get(ring_idx, default_group)
+        total = 0.0
+        for block in expansion_blocks:
+            key = f"{group}_{block}"
+            offset = group_offsets.get(key, 0.0)
+            block_y = (k_y + offset) % img_height
+            min_dist = min((_wrap_dist_y(block_y, gy) for gy in groove_ys),
+                           default=groove_snap_px + 1)
+            if min_dist <= groove_snap_px:
+                total += 1.0 + (groove_snap_px - min_dist) / groove_snap_px
+        return total
+    
+    # Collect all candidates with source tags
+    all_candidates = []
+    
+    # Groove-pair candidates
+    for gap_err, gap, mid in groove_pair_candidates:
+        gap_quality = 1.0 - (gap_err / 200.0)  # Normalize to [0, 1]
+        groove_score = _groove_alignment_score(mid, ring_idx, groove_ys)
+        groove_norm = groove_score / 12.0  # Normalize to [0, 1]
+        fusion = w_gap * gap_quality + w_groove * groove_norm
+        all_candidates.append((fusion, gap_err, gap, mid, 'groove_pair'))
+    
+    # Column-profile candidates
+    for gap_err, gap, mid in column_candidates:
+        gap_quality = 1.0 - (gap_err / 200.0)
+        groove_score = _groove_alignment_score(mid, ring_idx, groove_ys)
+        groove_norm = groove_score / 12.0
+        column_conf = 0.8  # Column profile has good confidence
+        fusion = w_gap * gap_quality + w_groove * groove_norm + w_column * column_conf
+        all_candidates.append((fusion, gap_err, gap, mid, 'column'))
+    
+    # Horizontal-line candidates
+    for gap_err, gap, mid in hline_candidates:
+        gap_quality = 1.0 - (gap_err / 200.0)
+        groove_score = _groove_alignment_score(mid, ring_idx, groove_ys)
+        groove_norm = groove_score / 12.0
+        hline_conf = 0.6  # Horizontal lines are less reliable
+        fusion = w_gap * gap_quality + w_groove * groove_norm + w_hline * hline_conf
+        all_candidates.append((fusion, gap_err, gap, mid, 'hline'))
+    
+    # Deduplicate: merge candidates within 30px
+    all_candidates.sort(key=lambda c: -c[0])  # Sort by fusion score descending
+    deduped = []
+    for fusion, gap_err, gap, mid, source in all_candidates:
+        is_dup = False
+        for existing_fusion, _, _, existing_mid in deduped:
+            if _wrap_dist_y(mid, existing_mid) < 30:
+                is_dup = True
+                break
+        if not is_dup:
+            deduped.append((fusion, gap_err, gap, mid))
+        if len(deduped) >= top_n:
+            break
+    
+    return deduped
+
+
+def _dp_inter_ring_consistency(
+    per_ring_candidates: List[List[Tuple[float, float, float, float]]],
+    ring_count: int,
+    img_height: int,
+    consistency_weight: float,
+    stagger_penalty_scale: float,
+) -> List[int]:
+    """Viterbi/DP to select best candidate per ring with inter-ring consistency.
+    
+    Args:
+        per_ring_candidates: List of lists, each inner list is (fusion_score, gap_err, gap, mid) for that ring
+        ring_count: Number of rings
+        img_height: Image height for wrap-aware distance
+        consistency_weight: Weight for consistency penalty (higher = more consistent)
+        stagger_penalty_scale: Scale factor for stagger pattern penalty
+        
+    Returns:
+        List of candidate indices (one per ring)
+    """
+    if ring_count == 0:
+        return []
+    
+    # Ensure all rings have at least one candidate
+    for i, candidates in enumerate(per_ring_candidates):
+        if len(candidates) == 0:
+            # Add fallback candidate at image center
+            per_ring_candidates[i] = [(0.0, 0.0, 0.0, img_height / 2.0)]
+    
+    def _wrap_dist_y(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, img_height - d)
+    
+    # DP state: (ring_idx, candidate_idx) -> best_score
+    # Track backpointers for reconstruction
+    dp = {}  # (ring, cand_idx) -> (best_score, prev_ring, prev_cand_idx)
+    
+    # Initialize first ring
+    for cand_idx, (fusion, gap_err, gap, mid) in enumerate(per_ring_candidates[0]):
+        dp[(0, cand_idx)] = (fusion, -1, -1)
+    
+    # Forward pass
+    for ring in range(1, ring_count):
+        for cand_idx, (fusion, gap_err, gap, mid) in enumerate(per_ring_candidates[ring]):
+            best_score = -float('inf')
+            best_prev = None
+            
+            # Try all previous ring candidates
+            for prev_cand_idx, (prev_fusion, prev_gap_err, prev_gap, prev_mid) in enumerate(per_ring_candidates[ring - 1]):
+                prev_score, _, _ = dp[(ring - 1, prev_cand_idx)]
+                
+                # Transition cost: penalize large jumps
+                y_jump = _wrap_dist_y(mid, prev_mid)
+                # Expected stagger: rings can have large jumps, but penalize extreme ones
+                # Typical stagger jump: 0-2000px, extreme: >3000px
+                if y_jump > 3000:
+                    transition_penalty = consistency_weight * (y_jump - 3000) / 1000.0 * stagger_penalty_scale
+                else:
+                    transition_penalty = 0.0
+                
+                score = prev_score + fusion - transition_penalty
+                if score > best_score:
+                    best_score = score
+                    best_prev = (ring - 1, prev_cand_idx)
+            
+            dp[(ring, cand_idx)] = (best_score, best_prev[0], best_prev[1])
+    
+    # Backward pass: find best path
+    best_final = max(
+        [(ring_count - 1, cand_idx) for cand_idx in range(len(per_ring_candidates[ring_count - 1]))],
+        key=lambda k: dp[k][0]
+    )
+    
+    path = []
+    current = best_final
+    while current[0] >= 0:
+        path.append(current[1])  # candidate index
+        _, prev_ring, prev_cand = dp[current]
+        if prev_ring < 0:
+            break
+        current = (prev_ring, prev_cand)
+    
+    path.reverse()
+    return path
+
+
 def calculate_k_positions_groove_pair(
     line_data: Dict,
     ring_count: int,
@@ -1154,6 +1506,220 @@ def calculate_k_positions_groove_pair(
 
     df = pd.DataFrame(k_positions, columns=['Type', 'X', 'Y', 'Confidence'])
     # Attach groove alignment metadata for intrinsic scoring
+    df.attrs['groove_alignment_total'] = float(groove_total)
+    df.attrs['groove_alignment_max'] = float(groove_max)
+    df.attrs['groove_alignment_pct'] = (
+        groove_total / groove_max * 100 if groove_max > 0 else 0.0
+    )
+    df.attrs['groove_scores_per_ring'] = [float(s) for s in groove_scores]
+    return df.sort_values(by='X').reset_index(drop=True)
+
+
+def calculate_k_positions_multisource(
+    line_data: Dict,
+    depth_map: np.ndarray,
+    ring_count: int,
+    k_height_mm: float,
+    resolution: float,
+    params: Dict,
+) -> pd.DataFrame:
+    """Multi-source K Y detection combining groove-pair, column-profile, and horizontal-line signals.
+    
+    Algorithm:
+      1. For each ring, collect candidates from 3 sources:
+         - Groove-pair (oblique line crossings)
+         - Column-profile (depth gradient)
+         - Horizontal-line density
+      2. Fuse candidates with weighted scoring
+      3. Apply inter-ring consistency (Viterbi/DP) to select best path
+      4. Return K positions with confidence scores
+    
+    BO-tunable parameters:
+      - Column-profile: col_strip_half_width, col_grad_threshold, col_blur_ksize
+      - Fusion weights: w_gap, w_groove, w_column, w_hline, top_n_candidates
+      - Inter-ring: consistency_weight, stagger_penalty_scale
+      - Groove-pair (reused): k_expected_height_px, k_gap_tolerance_px, groove_snap_px
+    
+    Returns:
+        DataFrame with columns Type, X, Y, Confidence (one row per ring).
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+    
+    ring_offset = params.get('ring_offset', W / (2 * ring_count))
+    ring_spacing_px = params.get('ring_spacing_px', W / ring_count)
+    half_width = abs(ring_spacing_px) * 0.5
+    
+    # BO-tunable parameters
+    k_expected_height_px = params.get(
+        'k_expected_height_px',
+        (k_height_mm / 1000.0) / resolution / 2.0
+    )
+    k_gap_tolerance_px = params.get('k_gap_tolerance_px', 150.0)
+    groove_snap_px = params.get('groove_snap_px', 60.0)
+    
+    # Column-profile parameters
+    col_strip_half_width = params.get('col_strip_half_width', 10.0)
+    col_grad_threshold = params.get('col_grad_threshold', 15.0)
+    col_blur_ksize = int(params.get('col_blur_ksize', 5))
+    
+    # Fusion weights
+    w_gap = params.get('w_gap', 0.3)
+    w_groove = params.get('w_groove', 0.4)
+    w_column = params.get('w_column', 0.2)
+    w_hline = params.get('w_hline', 0.1)
+    top_n_candidates = int(params.get('top_n_candidates', 12))
+    
+    # Inter-ring consistency
+    consistency_weight = params.get('consistency_weight', 0.5)
+    stagger_penalty_scale = params.get('stagger_penalty_scale', 1.0)
+    
+    # Grouped offsets for groove alignment scoring
+    stagger_groups = params.get('stagger_groups', {})
+    group_offsets = params.get('group_offsets', {})
+    ring_to_group: Dict[int, str] = {}
+    default_group = list(stagger_groups.keys())[0] if stagger_groups else "A"
+    for grp, ring_list in stagger_groups.items():
+        for r in ring_list:
+            ring_to_group[r] = grp
+    expansion_blocks = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+    
+    # Detect wide-angle oblique lines for groove-pair
+    positive_lines_wide, negative_lines_wide = detect_oblique_lines_wide_angle(
+        line_data['dilated_edges'], L, W, params
+    )
+    std_oblique = line_data['positive_lines'] + line_data['negative_lines']
+    
+    print(f"  [Multi-Source K Detection] ring_count={ring_count}, image={L}x{W}")
+    print(f"    Sources: groove-pair, column-profile, horizontal-line")
+    print(f"    Fusion weights: gap={w_gap:.2f}, groove={w_groove:.2f}, column={w_column:.2f}, hline={w_hline:.2f}")
+    
+    def _groove_crossings_at_x(x_center: float) -> List[float]:
+        """Y positions where standard oblique lines cross vertical x=x_center."""
+        crossings = []
+        for x1, y1, x2, y2 in std_oblique:
+            y_c = _line_crossing_y_at_x(x1, y1, x2, y2, x_center)
+            if y_c is not None and 0 <= y_c <= L:
+                crossings.append(y_c)
+        return sorted(crossings)
+    
+    # Collect candidates per ring from all sources
+    per_ring_candidates = []
+    
+    for i in range(ring_count):
+        band_center = ring_offset + i * ring_spacing_px
+        
+        # Source 1: Groove-pair (oblique line crossings)
+        pos_crossings = []
+        for x1, y1, x2, y2 in positive_lines_wide:
+            mid_x = (x1 + x2) / 2.0
+            if band_center - half_width <= mid_x <= band_center + half_width:
+                y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+                if y_c is not None and 0 <= y_c <= L:
+                    pos_crossings.append(y_c)
+        
+        neg_crossings = []
+        for x1, y1, x2, y2 in negative_lines_wide:
+            mid_x = (x1 + x2) / 2.0
+            if band_center - half_width <= mid_x <= band_center + half_width:
+                y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+                if y_c is not None and 0 <= y_c <= L:
+                    neg_crossings.append(y_c)
+        
+        def _wrap_dist_y(a: float, b: float) -> float:
+            d = abs(a - b)
+            return min(d, L - d)
+        
+        def _wrap_midpoint(a: float, b: float) -> float:
+            if abs(a - b) <= L / 2:
+                return (a + b) / 2.0
+            return ((a + b) / 2.0 + L / 2.0) % L
+        
+        groove_pair_cands = []
+        for py in pos_crossings:
+            for ny in neg_crossings:
+                gap = _wrap_dist_y(py, ny)
+                gap_err = abs(gap - k_expected_height_px)
+                if gap_err <= k_gap_tolerance_px:
+                    mid = _wrap_midpoint(py, ny)
+                    groove_pair_cands.append((gap_err, gap, mid))
+        groove_pair_cands.sort(key=lambda c: c[0])
+        
+        # Source 2: Column-profile
+        column_cands = _column_profile_candidates(
+            depth_map, band_center, col_strip_half_width,
+            k_expected_height_px, k_gap_tolerance_px,
+            col_grad_threshold, col_blur_ksize, L
+        )
+        
+        # Source 3: Horizontal-line density
+        hline_cands = _hline_density_candidates(
+            line_data, band_center, half_width,
+            k_expected_height_px, k_gap_tolerance_px, L
+        )
+        
+        # Fuse candidates
+        groove_ys = _groove_crossings_at_x(band_center)
+        fused = _fuse_candidates(
+            groove_pair_cands, column_cands, hline_cands,
+            groove_ys, i, ring_to_group, group_offsets, expansion_blocks,
+            groove_snap_px, L, w_gap, w_groove, w_column, w_hline, top_n_candidates
+        )
+        
+        per_ring_candidates.append(fused)
+    
+    # Inter-ring consistency (Viterbi/DP)
+    best_path = _dp_inter_ring_consistency(
+        per_ring_candidates, ring_count, L,
+        consistency_weight, stagger_penalty_scale
+    )
+    
+    # Extract final K positions
+    k_positions = []
+    groove_scores = []
+    for i in range(ring_count):
+        band_center = ring_offset + i * ring_spacing_px
+        if i < len(best_path) and best_path[i] < len(per_ring_candidates[i]):
+            fusion, gap_err, gap, y_k = per_ring_candidates[i][best_path[i]]
+            conf = min(1.0, 0.5 + 0.5 * fusion)  # Convert fusion score to confidence
+            det_type = 'multisource'
+            
+            # Compute groove alignment for reporting
+            groove_ys = _groove_crossings_at_x(band_center)
+            def _groove_alignment_score(k_y: float, ring_idx: int, groove_ys: List[float]) -> float:
+                group = ring_to_group.get(ring_idx, default_group)
+                total = 0.0
+                for block in expansion_blocks:
+                    key = f"{group}_{block}"
+                    offset = group_offsets.get(key, 0.0)
+                    block_y = (k_y + offset) % L
+                    min_dist = min((_wrap_dist_y(block_y, gy) for gy in groove_ys),
+                                   default=groove_snap_px + 1)
+                    if min_dist <= groove_snap_px:
+                        total += 1.0 + (groove_snap_px - min_dist) / groove_snap_px
+                return total
+            
+            groove_score = _groove_alignment_score(y_k, i, groove_ys)
+            groove_scores.append(groove_score)
+        else:
+            # Fallback: use banded median
+            banded_df = calculate_k_positions_banded(line_data, ring_count, params)
+            row = banded_df.iloc[i]
+            y_k = row['Y']
+            conf = float(row['Confidence']) * 0.4
+            det_type = 'multisource_fallback'
+            groove_scores.append(0.0)
+        
+        k_positions.append((det_type, band_center, y_k, conf))
+        print(f"    Ring {i}: X={band_center:.0f}, Y={y_k:.0f}, conf={conf:.2f} [{det_type}]")
+    
+    # Report summary
+    groove_total = sum(groove_scores)
+    groove_max = 12.0 * ring_count
+    print(f"    Groove alignment: {groove_total:.1f}/{groove_max:.0f} "
+          f"({groove_total / groove_max * 100:.1f}%)")
+    
+    df = pd.DataFrame(k_positions, columns=['Type', 'X', 'Y', 'Confidence'])
     df.attrs['groove_alignment_total'] = float(groove_total)
     df.attrs['groove_alignment_max'] = float(groove_max)
     df.attrs['groove_alignment_pct'] = (
@@ -1758,6 +2324,10 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
         k_positions = calculate_k_positions_groove_pair(
             line_data, ring_count, k_height_mm, resolution, params
         )
+    elif k_detection_method == 'multisource':
+        k_positions = calculate_k_positions_multisource(
+            line_data, depth_map_outlier, ring_count, k_height_mm, resolution, params
+        )
     else:
         k_positions = calculate_k_positions_complex_staggered(
             line_data, ring_count, k_height_mm, ab_height_mm, resolution, complex_params
@@ -1767,6 +2337,27 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     if 'Confidence' in k_positions.columns:
         print(f"  Average confidence: {k_positions['Confidence'].mean():.3f}")
         print(f"  Confidence range: [{k_positions['Confidence'].min():.3f}, {k_positions['Confidence'].max():.3f}]")
+    
+    # Optional: SAM validation and correction
+    use_sam_validation = params.get('use_sam_validation', False)
+    if use_sam_validation and k_detection_method == 'multisource':
+        print(f"\n[Step 2.5] SAM validation and correction...")
+        try:
+            from sam_validator import correct_uncertain_rings
+            stagger_groups = params.get('stagger_groups', {})
+            group_offsets = params.get('group_offsets', {})
+            sam_quality_threshold = params.get('sam_quality_threshold', 0.5)
+            correction_step_px = params.get('correction_step_px', 50.0)
+            max_shifts = int(params.get('max_shifts', 5))
+            
+            k_positions = correct_uncertain_rings(
+                k_positions, tunnel_id, base_dir,
+                sam_quality_threshold, correction_step_px, max_shifts,
+                group_offsets, stagger_groups
+            )
+            print(f"  SAM validation complete")
+        except Exception as e:
+            print(f"  Warning: SAM validation failed: {e}")
     
     # Optional: reverse ring order so ring 0 = right (high X), ring N-1 = left (low X), matching GT convention
     reverse_ring_order = params.get('reverse_ring_order', False)
