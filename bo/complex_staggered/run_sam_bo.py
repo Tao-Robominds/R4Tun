@@ -32,21 +32,25 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Extract agent_type from directory name
 DEFAULT_AGENT_TYPE = Path(__file__).parent.name
 
-# Import SAM functions
-sam_dir = PROJECT_ROOT / 'agents' / DEFAULT_AGENT_TYPE / '3_segmentation'
+# Map complex_staggered -> irregular for actual code path
+AGENT_CODE_PATH = 'irregular' if DEFAULT_AGENT_TYPE == 'complex_staggered' else DEFAULT_AGENT_TYPE
+
+# Import SAM functions (use irregular path for complex_staggered)
+sam_dir = PROJECT_ROOT / 'agents' / AGENT_CODE_PATH / '3_segmentation'
 sys.path.insert(0, str(sam_dir))
 
-spec = importlib.util.spec_from_file_location(
-    "sam",
-    os.path.join(sam_dir, "3_sam.py")
-)
+sam_file = sam_dir / "3_sam.py"
+if not sam_file.exists():
+    raise FileNotFoundError(f"SAM module not found: {sam_file}")
+
+spec = importlib.util.spec_from_file_location("sam", str(sam_file))
 sam_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sam_module)
 
 run_sam = sam_module.run_sam
 
 # Import evaluation for mIoU computation
-eval_dir = PROJECT_ROOT / 'agents' / DEFAULT_AGENT_TYPE
+eval_dir = PROJECT_ROOT / 'agents' / AGENT_CODE_PATH
 sys.path.insert(0, str(eval_dir))
 
 spec = importlib.util.spec_from_file_location(
@@ -269,9 +273,11 @@ class SamObjective:
         self.agent_type = agent_type
         
         self.tunnel_dir = os.path.join(data_dir, tunnel_id)
+        # Map agent_type to code path
+        code_path = 'irregular' if agent_type == 'complex_staggered' else agent_type
         self.params_dir = os.path.join(
             PROJECT_ROOT,
-            'agents', agent_type, '3_segmentation',
+            'agents', code_path, '3_segmentation',
             'parameters', tunnel_id
         )
         os.makedirs(self.params_dir, exist_ok=True)
@@ -538,9 +544,10 @@ def load_best_from_logs(
     
     # If no logs found, try to load from current parameters file
     if best_params is None or best_miou <= 0:
+        code_path = 'irregular' if agent_type == 'complex_staggered' else agent_type
         params_file = os.path.join(
             PROJECT_ROOT,
-            'agents', agent_type, '3_segmentation',
+            'agents', code_path, '3_segmentation',
             'parameters', tunnel_id, 'parameters_sam.json'
         )
         

@@ -1,0 +1,10 @@
+{
+  "trial_id": "groove_pair_4-1_143",
+  "params": {},
+  "mean_k_y_distance": Infinity,
+  "k_y_distances": [],
+  "details": [],
+  "num_matched": 0,
+  "runtime_sec": 0.00018715858459472656,
+  "error": "Object of type int64 is not JSON serializable"
+}

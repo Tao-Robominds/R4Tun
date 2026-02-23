@@ -1,0 +1,143 @@
+{
+  "tunnel_id": "1-4",
+  "stage": "detection",
+  "metric": "mIoU",
+  "best_score": 0.635,
+  "best_params": {
+    "binary_threshold": 140.0,
+    "dilation_kernel_size": 3.0,
+    "dilation_iterations": 3.0,
+    "hough_oblique_threshold": 60.0,
+    "hough_oblique_min_length": 111.0,
+    "hough_oblique_max_gap": 33.0,
+    "angle_positive_min": 5.918497783931734,
+    "angle_positive_max": 8.667417222278043,
+    "hough_horizontal_threshold": 44.0,
+    "hough_horizontal_min_length": 113.0,
+    "hough_horizontal_max_gap": 6.0,
+    "hough_vertical_threshold": 617.0,
+    "merge_distance_threshold": 5.0
+  },
+  "history": [
+    {
+      "eval": 1,
+      "params": {
+        "binary_threshold": 140.0,
+        "dilation_kernel_size": 3.0,
+        "dilation_iterations": 3.0,
+        "hough_oblique_threshold": 60.0,
+        "hough_oblique_min_length": 111.0,
+        "hough_oblique_max_gap": 33.0,
+        "angle_positive_min": 5.918497783931734,
+        "angle_positive_max": 8.667417222278043,
+        "hough_horizontal_threshold": 44.0,
+        "hough_horizontal_min_length": 113.0,
+        "hough_horizontal_max_gap": 6.0,
+        "hough_vertical_threshold": 617.0,
+        "merge_distance_threshold": 5.0
+      },
+      "score": 0.635,
+      "metrics": {
+        "OA": 0.849,
+        "F1": 0.744,
+        "mIoU": 0.635
+      }
+    },
+    {
+      "eval": 2,
+      "params": {
+        "binary_threshold": 100.0,
+        "dilation_kernel_size": 5.0,
+        "dilation_iterations": 2.0,
+        "hough_oblique_threshold": 61.0,
+        "hough_oblique_min_length": 80.0,
+        "hough_oblique_max_gap": 31.0,
+        "angle_positive_min": 6.049549320516778,
+        "angle_positive_max": 8.79972194343051,
+        "hough_horizontal_threshold": 41.0,
+        "hough_horizontal_min_length": 129.0,
+        "hough_horizontal_max_gap": 8.0,
+        "hough_vertical_threshold": 427.0,
+        "merge_distance_threshold": 4.0
+      },
+      "score": 0.635,
+      "metrics": {
+        "OA": 0.849,
+        "F1": 0.744,
+        "mIoU": 0.635
+      }
+    },
+    {
+      "eval": 3,
+      "params": {
+        "binary_threshold": 119.0,
+        "dilation_kernel_size": 5.0,
+        "dilation_iterations": 2.0,
+        "hough_oblique_threshold": 73.0,
+        "hough_oblique_min_length": 128.0,
+        "hough_oblique_max_gap": 44.0,
+        "angle_positive_min": 5.0265299223197335,
+        "angle_positive_max": 9.884403511369706,
+        "hough_horizontal_threshold": 57.0,
+        "hough_horizontal_min_length": 99.0,
+        "hough_horizontal_max_gap": 5.0,
+        "hough_vertical_threshold": 469.0,
+        "merge_distance_threshold": 3.0
+      },
+      "score": 0.635,
+      "metrics": {
+        "OA": 0.849,
+        "F1": 0.744,
+        "mIoU": 0.635
+      }
+    },
+    {
+      "eval": 4,
+      "params": {
+        "binary_threshold": 150.0,
+        "dilation_kernel_size": 2.0,
+        "dilation_iterations": 1.0,
+        "hough_oblique_threshold": 30.0,
+        "hough_oblique_min_length": 150.0,
+        "hough_oblique_max_gap": 60.0,
+        "angle_positive_min": 7.0,
+        "angle_positive_max": 8.0,
+        "hough_horizontal_threshold": 70.0,
+        "hough_horizontal_min_length": 130.0,
+        "hough_horizontal_max_gap": 20.0,
+        "hough_vertical_threshold": 700.0,
+        "merge_distance_threshold": 2.0
+      },
+      "score": 0.635,
+      "metrics": {
+        "OA": 0.849,
+        "F1": 0.744,
+        "mIoU": 0.635
+      }
+    },
+    {
+      "eval": 5,
+      "params": {
+        "binary_threshold": 100.0,
+        "dilation_kernel_size": 2.0,
+        "dilation_iterations": 1.0,
+        "hough_oblique_threshold": 80.0,
+        "hough_oblique_min_length": 80.0,
+        "hough_oblique_max_gap": 60.0,
+        "angle_positive_min": 5.0,
+        "angle_positive_max": 10.0,
+        "hough_horizontal_threshold": 70.0,
+        "hough_horizontal_min_length": 80.0,
+        "hough_horizontal_max_gap": 20.0,
+        "hough_vertical_threshold": 700.0,
+        "merge_distance_threshold": 5.0
+      },
+      "score": 0.635,
+      "metrics": {
+        "OA": 0.849,
+        "F1": 0.744,
+        "mIoU": 0.635
+      }
+    }
+  ]
+}

@@ -19,7 +19,7 @@
   "complex_hough_min_length": 31,
   "complex_hough_max_gap": 133,
   "complex_angle_pos_min": 4.835011,
-  "complex_angle_pos_max": 13.552690,
+  "complex_angle_pos_max": 13.55269,
   "complex_angle_neg_min": -14.670398,
   "complex_angle_neg_max": -5.817458,
   "complex_min_y_span": 28,
@@ -41,8 +41,17 @@
   "k_candidates_per_ring": 8,
   "groove_snap_px": 60,
   "stagger_groups": {
-    "A": [0, 1, 2, 3, 4],
-    "B": [5, 6]
+    "A": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "B": [
+      5,
+      6
+    ]
   },
   "group_offsets": {
     "A_B1": -460.9,

@@ -1,0 +1,23 @@
+{
+  "trial_id": "groove_pair_4-1_001",
+  "mean_k_y_distance": 789.1487971119437,
+  "params": {
+    "k_expected_height_px": 300,
+    "k_gap_tolerance_px": 150,
+    "k_candidates_per_ring": 8,
+    "groove_snap_px": 60,
+    "A_B1": -460.9,
+    "A_B2": -1222.7,
+    "A_A1": -1999.5,
+    "A_A2": 1992.4,
+    "A_A3": 1223.6,
+    "A_A4": 429.0,
+    "B_B1": 517.8,
+    "B_B2": 925.0,
+    "B_A1": 1924.9,
+    "B_A2": -1957.8,
+    "B_A3": -1405.4,
+    "B_A4": -940.7
+  },
+  "segments_file": "data/wrap/4-1/all_segments_stage1_best.csv"
+}

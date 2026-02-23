@@ -57,7 +57,7 @@
   },
 
   "segmentation_search_space": {
-    "description": "Stage B: 15D — 7 half_heights + 7 centre_offsets + segment_half_width. Detection fixed.",
+    "description": "Stage B: 20D — 7 half_heights + 7 centre_offsets + segment_half_width + 5 groove-snapping. Detection fixed.",
     "bounds": {
       "K_half_height": [100, 250],
       "B1_half_height": [300, 500],
@@ -73,15 +73,14 @@
       "A2_centre_offset": [-50, 50],
       "A3_centre_offset": [-50, 50],
       "A4_centre_offset": [-50, 50],
-      "segment_half_width": [150, 220]
+      "segment_half_width": [150, 220],
+      "shrink_x": [2, 8],
+      "shrink_y": [1, 4],
+      "snap_radius": [50, 150],
+      "groove_threshold": [15.0, 35.0],
+      "snap_weight": [0.5, 2.0]
     },
-    "fixed_params": {
-      "shrink_x": 4,
-      "shrink_y": 2,
-      "snap_radius": 100,
-      "groove_threshold": 25.0,
-      "snap_weight": 1.0
-    },
+    "fixed_params": {},
     "warmstart": {
       "K_half_height": 150,
       "B1_half_height": 382,
@@ -97,7 +96,12 @@
       "A2_centre_offset": 0,
       "A3_centre_offset": 0,
       "A4_centre_offset": 0,
-      "segment_half_width": 181
+      "segment_half_width": 181,
+      "shrink_x": 4,
+      "shrink_y": 2,
+      "snap_radius": 100,
+      "groove_threshold": 25.0,
+      "snap_weight": 1.0
     }
   },
 
