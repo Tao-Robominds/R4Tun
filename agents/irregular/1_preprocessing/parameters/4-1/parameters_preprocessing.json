@@ -1,6 +1,6 @@
 {
   "ring_spacing": 1.816,
-  "num_slicing_planes": 9,
+  "num_slicing_planes": 7,
   "samples_per_ring": 1210,
   "radius_min": 3.5256521861234806,
   "radius_max": 4.051146607999439,

@@ -300,35 +300,6 @@ def compute_angular_boundaries(all_segments_df, img_height, boundary_fractions=N
     return result
 
 
-def load_gt_angular_boundaries(tunnel_dir):
-    """Load pre-computed GT-optimal angular boundaries.
-
-    Returns:
-        tuple: (slices_dict, x_bands_dict) or (None, None)
-        slices_dict: {ring_id: {block_name: (y_start, y_end)}}
-        x_bands_dict: {ring_id: (x_min, x_max)}
-    """
-    path = os.path.join(tunnel_dir, 'gt_angular_boundaries.json')
-    if not os.path.exists(path):
-        return None, None
-
-    with open(path) as f:
-        data = json.load(f)
-
-    slices_result = {}
-    x_bands_result = {}
-    for ring_key, ring_data in data.items():
-        ring_idx = int(ring_key.split('_')[1])
-        slices = {}
-        for block_name, s in ring_data.get('slices', {}).items():
-            slices[block_name] = (s['y_start'], s['y_end'])
-        slices_result[ring_idx] = slices
-        x_band = ring_data.get('x_band')
-        if x_band is not None:
-            x_bands_result[ring_idx] = (x_band[0], x_band[1])
-    return slices_result, x_bands_result
-
-
 # =============================================================================
 # MASK GENERATION
 # =============================================================================
@@ -342,24 +313,18 @@ def fill_polygon(mask, vertices):
     mask[mask_inside] = 1
 
 
-def generate_template_mask(height, width, prompt_centre, block, resolution, template_params,
-                           instance_params=None):
-    """Generate template mask using parameterized dimensions (matching p4tun behavior).
+def generate_template_mask(height, width, prompt_centre, block, resolution, template_params):
+    """Generate template mask using parameterized per-block-type dimensions.
     
     Complex staggered uses slanted B1/B2 masks (same as simple staggered).
-    If instance_params is provided, uses per-instance half_w/dy_neg/dy_pos from GT.
+    All dimensions are BO-tunable per block TYPE (not per instance).
     """
     mask = np.zeros((height, width), dtype=np.uint8)
     prompt_centre_x, prompt_centre_y = prompt_centre
     x = prompt_centre_x * (resolution * 1000)
     y = prompt_centre_y * (resolution * 1000)
     
-    if instance_params is not None:
-        w = instance_params['half_w']
-        hn = instance_params['dy_neg']
-        hp = instance_params['dy_pos']
-        vertices_real = np.array([[x-w, y-hn], [x-w, y+hp], [x+w, y+hp], [x+w, y-hn]])
-    elif block == 'K':
+    if block == 'K':
         w = template_params['k_mask_width']
         hp = template_params['k_mask_height_pos']
         hn = template_params['k_mask_height_neg']
@@ -638,8 +603,7 @@ def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution * 1000))
 
 
-def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params,
-                               instance_params=None):
+def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution, template_params):
     """
     Crop image and generate template mask logits.
     
@@ -704,8 +668,7 @@ def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, re
 
     cropped_template_mask = generate_template_mask(
         cropped_image.shape[0], cropped_image.shape[1],
-        prompt_centre, block, resolution, template_params,
-        instance_params=instance_params
+        prompt_centre, block, resolution, template_params
     )
     template_mask_logits = compute_logits_from_mask(cropped_template_mask)
 
@@ -728,9 +691,14 @@ def compute_block_label(segment_per_ring):
 
 
 def compute_block_to_label_map(segment_per_ring):
-    """Get block name to numeric label mapping."""
+    """Get block name to numeric label mapping.
+    
+    Must match GT segment numbering convention:
+      7-seg: K=1, B1=2, B2=3, A1=4, A2=5, A3=6, A4=7
+      6-seg: K=1, B1=2, A1=3, A2=4, A3=5, B2=6
+    """
     if segment_per_ring == 7:
-        return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
+        return {'K': 1, 'B1': 2, 'B2': 3, 'A1': 4, 'A2': 5, 'A3': 6, 'A4': 7}
     else:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
@@ -761,31 +729,19 @@ def process_segment(segment_row, image, predictor, config):
     y_bounds = config['y_bounds']
     template_params = config['template_params']
     
-    instance_params_lookup = config.get('instance_params', None)
-    instance_params = None
-    if instance_params_lookup is not None:
-        key = f"{ring_id}_{block}"
-        instance_params = instance_params_lookup.get(key, None)
-
     angle_extra = math.tan(math.radians(angle)) * 700 + 100
 
-    if instance_params is not None:
-        half_w_mm = instance_params['half_w']
-        half_h_mm = max(instance_params['dy_neg'], instance_params['dy_pos'])
-        delta_x = convert_to_pixel_coords(half_w_mm + padding + crop_expansion, resolution)
-        delta_y = convert_to_pixel_coords(half_h_mm + angle_extra + crop_margin + crop_expansion, resolution)
+    delta_x = convert_to_pixel_coords(0.5 * segment_width + padding + crop_expansion, resolution)
+    if block == 'K':
+        delta_y = convert_to_pixel_coords(
+            0.5 * K_height + angle_extra + crop_margin + crop_expansion, resolution)
     else:
-        delta_x = convert_to_pixel_coords(0.5 * segment_width + padding + crop_expansion, resolution)
-        if block == 'K':
-            delta_y = convert_to_pixel_coords(
-                0.5 * K_height + angle_extra + crop_margin + crop_expansion, resolution)
-        else:
-            delta_y = convert_to_pixel_coords(
-                0.5 * AB_height + angle_extra + crop_margin + crop_expansion, resolution)
+        delta_y = convert_to_pixel_coords(
+            0.5 * AB_height + angle_extra + crop_margin + crop_expansion, resolution)
 
     crop_result = crop_image_and_mask_logits(
         image, initial_x, initial_y, 2 * delta_x, 2 * delta_y,
-        block, resolution, template_params, instance_params=instance_params)
+        block, resolution, template_params)
     if crop_result[0] is None:
         return None
     cropped_image, template_mask_logit, prompt_centre, crop_info, template_mask_binary = crop_result
@@ -927,9 +883,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     crop_expansion = get_param(params, 'crop_expansion', default=0, allow_default=True)
     use_template_fallback = get_param(params, 'use_template_fallback', default=False, allow_default=True)
     
-    # Angular boundary parameters
+    # Angular boundary parameters (boundaries computed from detected centroids)
     use_angular_boundaries = get_param(params, 'use_angular_boundaries', default=False, allow_default=True)
-    use_gt_boundaries = get_param(params, 'use_gt_boundaries', default=False, allow_default=True)
     boundary_fraction_bk = get_param(params, 'boundary_fraction_bk', default=0.5, allow_default=True)
     boundary_fraction_ba = get_param(params, 'boundary_fraction_ba', default=0.5, allow_default=True)
     boundary_fraction_aa = get_param(params, 'boundary_fraction_aa', default=0.5, allow_default=True)
@@ -959,11 +914,9 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  use_template_fallback: {use_template_fallback}")
     print(f"  use_angular_boundaries: {use_angular_boundaries}")
     if use_angular_boundaries:
-        print(f"  use_gt_boundaries: {use_gt_boundaries}")
-        if not use_gt_boundaries:
-            print(f"  boundary_fraction_bk: {boundary_fraction_bk}")
-            print(f"  boundary_fraction_ba: {boundary_fraction_ba}")
-            print(f"  boundary_fraction_aa: {boundary_fraction_aa}")
+        print(f"  boundary_fraction_bk: {boundary_fraction_bk}")
+        print(f"  boundary_fraction_ba: {boundary_fraction_ba}")
+        print(f"  boundary_fraction_aa: {boundary_fraction_aa}")
     print(f"  y_bounds:         [{y_bound_lower}, {y_bound_upper}] mm")
     print(f"  min_quality_threshold: {min_quality_threshold}")
     
@@ -1031,13 +984,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'b2_height_bottom': b2_height_bottom,
     }
     
-    instance_params = None
-    instance_params_path = os.path.join(tunnel_dir, 'gt_instance_mask_params.json')
-    if os.path.exists(instance_params_path):
-        with open(instance_params_path) as f:
-            instance_params = json.load(f)
-        print(f"  Per-instance mask params: {len(instance_params)} entries loaded")
-    
     config = {
         'resolution': resolution,
         'segment_width': segment_width,
@@ -1049,7 +995,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'crop_expansion': crop_expansion,
         'y_bounds': y_bounds,
         'template_params': template_params,
-        'instance_params': instance_params,
     }
     
     # Run SAM on each segment from all_segments.csv
@@ -1073,41 +1018,29 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
 
     if use_angular_boundaries:
         # --- Angular boundary mode: direct pixel assignment ---
-        gt_x_bands = None
-        if use_gt_boundaries:
-            angular_slices, gt_x_bands = load_gt_angular_boundaries(tunnel_dir)
-            if angular_slices is None:
-                raise FileNotFoundError(
-                    f"gt_angular_boundaries.json not found in {tunnel_dir}. "
-                    "Run GT boundary computation first.")
-            print(f"  Using GT-optimal angular boundaries")
-        else:
-            boundary_fractions = {
-                'bk': boundary_fraction_bk,
-                'ba': boundary_fraction_ba,
-                'aa': boundary_fraction_aa,
-            }
-            angular_slices = compute_angular_boundaries(
-                all_segments_df, img_h, boundary_fractions)
-            print(f"  Using parameterized boundaries (bk={boundary_fraction_bk}, "
-                  f"ba={boundary_fraction_ba}, aa={boundary_fraction_aa})")
+        # Boundaries computed from detected centroids (BO-tunable fractions)
+        boundary_fractions = {
+            'bk': boundary_fraction_bk,
+            'ba': boundary_fraction_ba,
+            'aa': boundary_fraction_aa,
+        }
+        angular_slices = compute_angular_boundaries(
+            all_segments_df, img_h, boundary_fractions)
+        print(f"  Using parameterized boundaries (bk={boundary_fraction_bk}, "
+              f"ba={boundary_fraction_ba}, aa={boundary_fraction_aa})")
 
-        # Build X bands per ring
+        # Estimate X bands per ring from SAM crop extents
         ring_x_bands = {}
-        if gt_x_bands:
-            ring_x_bands = {r: list(xb) for r, xb in gt_x_bands.items()}
-        else:
-            # Estimate X bands from SAM crop extents (intersection of all blocks)
-            ring_x_min = {}
-            ring_x_max = {}
-            for item in all_results:
-                r = item['ring_id']
-                for mapping in item['crop_info']['mappings']:
-                    x_start, x_end = mapping['img_x']
-                    ring_x_min.setdefault(r, []).append(x_start)
-                    ring_x_max.setdefault(r, []).append(x_end)
-            for r in ring_x_min:
-                ring_x_bands[r] = [max(ring_x_min[r]), min(ring_x_max[r])]
+        ring_x_min = {}
+        ring_x_max = {}
+        for item in all_results:
+            r = item['ring_id']
+            for mapping in item['crop_info']['mappings']:
+                x_start, x_end = mapping['img_x']
+                ring_x_min.setdefault(r, []).append(x_start)
+                ring_x_max.setdefault(r, []).append(x_end)
+        for r in ring_x_min:
+            ring_x_bands[r] = [max(ring_x_min[r]), min(ring_x_max[r])]
 
         # Build per-ring angular slice lookup: for each Y pixel, which block?
         ring_y_to_block = {}
@@ -1172,24 +1105,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
 
         print(f"  Angular boundary + template mask assignment: {assigned_count:,} pixels")
 
-        # Override interlocked rings with GT pixel masks
-        gt_label_ring4_path = os.path.join(tunnel_dir, 'gt_label_ring4.npy')
-        if os.path.exists(gt_label_ring4_path):
-            gt_label_ring4 = np.load(gt_label_ring4_path)
-            override_count = 0
-            for seg_id in range(1, 8):
-                pixel_mask = gt_label_ring4 == seg_id
-                if pixel_mask.sum() == 0:
-                    continue
-                bn = {1:'K', 2:'B1', 3:'A1', 4:'A2', 5:'A3', 6:'A4', 7:'B2'}[seg_id]
-                label_val = block_to_label.get(bn, 0)
-                if label_val == 0:
-                    continue
-                label_map[pixel_mask] = label_val
-                ring_map[pixel_mask] = 4
-                override_count += pixel_mask.sum()
-            print(f"  Ring 4 GT pixel mask override: {override_count:,} pixels")
-
     else:
         # --- Legacy DT competition mode ---
         logits_map = np.full((img_h, img_w), -np.inf, dtype=float)
@@ -1248,24 +1163,6 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
                 label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label.get(block, 0)
                 ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_id
 
-        # Override interlocked rings with GT pixel masks (legacy mode)
-        gt_label_ring4_path = os.path.join(tunnel_dir, 'gt_label_ring4.npy')
-        if os.path.exists(gt_label_ring4_path):
-            gt_label_ring4 = np.load(gt_label_ring4_path)
-            override_count = 0
-            for seg_id in range(1, 8):
-                pixel_mask = gt_label_ring4 == seg_id
-                if pixel_mask.sum() == 0:
-                    continue
-                bn = {1:'K', 2:'B1', 3:'A1', 4:'A2', 5:'A3', 6:'A4', 7:'B2'}[seg_id]
-                label_val = block_to_label.get(bn, 0)
-                if label_val == 0:
-                    continue
-                label_map[pixel_mask] = label_val
-                ring_map[pixel_mask] = 4
-                override_count += pixel_mask.sum()
-            print(f"  Ring 4 GT pixel mask override: {override_count:,} pixels")
-
     # Fix ring numbering
     fix_ring = np.where((ring_map >= 1) & (ring_map <= (ring_count-1)),
                         ring_count - ring_map, ring_map)
@@ -1279,8 +1176,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     
     if 'segment' in updated_df.columns:
         df_pred = pd.DataFrame()
-        df_pred['gt_labels'] = updated_df['segment']
-        df_pred['gt_rings'] = updated_df['ring']
+        df_pred['segment'] = updated_df['segment']
+        df_pred['ring'] = updated_df['ring']
         df_pred['pred_labels'] = updated_df['pred']
         df_pred['pred_rings'] = updated_df['pred_ring']
         df_pred.to_csv(os.path.join(tunnel_dir, 'only_label.csv'), index=False)

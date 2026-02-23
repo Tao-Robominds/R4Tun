@@ -94,11 +94,11 @@ CLASS_NAMES_7 = {
     0: 'Background',
     1: 'K-block',
     2: 'B1-block',
-    3: 'A1-block',
-    4: 'A2-block',
-    5: 'A3-block',
-    6: 'A4-block',
-    7: 'B2-block'
+    3: 'B2-block',
+    4: 'A1-block',
+    5: 'A2-block',
+    6: 'A3-block',
+    7: 'A4-block'
 }
 
 

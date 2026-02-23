@@ -1,0 +1,13 @@
+{
+  "tunnel_id": "2-2",
+  "agent_type": "simple_staggered",
+  "stage": "preprocessing",
+  "best_f2": 0.9760453476359839,
+  "trial_id": "preproc_2-2_030",
+  "parameters": {
+    "ring_spacing": 1.4,
+    "radius_min": 2.612718514221595,
+    "radius_max": 3.0562619519054484,
+    "gradient_threshold": 0.5
+  }
+}

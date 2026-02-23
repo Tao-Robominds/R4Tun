@@ -1,0 +1,22 @@
+{
+  "shrink_x": 4,
+  "shrink_y": 2,
+  "snap_radius": 100,
+  "groove_threshold": 25.0,
+  "snap_weight": 1.0,
+  "K_half_height": 150.0,
+  "B1_half_height": 382.0,
+  "B2_half_height": 374.0,
+  "A1_half_height": 372.0,
+  "A2_half_height": 368.0,
+  "A3_half_height": 367.0,
+  "A4_half_height": 381.0,
+  "K_centre_offset": 0.0,
+  "B1_centre_offset": 0.0,
+  "B2_centre_offset": 0.0,
+  "A1_centre_offset": 0.0,
+  "A2_centre_offset": 0.0,
+  "A3_centre_offset": 0.0,
+  "A4_centre_offset": 0.0,
+  "segment_half_width": 181.0
+}

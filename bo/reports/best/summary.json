@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-02-13T07:55:46.722786",
+  "summary": "Best parameters from Bayesian Optimization",
+  "tunnels": {
+    "1-4": {
+      "preprocessing": {
+        "f2_score": 0.9811259181036004,
+        "trial_id": "preproc_1-4_051",
+        "agent_type": "simple_staggered"
+      },
+      "detection": {
+        "weighted_f1": 0.5925630219379419,
+        "trial_id": "detect_1-4_132",
+        "agent_type": "simple_staggered",
+        "metrics": {
+          "f1": 0.8421052631578948,
+          "precision": 0.8888888888888888,
+          "recall": 0.8,
+          "position_bonus": 0.40733717710261186,
+          "mean_distance_px": 59.26628228973881
+        }
+      }
+    },
+    "2-2": {
+      "preprocessing": {
+        "f2_score": 0.9760453476359839,
+        "trial_id": "preproc_2-2_030",
+        "agent_type": "simple_staggered"
+      },
+      "detection": {
+        "weighted_f1": 0.8024471461872101,
+        "trial_id": "detect_2-2_070",
+        "agent_type": "simple_staggered",
+        "metrics": {
+          "f1": 0.9473684210526316,
+          "precision": 1.0,
+          "recall": 0.9,
+          "position_bonus": 0.6940550863952213,
+          "mean_distance_px": 30.594491360477875
+        }
+      }
+    },
+    "3-1": {
+      "preprocessing": {
+        "f2_score": 0.9602991402938136,
+        "trial_id": "preproc_3-1_008",
+        "agent_type": "continuous"
+      },
+      "detection": {
+        "weighted_f1": 0.5812497253660596,
+        "trial_id": "detect_3-1_065",
+        "agent_type": "continuous",
+        "metrics": {
+          "f1": 0.7272727272727272,
+          "precision": 0.6666666666666666,
+          "recall": 0.8,
+          "position_bonus": 0.5984367447566639,
+          "mean_distance_px": 40.15632552433361
+        }
+      }
+    },
+    "4-1": {
+      "preprocessing": {
+        "f2_score": 0.9379314278195537,
+        "trial_id": "preproc_4-1_018",
+        "agent_type": "complex_staggered"
+      },
+      "detection": {
+        "weighted_f1": 0.30865097413134407,
+        "trial_id": "detect_4-1_073",
+        "agent_type": "complex_staggered",
+        "metrics": {
+          "f1": 0.37499999999999994,
+          "precision": 0.2727272727272727,
+          "recall": 0.6,
+          "position_bonus": 0.6461385287005019,
+          "mean_distance_px": 35.386147129949805
+        }
+      }
+    },
+    "5-1": {
+      "preprocessing": {
+        "f2_score": 0.9545199619642706,
+        "trial_id": "preproc_5-1_041",
+        "agent_type": "complex_staggered"
+      },
+      "detection": {
+        "weighted_f1": 0.5293241710873645,
+        "trial_id": "detect_5-1_059",
+        "agent_type": "complex_staggered",
+        "metrics": {
+          "f1": 0.5882352941176471,
+          "precision": 0.45454545454545453,
+          "recall": 0.8333333333333334,
+          "position_bonus": 0.7997021816970393,
+          "mean_distance_px": 20.029781830296074
+        }
+      }
+    }
+  }
+}

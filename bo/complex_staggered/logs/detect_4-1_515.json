@@ -1,0 +1,72 @@
+{
+  "schema_version": "r4tun.detection.v1",
+  "trial": {
+    "trial_id": "detect_4-1_515",
+    "timestamp_utc": "2026-02-13T16:07:44Z",
+    "tunnel_id": "4-1",
+    "assembly_type": "complex_staggered"
+  },
+  "params": {
+    "binary_threshold": 143,
+    "dilation_kernel_size": 2,
+    "dilation_iterations": 5,
+    "hough_oblique_threshold": 62,
+    "hough_oblique_min_length": 92,
+    "hough_oblique_max_gap": 38,
+    "angle_positive_min": 5.541779248048511,
+    "angle_positive_max": 7.767015989651521,
+    "angle_negative_min": -7.767015989651521,
+    "angle_negative_max": -5.541779248048511,
+    "hough_vertical_threshold": 776,
+    "hough_horizontal_threshold": 18,
+    "hough_horizontal_min_length": 98,
+    "hough_horizontal_max_gap": 19,
+    "horizontal_angle_tolerance": 0.8554232540860751,
+    "merge_distance_threshold": 3.85,
+    "complex_hough_threshold": 27,
+    "complex_hough_min_length": 21,
+    "complex_hough_max_gap": 119,
+    "complex_angle_pos_min": 5.644773237323344,
+    "complex_angle_pos_max": 13.218442933428522,
+    "complex_angle_neg_min": -13.355331717901665,
+    "complex_angle_neg_max": -4.174559485637768,
+    "complex_min_y_span": 16,
+    "complex_min_x_span": 25,
+    "complex_eps_primary": 0.06206984384918793,
+    "complex_eps_secondary": 0.07646445165470915,
+    "complex_subdivision_threshold": 2.1,
+    "complex_max_subdivisions": 3,
+    "complex_conf_midpoint": 0.52,
+    "complex_conf_intersection": 0.92
+  },
+  "outputs": {
+    "num_detected": 9,
+    "num_gt": 5,
+    "confusion": {
+      "tp": 3,
+      "fp": 6,
+      "fn": 2
+    },
+    "metrics": {
+      "precision": 0.3333333333333333,
+      "recall": 0.6,
+      "f1": 0.42857142857142855,
+      "position_bonus": 0.6131513589428853,
+      "weighted_f1": 0.3456752912020469,
+      "mean_distance_px": 58.027296158567204
+    },
+    "matched_distances_px": [
+      57.87448046066154,
+      64.25421422038416,
+      51.95319379465593
+    ]
+  },
+  "bo": {
+    "objective_name": "kposition_weighted_f1",
+    "objective_value": 0.3456752912020469,
+    "eval_index": 515,
+    "runtime_sec": 1.0440425872802734,
+    "is_feasible": true,
+    "cached_enhancing": false
+  }
+}

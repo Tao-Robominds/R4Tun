@@ -54,7 +54,6 @@
   "crop_expansion": 300,
   "use_template_fallback": true,
   "use_angular_boundaries": true,
-  "use_gt_boundaries": true,
   "boundary_fraction_bk": 0.5,
   "boundary_fraction_ba": 0.5,
   "boundary_fraction_aa": 0.5

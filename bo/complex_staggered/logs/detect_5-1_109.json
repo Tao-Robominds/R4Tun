@@ -1,0 +1,89 @@
+{
+  "schema_version": "r4tun.detection.v2",
+  "trial": {
+    "trial_id": "detect_5-1_109",
+    "timestamp_utc": "2026-02-18T12:38:07Z",
+    "tunnel_id": "5-1",
+    "assembly_type": "complex_staggered"
+  },
+  "params": {
+    "binary_threshold": 174,
+    "dilation_kernel_size": 4,
+    "dilation_iterations": 3,
+    "hough_oblique_threshold": 32,
+    "hough_oblique_min_length": 70,
+    "hough_oblique_max_gap": 22,
+    "angle_positive_min": 5.119594245938302,
+    "angle_positive_max": 9.569867180834493,
+    "angle_negative_min": -9.569867180834493,
+    "angle_negative_max": -5.119594245938302,
+    "hough_vertical_threshold": 652,
+    "hough_horizontal_threshold": 25,
+    "hough_horizontal_min_length": 148,
+    "hough_horizontal_max_gap": 9,
+    "horizontal_angle_tolerance": 0.5683831592708489,
+    "merge_distance_threshold": 5.1,
+    "complex_hough_threshold": 48,
+    "complex_hough_min_length": 66,
+    "complex_hough_max_gap": 96,
+    "complex_angle_pos_min": 3.2840992440729915,
+    "complex_angle_pos_max": 11.8550820367171,
+    "complex_angle_neg_min": -12.949161746511809,
+    "complex_angle_neg_max": -5.838162859510043,
+    "complex_min_y_span": 29,
+    "complex_min_x_span": 35,
+    "complex_eps_primary": 0.05,
+    "complex_eps_secondary": 0.08,
+    "complex_subdivision_threshold": 2.2,
+    "complex_max_subdivisions": 3,
+    "complex_conf_midpoint": 0.62,
+    "complex_conf_intersection": 0.97,
+    "k_to_b_px": 581.8462467582683,
+    "ab_step_px": 388.613588645796
+  },
+  "outputs": {
+    "num_pred_segments": 14,
+    "num_gt_segments": 45,
+    "num_matched": 14,
+    "num_unmatched_gt": 31,
+    "num_unmatched_pred": 0,
+    "k_metrics": {
+      "weighted_f1": 0.20676788778016308,
+      "f1": 0.25,
+      "precision": 0.5,
+      "recall": 0.16666666666666666,
+      "tp": 1,
+      "fp": 1,
+      "fn": 5,
+      "mean_distance_px": 51.87853466380432
+    },
+    "segment_metrics": {
+      "composite_score": 0.18299222628794273,
+      "position_accuracy": 0.17280265707699116,
+      "mean_segment_distance_px": 413.5986714615044
+    },
+    "matched_distances_px": [
+      319.53314260198823,
+      39.93911864204825,
+      338.2676005757455,
+      241.21253359323637,
+      51.87853466380432,
+      255.41117946958855,
+      301.39271936982186,
+      74.63247978265639,
+      291.2402270134852,
+      242.23633689361074,
+      178.82836777822084,
+      435.5684263356028,
+      250.12734735298986,
+      91.67220169490025
+    ]
+  },
+  "bo": {
+    "objective_name": "all_segments_composite",
+    "objective_value": 0.18299222628794273,
+    "eval_index": 109,
+    "runtime_sec": 0.9761192798614502,
+    "is_feasible": true
+  }
+}

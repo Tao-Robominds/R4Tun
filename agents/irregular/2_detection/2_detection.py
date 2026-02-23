@@ -943,6 +943,226 @@ def calculate_k_positions_geometric(
     return df.sort_values(by='X').reset_index(drop=True)
 
 
+def calculate_k_positions_groove_pair(
+    line_data: Dict,
+    ring_count: int,
+    k_height_mm: float,
+    resolution: float,
+    params: Dict,
+) -> pd.DataFrame:
+    """Locate K Y by finding the closest positive+negative oblique line pair
+    whose gap matches the expected K block height.
+
+    Algorithm:
+      1. Detect wide-angle oblique lines; for each ring X band, collect
+         positive and negative line crossings at band center.
+      2. Enumerate all (pos, neg) crossing pairs.  Score each by
+         ``|gap - k_expected_height_px|``.
+      3. Keep top-N candidates per ring.
+      4. Disambiguate via **groove alignment scoring**: expand each candidate
+         K Y with grouped offsets and count how many expanded positions have
+         a groove crossing within ``groove_snap_px``.
+      5. Select the candidate with the highest groove alignment count.
+
+    All new parameters are BO-tunable:
+      - ``k_expected_height_px``  (derived from K_height_mm, BO can fine-tune)
+      - ``k_gap_tolerance_px``    (max allowed deviation from expected height)
+      - ``k_candidates_per_ring`` (top-N for disambiguation)
+      - ``groove_snap_px``        (proximity threshold for groove alignment)
+
+    Returns:
+        DataFrame with columns Type, X, Y, Confidence (one row per ring).
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+
+    ring_offset = params.get('ring_offset', W / (2 * ring_count))
+    ring_spacing_px = params.get('ring_spacing_px', W / ring_count)
+    half_width = abs(ring_spacing_px) * 0.5
+
+    # BO-tunable groove-pair parameters
+    k_expected_height_px = params.get(
+        'k_expected_height_px',
+        (k_height_mm / 1000.0) / resolution / 2.0  # default: half the angular span → ~300px
+    )
+    k_gap_tolerance_px = params.get('k_gap_tolerance_px', 150.0)
+    k_candidates_per_ring = int(params.get('k_candidates_per_ring', 8))
+    groove_snap_px = params.get('groove_snap_px', 60.0)
+
+    # Detect wide-angle oblique lines for pair finding (more sensitive)
+    positive_lines_wide, negative_lines_wide = detect_oblique_lines_wide_angle(
+        line_data['dilated_edges'], L, W, params
+    )
+    # Standard oblique lines (from detect_lines) are much sparser/cleaner:
+    # use them for groove alignment scoring to avoid false matches.
+    std_oblique = line_data['positive_lines'] + line_data['negative_lines']
+
+    print(f"  [Groove-Pair K Detection] ring_count={ring_count}, image={L}x{W}")
+    print(f"    Wide-angle lines: Positive={len(positive_lines_wide)}, Negative={len(negative_lines_wide)}")
+    print(f"    Standard oblique lines (for groove scoring): {len(std_oblique)}")
+    print(f"    k_expected_height_px={k_expected_height_px:.0f}, gap_tol={k_gap_tolerance_px:.0f}, "
+          f"candidates={k_candidates_per_ring}, groove_snap={groove_snap_px:.0f}")
+
+    # Grouped offsets for groove alignment scoring
+    stagger_groups = params.get('stagger_groups', {})
+    group_offsets = params.get('group_offsets', {})
+    ring_to_group: Dict[int, str] = {}
+    default_group = list(stagger_groups.keys())[0] if stagger_groups else "A"
+    for grp, ring_list in stagger_groups.items():
+        for r in ring_list:
+            ring_to_group[r] = grp
+    expansion_blocks = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+
+    def _groove_crossings_at_x(x_center: float) -> List[float]:
+        """Y positions where *standard* oblique lines cross vertical x=x_center.
+
+        Standard lines are sparser/higher-quality than wide-angle lines,
+        preventing every candidate from trivially matching all grooves.
+        """
+        crossings = []
+        for x1, y1, x2, y2 in std_oblique:
+            y_c = _line_crossing_y_at_x(x1, y1, x2, y2, x_center)
+            if y_c is not None and 0 <= y_c <= L:
+                crossings.append(y_c)
+        return sorted(crossings)
+
+    def _wrap_dist_y(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, L - d)
+
+    def _groove_alignment_score(
+        k_y: float,
+        ring_idx: int,
+        groove_ys: List[float],
+    ) -> float:
+        """Compute groove alignment score for a K-Y candidate.
+
+        For each of the 6 expanded non-K block positions, find the minimum
+        distance to the nearest standard groove crossing.  The score is the
+        number of blocks whose nearest groove is within ``groove_snap_px``
+        (the *count* component) plus a proximity bonus (sum of
+        (groove_snap_px - min_dist) / groove_snap_px for each hit, giving
+        continuous gradients for BO).
+        """
+        group = ring_to_group.get(ring_idx, default_group)
+        total = 0.0
+        for block in expansion_blocks:
+            key = f"{group}_{block}"
+            offset = group_offsets.get(key, 0.0)
+            block_y = (k_y + offset) % L
+            min_dist = min((_wrap_dist_y(block_y, gy) for gy in groove_ys),
+                           default=groove_snap_px + 1)
+            if min_dist <= groove_snap_px:
+                total += 1.0 + (groove_snap_px - min_dist) / groove_snap_px
+        return total  # range [0, 12] (2 points per aligned block)
+
+    def _wrap_midpoint(a: float, b: float) -> float:
+        """Wrap-aware midpoint of two Y values on a cylinder of height L."""
+        if abs(a - b) <= L / 2:
+            return (a + b) / 2.0
+        return ((a + b) / 2.0 + L / 2.0) % L
+
+    # Fallback: banded result for rings with no viable candidates
+    banded_df = calculate_k_positions_banded(line_data, ring_count, params)
+
+    k_positions = []
+    groove_scores = []
+    for i in range(ring_count):
+        band_center = ring_offset + i * ring_spacing_px
+
+        # Collect wide-angle positive and negative crossings within the band
+        pos_crossings = []
+        for x1, y1, x2, y2 in positive_lines_wide:
+            mid_x = (x1 + x2) / 2.0
+            if band_center - half_width <= mid_x <= band_center + half_width:
+                y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+                if y_c is not None and 0 <= y_c <= L:
+                    pos_crossings.append(y_c)
+
+        neg_crossings = []
+        for x1, y1, x2, y2 in negative_lines_wide:
+            mid_x = (x1 + x2) / 2.0
+            if band_center - half_width <= mid_x <= band_center + half_width:
+                y_c = _line_crossing_y_at_x(x1, y1, x2, y2, band_center)
+                if y_c is not None and 0 <= y_c <= L:
+                    neg_crossings.append(y_c)
+
+        # Enumerate all (pos, neg) pairs; filter by gap proximity to K height
+        candidates = []  # (gap_err, gap, midpoint_y)
+        for py in pos_crossings:
+            for ny in neg_crossings:
+                gap = _wrap_dist_y(py, ny)
+                gap_err = abs(gap - k_expected_height_px)
+                if gap_err > k_gap_tolerance_px:
+                    continue
+                mid = _wrap_midpoint(py, ny)
+                candidates.append((gap_err, gap, mid))
+
+        # Deduplicate: merge candidates whose midpoints are within 30px
+        candidates.sort(key=lambda c: c[0])
+        deduped = []
+        for gap_err, gap, mid in candidates:
+            is_dup = False
+            for _, _, existing_mid in deduped:
+                if _wrap_dist_y(mid, existing_mid) < 30:
+                    is_dup = True
+                    break
+            if not is_dup:
+                deduped.append((gap_err, gap, mid))
+            if len(deduped) >= k_candidates_per_ring:
+                break
+        candidates = deduped
+
+        if candidates:
+            # Score candidates with combined metric:
+            # combined = groove_alignment_score - gap_err_penalty
+            # groove_alignment uses *standard* oblique lines (sparse/discriminating)
+            groove_ys = _groove_crossings_at_x(band_center)
+            best_mid = candidates[0][2]
+            best_combined = -float('inf')
+            best_groove = 0.0
+            for gap_err, gap, mid in candidates:
+                groove = _groove_alignment_score(mid, i, groove_ys)
+                # gap_err penalty: normalised to [0, 1] by tolerance
+                gap_penalty = gap_err / k_gap_tolerance_px
+                combined = groove - gap_penalty
+                if combined > best_combined:
+                    best_combined = combined
+                    best_mid = mid
+                    best_groove = groove
+            y_k = best_mid
+            conf = min(1.0, 0.5 + 0.04 * best_groove)
+            det_type = 'groove_pair'
+            groove_scores.append(best_groove)
+        else:
+            # Fallback: banded median
+            row = banded_df.iloc[i]
+            y_k = row['Y']
+            conf = float(row['Confidence']) * 0.4
+            det_type = 'groove_pair_fallback'
+            groove_scores.append(0.0)
+
+        k_positions.append((det_type, band_center, y_k, conf))
+        print(f"    Ring {i}: X={band_center:.0f}, Y={y_k:.0f}, conf={conf:.2f} [{det_type}] "
+              f"(cands={len(candidates)}, groove={groove_scores[-1]:.1f})")
+
+    # Report summary
+    groove_total = sum(groove_scores)
+    groove_max = 12.0 * ring_count  # max 12 per ring (2 pts per aligned block × 6 blocks)
+    print(f"    Groove alignment: {groove_total:.1f}/{groove_max:.0f} "
+          f"({groove_total / groove_max * 100:.1f}%)")
+
+    df = pd.DataFrame(k_positions, columns=['Type', 'X', 'Y', 'Confidence'])
+    # Attach groove alignment metadata for intrinsic scoring
+    df.attrs['groove_alignment_total'] = float(groove_total)
+    df.attrs['groove_alignment_max'] = float(groove_max)
+    df.attrs['groove_alignment_pct'] = (
+        groove_total / groove_max * 100 if groove_max > 0 else 0.0
+    )
+    df.attrs['groove_scores_per_ring'] = [float(s) for s in groove_scores]
+    return df.sort_values(by='X').reset_index(drop=True)
+
+
 # =============================================================================
 # Segment Expansion: K → All Segments
 # =============================================================================
@@ -1229,29 +1449,40 @@ def expand_k_with_template(
     return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
 
-# Non-K block names for offset expansion (order for consistent row output)
-OFFSET_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+# Non-K block names for grouped offset expansion
+EXPANSION_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
 
 
-def expand_k_with_offsets(
+def expand_k_with_grouped_offsets(
     k_positions: pd.DataFrame,
     img_height: int,
-    offsets_dict: Dict[str, float],
+    stagger_groups: Dict[str, list],
+    group_offsets: Dict[str, float],
 ) -> pd.DataFrame:
-    """Derive all segment positions from K using direct per-ring per-block Y offsets.
+    """Derive all segment positions from K using grouped offsets + stagger assignment.
 
-    X for every segment in a ring = K's X. Y = (K_Y + offset) % img_height.
-    offsets_dict keys: "{block}_offset_r{ring}" e.g. b1_offset_r0, a2_offset_r3.
-    Missing keys default to 0 (block at K Y).
+    Each ring belongs to a stagger group (e.g. "A" or "B").  All rings in the
+    same group share the same 6 Y-offsets from K.  This is BO-tunable at 12D
+    (2 groups x 6 blocks) + a discrete stagger assignment.
 
     Args:
         k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
         img_height: Depth map height in pixels (for Y wrap-around).
-        offsets_dict: Maps e.g. "b1_offset_r0" -> signed pixel offset from K.
+        stagger_groups: Maps group name -> list of ring indices, e.g.
+            {"A": [0,1,2,3,4], "B": [5,6]}.
+        group_offsets: Maps "{group}_{block}" -> signed pixel offset from K,
+            e.g. {"A_B1": -460.9, "B_B1": 517.8, ...}.
 
     Returns:
         DataFrame with columns Ring, Block, X, Y, quality.
     """
+    # Build reverse lookup: ring_idx -> group name
+    ring_to_group = {}
+    default_group = list(stagger_groups.keys())[0] if stagger_groups else "A"
+    for group_name, ring_list in stagger_groups.items():
+        for r in ring_list:
+            ring_to_group[r] = group_name
+
     rows = []
     for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
         k_x = float(k_row['X'])
@@ -1267,10 +1498,11 @@ def expand_k_with_offsets(
             'quality': quality,
         })
 
-        # Non-K blocks: Y = (K_Y + offset) % img_height
-        for block in OFFSET_BLOCKS:
-            key = f"{block.lower()}_offset_r{ring_idx}"
-            offset = offsets_dict.get(key, 0.0)
+        # Non-K blocks: look up group, then apply group offset
+        group = ring_to_group.get(ring_idx, default_group)
+        for block in EXPANSION_BLOCKS:
+            key = f"{group}_{block}"
+            offset = group_offsets.get(key, 0.0)
             y = (k_y + offset) % img_height
             if y < 0:
                 y += img_height
@@ -1278,7 +1510,7 @@ def expand_k_with_offsets(
                 'Ring': ring_idx,
                 'Block': block,
                 'X': k_x,
-                'Y': y,
+                'Y': round(y, 1),
                 'quality': quality,
             })
 
@@ -1522,6 +1754,10 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
         k_positions = calculate_k_positions_geometric(
             line_data, ring_count, k_height_mm, resolution, params
         )
+    elif k_detection_method == 'groove_pair':
+        k_positions = calculate_k_positions_groove_pair(
+            line_data, ring_count, k_height_mm, resolution, params
+        )
     else:
         k_positions = calculate_k_positions_complex_staggered(
             line_data, ring_count, k_height_mm, ab_height_mm, resolution, complex_params
@@ -1541,7 +1777,19 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     # Save K-only results (backward compatible)
     k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
     print(f"\n  Saved: {os.path.join(tunnel_dir, 'detected.csv')}")
-    
+
+    # Save groove alignment metadata (for intrinsic BO objective)
+    groove_meta = {
+        'groove_alignment_total': k_positions.attrs.get('groove_alignment_total', None),
+        'groove_alignment_max': k_positions.attrs.get('groove_alignment_max', None),
+        'groove_alignment_pct': k_positions.attrs.get('groove_alignment_pct', None),
+        'k_detection_method': k_detection_method,
+    }
+    groove_meta_path = os.path.join(tunnel_dir, 'groove_alignment.json')
+    with open(groove_meta_path, 'w') as f:
+        json.dump(groove_meta, f, indent=2)
+    print(f"  Saved: {groove_meta_path}")
+
     # Step 3: Expand K positions to all segments
     expansion_method = params.get('expansion_method', 'physical')
     print(f"\n[Step 3] Expanding K positions to all segments ({expansion_method})...")
@@ -1551,18 +1799,15 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     param_ab_step_px = params.get('ab_step_px', None)
     n_rings_detected = len(k_positions)
 
-    if expansion_method == 'offsets':
-        # Direct per-ring per-block Y offsets from K (keys: b1_offset_r0, ..., a4_offset_r6)
-        offsets_dict = {}
-        for ring_idx in range(n_rings_detected):
-            for block in OFFSET_BLOCKS:
-                key = f"{block.lower()}_offset_r{ring_idx}"
-                if key in params:
-                    offsets_dict[key] = float(params[key])
-        all_segments = expand_k_with_offsets(
+    if expansion_method == 'grouped_offsets':
+        # Grouped offsets: 2 stagger groups x 6 blocks = 12D (BO-tunable)
+        stagger_groups = params.get('stagger_groups', {"A": list(range(n_rings_detected))})
+        group_offsets = params.get('group_offsets', {})
+        all_segments = expand_k_with_grouped_offsets(
             k_positions,
             img_height=L,
-            offsets_dict=offsets_dict,
+            stagger_groups=stagger_groups,
+            group_offsets=group_offsets,
         )
     elif expansion_method == 'template':
         # 7 steps: K->B1, B1->A1, A1->A2, A2->A3, A3->A4, A4->B2, B2->K; sum = img_height
