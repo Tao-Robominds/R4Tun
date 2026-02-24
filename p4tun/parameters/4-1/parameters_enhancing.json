@@ -1,0 +1,39 @@
+{
+    "description": "Geometry-guided point cloud enhancement parameters",
+    "physical_constants": {
+        "ring_spacing": 1.2
+    },
+    "curvature": {
+        "curvature_neighbors": 20
+    },
+    "upsampling": {
+        "target_distances": [
+            0.1,
+            0.05,
+            0.025
+        ],
+        "curvature_threshold": 0.002,
+        "upsampling_neighbors": 20,
+        "distance_tolerance_low": 0.9,
+        "distance_tolerance_high": 2.0,
+        "radius_filter_factor": 0.15,
+        "min_new_point_distance_factor": 0.2
+    },
+    "outlier_detection": {
+        "depth_threshold_low": 0.005,
+        "depth_threshold_high": 0.012,
+        "high_density_ring_start": 10,
+        "high_density_ring_end": 21,
+        "outlier_neighbors": 20
+    },
+    "outlier_interpolation": {
+        "interpolation_radius": 0.08,
+        "num_interpolations": 2,
+        "duplicate_threshold": 0.02,
+        "max_outlier_points": 5000
+    },
+    "depth_map": {
+        "resolution": 0.005,
+        "interpolation_window": 9
+    }
+}

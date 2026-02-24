@@ -1,0 +1,85 @@
+{
+    "segment_geometry": {
+        "segment_width": 1150.0,
+        "k_height": 1000.0,
+        "ab_height": 3100.0,
+        "angle_deg": 6.5
+    },
+    "image": {
+        "resolution": 0.005
+    },
+    "processing": {
+        "padding": 100,
+        "crop_margin": 30,
+        "mask_eps": 0.001,
+        "y_bounds": [
+            4200,
+            13100
+        ]
+    },
+    "prompt_points": {
+        "k_block": {
+            "outer_ring": 650.0,
+            "middle_ring": 450.0,
+            "inner_ring": 300.0,
+            "center_ring": 280.0,
+            "spacing_factors": {
+                "k_block_spacing": 310.91,
+                "vertical_spacing": [
+                    732.35,
+                    505.96,
+                    310.91,
+                    219.01,
+                    373.96
+                ]
+            }
+        },
+        "ab_blocks": {
+            "outer_ring": 650.0,
+            "middle_ring": 460.0,
+            "inner_ring": 450.0,
+            "center_ring": 280.0,
+            "fine_spacing": 200.0,
+            "ultra_fine": 130.0,
+            "edge_ring": 300.0,
+            "edge_spacing": 300.0,
+            "vertical_levels": {
+                "level_1": 1550.0,
+                "level_2": 1370.0,
+                "level_3": 1210.0,
+                "level_4": 980.0,
+                "level_5": 735.0,
+                "level_6": 490.0,
+                "level_7": 245.0,
+                "center": 0
+            }
+        },
+        "template_mask": {
+            "k_block": {
+                "width": 580.0,
+                "height_pos": 580.0,
+                "height_neg": 450.0
+            },
+            "b1_block": {
+                "width": 575.0,
+                "height_top": 1570.0,
+                "height_bottom_pos": 1540.69,
+                "height_bottom_neg": 1699.08
+            },
+            "b2_block": {
+                "width": 575.0,
+                "height_top_pos": 1540.69,
+                "height_top_neg": 1699.08,
+                "height_bottom": 1570.0
+            },
+            "a_blocks": {
+                "width": 575.0,
+                "height": 1570.0
+            }
+        }
+    },
+    "pattern_aware": {
+        "use_quality_weighting": true,
+        "min_quality_threshold": 0.1
+    }
+}

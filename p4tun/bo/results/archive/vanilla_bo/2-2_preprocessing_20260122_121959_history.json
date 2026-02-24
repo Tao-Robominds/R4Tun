@@ -1,0 +1,8 @@
+{
+  "tunnel_id": "2-2",
+  "stage": "preprocessing",
+  "metric": "mIoU",
+  "best_score": -Infinity,
+  "best_params": null,
+  "history": []
+}
