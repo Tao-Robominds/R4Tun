@@ -1,9 +1,0 @@
-{
-  "trial_id": "det_4-1_018",
-  "stage": "detection",
-  "params": {},
-  "miou": 0.0,
-  "details": {},
-  "runtime_sec": 34.4406464099884,
-  "error": "Error tokenizing data. C error: Expected 12 fields in line 3474910, saw 14\n"
-}

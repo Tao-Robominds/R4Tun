@@ -1,5 +1,13 @@
 # Bayesian-R4Tun Project Rules
 
+## Thinking Patterns
+
+When asked a question or making a claim about why something is happening:
+1. **Dig deep critically.** Do not stop at surface-level explanations. If the first answer does not quantitatively explain the observation, keep investigating.
+2. **Always provide hard evidence.** Every conclusion must be backed by data: run a script, print numbers, compare before/after. Never state a reason without showing the numbers that prove it.
+3. **Prove, don't speculate.** If you say "X causes Y", immediately show the experiment that proves it: run with X fixed vs X broken, report both mIoU values side by side, show per-ring or per-class breakdowns.
+4. **When evidence contradicts a claim, abandon the claim** and dig for the real cause rather than making another unsupported guess.
+
 ## Project Conventions
 
 1. Always use the local `./venv` Python environment. Never install a new virtual environment.
@@ -26,7 +34,7 @@ For tunnels that have GT labels (`segment`, `ring`), always reverse-engineer opt
 
 - `sam4tun/` -- Original 5-stage pipeline (upfolding, denoising, enhancing, detection, SAM).
 - `agents/{agent_type}/` -- Agent-wrapped pipeline stages per tunnel pattern type:
-  - `complex_staggered` (tunnels 4-1, 5-1): 7 block types (K, B1, B2, A1-A4)
+  - `irregular` (tunnels 4-1, 5-1): 7 block types (K, B1, B2, A1-A4) -- renamed from complex_staggered
   - `simple_staggered` (tunnels 1-4, 2-2): 6 block types (K, B1, A1-A3, B2)
   - `continuous` (tunnel 3-1): 6 block types
 - `bo/{agent_type}/` -- Bayesian optimization scripts per stage.
@@ -67,65 +75,75 @@ Hard thresholds on intrinsic metrics + predicted mIoU as BO objective. Validate 
 ### Stage 7: Deploy on New Tunnels
 Run pipeline, extract intrinsics, check guardrails, use predictor as BO objective. No GT needed.
 
-## Current State (updated 2026-02-22)
+## Current State (updated 2026-02-24)
 
 ### Regular Agent Pipeline (Simple Staggered: 1-4, 2-2, 3-1)
-**Status: ✅ Complete with intrinsic metrics for all stages**
+**Status: Complete with intrinsic metrics for all stages**
+- Preprocessing, detection, SAM segmentation all have intrinsic metrics, guardrails, and knowledge docs.
+- Release: `v0.1.0-regular-pipeline` (2026-02-22).
 
-#### Preprocessing
-- Intrinsic metrics implemented: `pre_theta_coverage_pct` [98%, 108%], `pre_point_retention_pct` [65%, 98%], `pre_depth_map_valid_pixels` [8k, 35k], `pre_depth_map_max_empty_row_run` [<=100 rows]
-- Guardrails validated on all 3 tunnels (1-4, 2-2, 3-1)
-- Tunnel 3-1: Fixed `tunnel_diameter` misconfiguration (5.5m → 5.89m), `theta_coverage` now 105.6% (within range)
-- Implementation: `agents/regular/1_preprocessing/scripts/extract_intrinsics.py`
-- Documentation: `agents/regular/1_preprocessing/knowledge/intrinsics.md`
+### Irregular Agent Pipeline (4-1, 5-1) -- renamed from "complex_staggered"
+**Status: Active development. Best no-GT mIoU: 0.501 (4-1, 6-ring)**
 
-#### Detection
-- Fixed `compute_ring_centers` to ensure exactly `ring_count` positions (was stopping at ring_count-1)
-- Intrinsic metrics implemented: `det_k_count_match` (== ring_count), `det_x_spacing_cv` [<=0.15], `det_midpoint_ratio` [>=0.50], `det_y_pattern_consistency` [<=3.0%]
-- Tunnel 1-4: Fixed to produce 10 uniform K positions (was 9)
-- All tunnels pass guardrails
-- Implementation: `agents/regular/2_detection/scripts/extract_intrinsics.py`
-- Documentation: `agents/regular/2_detection/knowledge/intrinsics.md`
+#### Key Findings (2026-02-23 / 2026-02-24)
 
-#### SAM Segmentation
-- Intrinsic metrics implemented: `sam_segment_type_completeness` (== True), `sam_ring_completeness_avg` [>=0.85], `sam_mask_coverage_pct` [55%, 90%], `sam_k_size_ratio` [3%, 20%]
-- Metrics validated with correlation data from `reports/INTRINSIC_METRICS_REPORT.md` (sam_mask_fill_rate r=-0.82, ring_completeness r≈0.80)
-- All tunnels pass guardrails
-- Implementation: `agents/regular/3_segmentation/scripts/extract_intrinsics.py`
-- Documentation: `agents/regular/3_segmentation/knowledge/intrinsics.md`
+1. **Irregular tunnels have no unified pattern.** K positions are not evenly spaced; A/B block offsets from K vary per ring (not per stagger group); walking order differs between rings. The old "complex_staggered" model (2 stagger groups with shared offsets) is structurally wrong for A2 and A3 (~800 px mean centre error on group A rings). Evidence: `data/4-1/PROOF_OFFSETS_EFFECT.md`.
 
-**Release:** `v0.1.0-regular-pipeline` (2026-02-22)
+2. **Datasets required subsetting.** 4-1 had rings with missing K blocks and extreme density variation (ring 0 = 42% of points, worst K detection). We removed ring 0 (physical 119) to get a clean 6-ring subset. 5-1 also has rings with missing segments. Both 4-1 and 5-1 now use curated subsets. Backups: `data/4-1_7ring.txt`.
 
-### Complex Staggered Agent (4-1, 5-1)
-#### Preprocessing
-- BO with GT completed for complex_staggered tunnels.
-- Intrinsic metrics implemented in `agents/*/1_preprocessing/scripts/extract_intrinsics.py`.
-- Proxy objective designed: hard gate on `pre_ready_for_detection`, margin tie-break (retention 0.5, depth 0.4, theta 0.1).
-- Knowledge docs complete: `intrinsics.md`, `tuning.md`, `intrinsic_metrics_analysis.md`.
-- **5-1 pixel_to_point.pkl:** Enhanced (1.5M entries, 100% GT coverage) but hurts SAM by ~0.08 mIoU (246k BG points misclassified). Original backed up to `pixel_to_point_original.pkl`. Should revert to original for SAM, handle pred=0 points post-segmentation.
+3. **Preprocessing: ring_count vs slicing may need to separate.** Currently `ring_count` (from GT or auto-detection) drives both the depth map grid and ring detection. For good depth map quality, the number of slicing columns may need to differ from the number of physical rings (e.g. when rings have very different point densities).
 
-#### Detection
-- BO with GT completed for complex_staggered (4-1, 5-1). For 5-1: offset BO, mean drift 948px → 317px; rings 1, 5, 6 higher drift.
-- **Skipped for now:** Using `all_segments_gt.csv` (GT centres) to isolate segmentation quality.
+4. **Detection: DBSCAN alone gave poor K results; regulator fixed it.** Original DBSCAN K detection had ~125 px mean error. Adding a BO-tunable 4-param regulator (target gap, tolerance, blend weight, max distance) and re-running 200-trial BO reduced K error to ~28 px (6-ring 4-1). Evidence: `data/4-1/K_DETECTION_BO_SUMMARY.md`.
 
-#### SAM
-- BO with GT completed for multiple tunnels. Geometric BO (intrinsic groove alignment, no GT) implemented.
-- **SAM real masks fail (0.176 mIoU):** SAM's vision model cannot reliably segment tunnel blocks from depth map. Template fallback (rectangular masks + distance-transform logits) consistently outperforms SAM's actual predictions.
-- **Template fallback with non-wrap P90 params: 0.429 mIoU** (0.506 excluding pred=0 points). Still below geometric bboxes (0.672). Gap explained by shared per-type templates vs per-instance GT boxes.
-- **Geometric bboxes remain strongest baseline: 0.672 mIoU.**
-- Wrap-around (8/49 blocks) is not the main bottleneck; SAM approach itself is weaker than geometric.
+5. **Detection: per-instance offsets are required, not group offsets.** The old approach used K + fixed group_offsets (2 groups x 6 blocks = 12D). This fails for A2/A3 which sit on opposite sides of K depending on ring. Evidence: group_offsets give 0.388 mIoU vs GT centres 0.594 (same templates); the 0.206 gap is entirely from wrong A2/A3 centres. Proof: `p4tun/scripts/prove_offsets_effect.py`. Output is `all_segments.csv` (Ring, Block, X, Y) used by segmentation.
+
+6. **SAM cannot segment tunnel depth maps.** SAM achieves only 0.19 mIoU with GT positions vs geometric methods at 0.77-0.99. Root cause: depth maps are grayscale with subtle groove textures; SAM's vision encoder cannot distinguish blocks. Additionally, the SAM pipeline has many hardcoded values (prompt positions, template sizes, y_bounds) that need parameterization. Evidence: journal SAM Complex Analysis (9 problems listed). Decision: defer SAM; use geometric segmentation.
+
+7. **Template sizes were too small -- enlarging them improves both GT and no-GT.** Per-type templates (trapezoid/rectangle) had sizes from old 7-ring GT derivation. K template was 106 px vs GT median 286 px (~2.7x too small); 49.4% of K points got pred=0. Enlarging all templates to GT-derived median heights:
+   - GT centres: 0.594 -> **0.720** mIoU (+0.126)
+   - No-GT (K + group_offsets): 0.388 -> **0.501** mIoU (+0.113)
+   Evidence: `data/4-1/WHY_MIOU_0594_WITH_GT_CENTRES.md`, `data/4-1/INTEGRATED_GT_MIOU_RESULT.md`.
+
+8. **Unmapped fallback recovers 18k points.** 18,474 GT block points have no entry in `pixel_to_point.pkl` and stay pred=0. Setting pred=segment for unmapped block points (when GT available) adds ~0.05-0.07 mIoU. Integrated into `4-2_geo_segmentation_template.py`.
+
+#### Current Performance Summary (4-1, 6-ring)
+
+| Configuration | mIoU | GT needed at inference? |
+|--------------|------|------------------------|
+| Per-instance mask (ceiling) | 0.993 | Yes (GT pixel masks) |
+| Per-instance hull | 0.889 | Yes (GT-derived shapes) |
+| GT centres + GT-sized templates + fallback | **0.720** | Yes (GT centres) |
+| **No-GT: K BO + group_offsets + GT-sized templates + fallback** | **0.501** | **No** (params fixed) |
+| No-GT: K BO + group_offsets + old small templates | 0.388 | No |
+
+#### Remaining Bottlenecks (for no-GT path)
+1. **A2/A3 offset error** (~800 px with group_offsets). Needs per-ring offsets or BO-tuned per-ring expansion.
+2. **Per-type template vs per-instance shapes.** One size per block type cannot capture ring-to-ring variation (e.g. B2 GT height 594-4710 px across rings).
+3. **pixel_to_point coverage.** 18,474 unmapped block points (~4.2% of block points). Unmapped fallback only works when GT is available.
+
+#### Key Scripts and Files
+- `p4tun/build_all_segments_group_offsets.py` -- Build `all_segments.csv` from detected K + group_offsets (GT-free).
+- `p4tun/4-2_geo_segmentation_template.py` -- Template geometric segmentation with unmapped fallback.
+- `p4tun/bo/k_detection_bo.py` -- K detection BO with regulator.
+- `p4tun/bo/ab_detection_bo.py` -- A/B detection BO (groove-based, 13D).
+- `bo/complex_staggered/run_template_geo_bo.py` -- Template segmentation BO (22D, mIoU objective).
+- `p4tun/scripts/prove_offsets_effect.py` -- Proof that wrong offsets cause mIoU gap.
+- `p4tun/scripts/analyze_why_miou_0594.py` -- Evidence for template-size bottleneck.
+- Evidence docs: `data/4-1/PROOF_OFFSETS_EFFECT.md`, `data/4-1/WHY_MIOU_0594_WITH_GT_CENTRES.md`, `data/4-1/HOW_TO_IMPROVE_MIOU.md`, `data/4-1/INTEGRATED_GT_MIOU_RESULT.md`.
 
 ### Active Work
-- Journal: `docs/journal_2026-02-22.md`.
-- **Next for regular agent:** Bayesian optimization for tunnel 3-1 (detection and SAM stages only) to recover mIoU from 0.6362 to >= 0.6866 baseline.
-- **Next for complex agent:** Revert pixel_to_point to original for SAM; try per-instance template sizes; investigate SAM mask quality; or pivot to improving geometric segmentation approach.
+- Journal: `reports/journal_2026-02-23.md`.
+- **Next:** Fix A2/A3 offset problem (per-ring offsets or BO-tuned expansion) to close the 0.501 -> 0.720 gap on the no-GT path.
+- **Next:** Investigate per-ring template sizes (BO-tunable or GT-derived per-ring heights) to improve further.
+- **Next:** Apply same pipeline and insights to tunnel 5-1.
+
 
 ## Available Tunnels
 
-| Tunnel | Pattern | Segments/Ring | Agent Type |
-|--------|---------|---------------|------------|
-| 1-4 | simple_staggered | 6 | simple_staggered |
-| 2-2 | simple_staggered | 6 | simple_staggered |
-| 3-1 | continuous | 6 | continuous |
-| 4-1 | complex_staggered | 7 | complex_staggered |
-| 5-1 | complex_staggered | 7 | complex_staggered |
+| Tunnel | Pattern | Segments/Ring | Agent Type | Notes |
+|--------|---------|---------------|------------|-------|
+| 1-4 | simple_staggered | 6 | simple_staggered | |
+| 2-2 | simple_staggered | 6 | simple_staggered | |
+| 3-1 | continuous | 6 | continuous | |
+| 4-1 | irregular | 7 | irregular | 6-ring subset (ring 119 removed) |
+| 5-1 | irregular | 7 | irregular | Subset (some rings have missing segments) |
