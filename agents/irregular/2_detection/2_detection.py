@@ -78,6 +78,62 @@ def get_param(params: Dict, key: str, default=None):
     return params.get(key, default)
 
 
+def validate_detection_params(params: Dict) -> None:
+    """Validate and report parameter hygiene for detection stage.
+
+    This helps keep complex-scenario tuning focused on parameters that are
+    actively consumed by the current pipeline.
+    """
+    if not params:
+        return
+
+    active_keys = {
+        # Core line detection
+        'binary_threshold', 'hough_threshold', 'hough_min_length', 'hough_max_gap',
+        'angle_pos_min', 'angle_pos_max', 'angle_neg_min', 'angle_neg_max',
+        # K detection/fusion
+        'k_detection_method', 'eps', 'k_expected_height_px', 'k_gap_tolerance_px',
+        'k_candidates_per_ring', 'groove_snap_px', 'ring_offset', 'ring_spacing_px',
+        'reverse_ring_order',
+        # Expansion
+        'expansion_method', 'block_sequence', 'expansion_blocks',
+        'stagger_groups', 'group_offsets',
+        'ring_block_offsets', 'global_block_offsets',
+        'ring_x_offsets', 'global_x_offset',
+        # Outputs/meta
+        'output_filename', 'description',
+        # Legacy complex DBSCAN branch
+        'complex_subdivision_threshold', 'complex_max_subdivisions',
+        'complex_conf_midpoint', 'complex_conf_intersection',
+    }
+
+    deprecated_keys = {
+        # Legacy names from earlier Hough pipeline variants
+        'hough_oblique_threshold', 'hough_oblique_min_length', 'hough_oblique_max_gap',
+        'angle_positive_min', 'angle_positive_max', 'angle_negative_min', 'angle_negative_max',
+        'hough_vertical_threshold', 'hough_horizontal_threshold',
+        'hough_horizontal_min_length', 'hough_horizontal_max_gap',
+        'horizontal_angle_tolerance', 'merge_distance_threshold',
+        'complex_hough_threshold', 'complex_hough_min_length', 'complex_hough_max_gap',
+        'complex_angle_pos_min', 'complex_angle_pos_max',
+        'complex_angle_neg_min', 'complex_angle_neg_max',
+        'complex_min_y_span', 'complex_min_x_span',
+        'complex_eps_primary', 'complex_eps_secondary',
+        'k_to_b_r0', 'ab_step_r0', 'k_to_b_r1', 'ab_step_r1', 'k_to_b_r2', 'ab_step_r2',
+        'k_to_b_r3', 'ab_step_r3', 'k_to_b_r4', 'ab_step_r4', 'k_to_b_r5', 'ab_step_r5',
+    }
+
+    unknown = sorted([k for k in params.keys() if k not in active_keys and k not in deprecated_keys])
+    legacy = sorted([k for k in params.keys() if k in deprecated_keys])
+
+    if legacy:
+        print(f"  Warning: {len(legacy)} deprecated detection params present (ignored by current path):")
+        print(f"    {legacy}")
+    if unknown:
+        print(f"  Warning: {len(unknown)} unknown detection params present:")
+        print(f"    {unknown}")
+
+
 # =============================================================================
 # CRITICAL PARAMETERS (tunable via JSON)
 # =============================================================================
@@ -1281,43 +1337,103 @@ def calculate_k_positions_combined(
 
 
 
-# Non-K block names for grouped offset expansion
-EXPANSION_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
+# Default non-K expansion sequence (can be overridden by parameters)
+DEFAULT_EXPANSION_BLOCKS = ['B1', 'B2', 'A1', 'A2', 'A3', 'A4']
 
 
-def expand_k_with_grouped_offsets(
-    k_positions: pd.DataFrame,
+def _normalize_block_sequence(params: Dict) -> List[str]:
+    """Resolve block expansion sequence from parameters.
+
+    Accepts:
+      - block_sequence: ["K", "B1", ...] or ["B1", ...]
+      - expansion_blocks: ["B1", ...] (legacy alias)
+    """
+    sequence = params.get('block_sequence', params.get('expansion_blocks', DEFAULT_EXPANSION_BLOCKS))
+    if not sequence:
+        return DEFAULT_EXPANSION_BLOCKS
+
+    seq = [str(x) for x in sequence]
+    if seq and seq[0] == 'K':
+        seq = seq[1:]
+    return seq if seq else DEFAULT_EXPANSION_BLOCKS
+
+
+def _resolve_block_offset(
+    ring_idx: int,
+    block: str,
+    k_y: float,
     img_height: int,
+    expansion_method: str,
     stagger_groups: Dict[str, list],
     group_offsets: Dict[str, float],
-) -> pd.DataFrame:
-    """Derive all segment positions from K using grouped offsets + stagger assignment.
+    ring_block_offsets: Dict,
+    global_block_offsets: Dict[str, float],
+) -> float:
+    """Get per-block Y offset for the current ring under selected expansion method.
 
-    Each ring belongs to a stagger group (e.g. "A" or "B").  All rings in the
-    same group share the same 6 Y-offsets from K.  This is BO-tunable at 12D
-    (2 groups x 6 blocks) + a discrete stagger assignment.
+    Note:
+      - ``group_offsets`` are used only when ``expansion_method == 'grouped_offsets'``.
+      - For ``irregular_offsets``, ``ring_block_offsets`` / ``global_block_offsets`` are used.
+    """
+    # Highest-priority: explicit per-ring per-block override
+    ring_key = str(ring_idx)
+    explicit_ring_offsets = ring_block_offsets.get(ring_key, ring_block_offsets.get(ring_idx, {}))
+    if isinstance(explicit_ring_offsets, dict) and block in explicit_ring_offsets:
+        return float(explicit_ring_offsets[block])
+
+    scalar_key = f"r{ring_idx}_{block}"
+    if scalar_key in ring_block_offsets:
+        return float(ring_block_offsets[scalar_key])
+
+    if expansion_method == 'grouped_offsets':
+        ring_to_group = {}
+        default_group = list(stagger_groups.keys())[0] if stagger_groups else "A"
+        for group_name, ring_list in stagger_groups.items():
+            for r in ring_list:
+                ring_to_group[r] = group_name
+        group = ring_to_group.get(ring_idx, default_group)
+        return float(group_offsets.get(f"{group}_{block}", 0.0))
+
+    return float(global_block_offsets.get(block, 0.0))
+
+
+def expand_k_to_all_segments(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    params: Dict,
+) -> pd.DataFrame:
+    """Derive all segment positions from K using irregular-aware configurable expansion.
+
+    Supported expansion methods:
+      - grouped_offsets (legacy): per-group offsets keyed as "{group}_{block}"
+      - irregular_offsets: per-ring/per-block offsets with fallbacks
+
+    Offset fallback order:
+      ring_block_offsets[ring][block] -> ring_block_offsets["r{ring}_{block}"]
+      -> (grouped_offsets if grouped mode, else global_block_offsets) -> 0.0
 
     Args:
         k_positions: DataFrame with columns Type, X, Y, Confidence (K-only).
         img_height: Depth map height in pixels (for Y wrap-around).
-        stagger_groups: Maps group name -> list of ring indices, e.g.
-            {"A": [0,1,2,3,4], "B": [5,6]}.
-        group_offsets: Maps "{group}_{block}" -> signed pixel offset from K,
-            e.g. {"A_B1": -460.9, "B_B1": 517.8, ...}.
+        params: Detection parameters dict.
 
     Returns:
         DataFrame with columns Ring, Block, X, Y, quality.
     """
-    # Build reverse lookup: ring_idx -> group name
-    ring_to_group = {}
-    default_group = list(stagger_groups.keys())[0] if stagger_groups else "A"
-    for group_name, ring_list in stagger_groups.items():
-        for r in ring_list:
-            ring_to_group[r] = group_name
+    expansion_method = params.get('expansion_method', 'grouped_offsets')
+    stagger_groups = params.get('stagger_groups', {"A": list(range(len(k_positions)))})
+    group_offsets = params.get('group_offsets', {})
+    ring_block_offsets = params.get('ring_block_offsets', {})
+    global_block_offsets = params.get('global_block_offsets', {})
+    block_sequence = _normalize_block_sequence(params)
+
+    ring_x_offsets = params.get('ring_x_offsets', {})
+    global_x_offset = float(params.get('global_x_offset', 0.0))
 
     rows = []
     for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
-        k_x = float(k_row['X'])
+        ring_x_offset = float(ring_x_offsets.get(str(ring_idx), ring_x_offsets.get(ring_idx, global_x_offset)))
+        k_x = float(k_row['X']) + ring_x_offset
         k_y = float(k_row['Y'])
         quality = float(k_row.get('Confidence', 1.0))
 
@@ -1330,11 +1446,19 @@ def expand_k_with_grouped_offsets(
             'quality': quality,
         })
 
-        # Non-K blocks: look up group, then apply group offset
-        group = ring_to_group.get(ring_idx, default_group)
-        for block in EXPANSION_BLOCKS:
-            key = f"{group}_{block}"
-            offset = group_offsets.get(key, 0.0)
+        # Non-K blocks with configurable per-ring offsets
+        for block in block_sequence:
+            offset = _resolve_block_offset(
+                ring_idx=ring_idx,
+                block=block,
+                k_y=k_y,
+                img_height=img_height,
+                expansion_method=expansion_method,
+                stagger_groups=stagger_groups,
+                group_offsets=group_offsets,
+                ring_block_offsets=ring_block_offsets,
+                global_block_offsets=global_block_offsets,
+            )
             y = (k_y + offset) % img_height
             if y < 0:
                 y += img_height
@@ -1439,6 +1563,7 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
     
     # Load parameters
     params, params_loaded = load_parameters(tunnel_id, base_dir)
+    validate_detection_params(params)
     
     # Physical constants - READ FROM PREPROCESSING STAGE (not duplicated here)
     preprocessing_params = load_preprocessing_params(tunnel_id, base_dir)
@@ -1531,24 +1656,23 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> pd.DataFrame:
         json.dump(groove_meta, f, indent=2)
     print(f"  Saved: {groove_meta_path}")
 
-    # Step 3: Expand K positions to all segments (grouped_offsets only)
+    # Step 3: Expand K positions to all segments
     expansion_method = params.get('expansion_method', 'grouped_offsets')
     print(f"\n[Step 3] Expanding K positions to all segments ({expansion_method})...")
 
     n_rings_detected = len(k_positions)
-    
-    if expansion_method != 'grouped_offsets':
-        raise ValueError(f"Only 'grouped_offsets' expansion method is supported. Got: {expansion_method}")
-    
-    # Grouped offsets: 2 stagger groups x 6 blocks = 12D (BO-tunable)
-    stagger_groups = params.get('stagger_groups', {"A": list(range(n_rings_detected))})
-    group_offsets = params.get('group_offsets', {})
-    all_segments = expand_k_with_grouped_offsets(
-        k_positions,
-        img_height=L,
-        stagger_groups=stagger_groups,
-        group_offsets=group_offsets,
-    )
+
+    if expansion_method not in {'grouped_offsets', 'irregular_offsets'}:
+        raise ValueError(
+            f"Unsupported expansion_method '{expansion_method}'. "
+            f"Expected one of: grouped_offsets, irregular_offsets"
+        )
+
+    if expansion_method == 'irregular_offsets' and params.get('group_offsets'):
+        print("  Note: 'group_offsets' provided but ignored in irregular_offsets mode")
+
+    params.setdefault('stagger_groups', {"A": list(range(n_rings_detected))})
+    all_segments = expand_k_to_all_segments(k_positions, img_height=L, params=params)
     
     # Output filename based on detection method
     output_filename = params.get('output_filename', 'all_segments.csv')
