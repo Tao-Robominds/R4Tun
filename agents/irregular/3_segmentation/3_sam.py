@@ -703,6 +703,57 @@ def compute_block_to_label_map(segment_per_ring):
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 
+def normalize_walk_order(walk_order, default_blocks):
+    """Normalize walk order config into list[(block_name, ring_direction)]."""
+    if not walk_order:
+        return [(b, 0) for b in default_blocks]
+
+    normalized = []
+    for item in walk_order:
+        if isinstance(item, (list, tuple)) and len(item) >= 1:
+            block = str(item[0])
+            direction = int(item[1]) if len(item) > 1 else 0
+            normalized.append((block, direction))
+        else:
+            normalized.append((str(item), 0))
+
+    covered = {b for b, _ in normalized}
+    for b in default_blocks:
+        if b not in covered:
+            normalized.append((b, 0))
+    return normalized
+
+
+def apply_walk_order(all_segments_df, walk_order):
+    """Reorder segment processing by configurable block walking order.
+
+    ``walk_order`` entries are (block, ring_direction):
+      - ring_direction = 1: process rings low->high
+      - ring_direction = -1: process rings high->low
+      - ring_direction = 0: process rings in natural order
+    """
+    all_rings = sorted(all_segments_df['Ring'].unique().tolist())
+    by_block = {(row.Block, int(row.Ring)): row for row in all_segments_df.itertuples(index=False)}
+
+    ordered_rows = []
+    for block_name, ring_dir in walk_order:
+        if ring_dir > 0:
+            ring_iter = all_rings
+        elif ring_dir < 0:
+            ring_iter = list(reversed(all_rings))
+        else:
+            ring_iter = all_rings
+
+        for ring_id in ring_iter:
+            row = by_block.get((block_name, ring_id))
+            if row is not None:
+                ordered_rows.append({'Ring': row.Ring, 'Block': row.Block, 'X': row.X, 'Y': row.Y, 'quality': getattr(row, 'quality', 1.0)})
+
+    if not ordered_rows:
+        return all_segments_df
+    return pd.DataFrame(ordered_rows)
+
+
 # =============================================================================
 # PER-SEGMENT PROCESSING (from all_segments.csv)
 # =============================================================================
@@ -712,6 +763,8 @@ def process_segment(segment_row, image, predictor, config):
 
     Returns result dict or None if the segment cannot be processed.
     """
+    img_h, img_w = image.shape[:2]
+
     initial_x = segment_row['X']
     initial_y = segment_row['Y']
     block = segment_row['Block']
@@ -728,6 +781,11 @@ def process_segment(segment_row, image, predictor, config):
     crop_expansion = config.get('crop_expansion', 0)
     y_bounds = config['y_bounds']
     template_params = config['template_params']
+
+    seam_shift_px = float(config.get('seam_shift_px', 0.0))
+    ring_seam_shifts = config.get('ring_seam_shifts', {})
+    ring_shift = float(ring_seam_shifts.get(str(ring_id), ring_seam_shifts.get(ring_id, seam_shift_px)))
+    initial_x = (float(initial_x) + ring_shift) % img_w
     
     angle_extra = math.tan(math.radians(angle)) * 700 + 100
 
@@ -888,6 +946,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     boundary_fraction_bk = get_param(params, 'boundary_fraction_bk', default=0.5, allow_default=True)
     boundary_fraction_ba = get_param(params, 'boundary_fraction_ba', default=0.5, allow_default=True)
     boundary_fraction_aa = get_param(params, 'boundary_fraction_aa', default=0.5, allow_default=True)
+    seam_shift_px = get_param(params, 'seam_shift_px', default=0.0, allow_default=True)
+    ring_seam_shifts = get_param(params, 'ring_seam_shifts', default={}, allow_default=True)
     
     # Prompt point y-bounds (mm)
     y_bound_lower = get_param(params, 'y_bound_lower', default=DEFAULT_Y_BOUND_LOWER, allow_default=True)
@@ -913,6 +973,7 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     print(f"  crop_expansion:   {crop_expansion}mm")
     print(f"  use_template_fallback: {use_template_fallback}")
     print(f"  use_angular_boundaries: {use_angular_boundaries}")
+    print(f"  seam_shift_px:    {seam_shift_px}")
     if use_angular_boundaries:
         print(f"  boundary_fraction_bk: {boundary_fraction_bk}")
         print(f"  boundary_fraction_ba: {boundary_fraction_ba}")
@@ -953,10 +1014,13 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
     # Determine segment count from data
     unique_blocks = all_segments_df['Block'].unique()
     segment_per_ring = len(unique_blocks)
+    walk_order = normalize_walk_order(params.get('walk_order', []), sorted(unique_blocks))
+    all_segments_df = apply_walk_order(all_segments_df, walk_order)
     
     print(f"  Total segments to process: {len(all_segments_df)}")
     print(f"  Rings: {all_segments_df['Ring'].nunique()}")
     print(f"  Unique block types: {sorted(unique_blocks)} ({segment_per_ring})")
+    print(f"  walk_order:       {walk_order}")
     print(f"  Wrap-around: ENABLED")
     print(f"  Point update: pred in [0, 7] (p4tun-style)")
     
@@ -995,6 +1059,8 @@ def run_sam(tunnel_id: str, base_dir: str = "data"):
         'crop_expansion': crop_expansion,
         'y_bounds': y_bounds,
         'template_params': template_params,
+        'seam_shift_px': seam_shift_px,
+        'ring_seam_shifts': ring_seam_shifts,
     }
     
     # Run SAM on each segment from all_segments.csv

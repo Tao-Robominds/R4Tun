@@ -83,5 +83,67 @@
     "B_A3": 1164.6,
     "B_A4": 459.1
   },
-  "description": "Unified line detection + combined K detection (DBSCAN + groove_pair) + grouped offsets (baseline: 0.305 mIoU)"
+  "description": "Unified line detection + combined K detection (DBSCAN + groove_pair) + grouped offsets (baseline: 0.305 mIoU)",
+  "block_sequence": [
+    "K",
+    "B1",
+    "B2",
+    "A1",
+    "A2",
+    "A3",
+    "A4"
+  ],
+  "expansion_method": "irregular_offsets",
+  "global_x_offset": 0.0,
+  "ring_x_offsets": {},
+  "ring_block_offsets": {
+    "0": {
+      "B1": -413.1,
+      "B2": -1225.0,
+      "A1": -1980.7,
+      "A2": 1289.5,
+      "A3": 471.1,
+      "A4": 464.4
+    },
+    "1": {
+      "B1": -413.1,
+      "B2": -1225.0,
+      "A1": -1980.7,
+      "A2": 1289.5,
+      "A3": 471.1,
+      "A4": 464.4
+    },
+    "2": {
+      "B1": -413.1,
+      "B2": -1225.0,
+      "A1": -1980.7,
+      "A2": 1289.5,
+      "A3": 471.1,
+      "A4": 464.4
+    },
+    "3": {
+      "B1": -413.1,
+      "B2": -1225.0,
+      "A1": -1980.7,
+      "A2": 1289.5,
+      "A3": 471.1,
+      "A4": 464.4
+    },
+    "4": {
+      "B1": -413.1,
+      "B2": -1225.0,
+      "A1": -1980.7,
+      "A2": 1289.5,
+      "A3": 471.1,
+      "A4": 464.4
+    },
+    "5": {
+      "B1": -457.9,
+      "B2": -1197.2,
+      "A1": -1999.3,
+      "A2": -1625.4,
+      "A3": 1164.6,
+      "A4": 459.1
+    }
+  }
 }
