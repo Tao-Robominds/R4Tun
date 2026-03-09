@@ -1,8 +1,4 @@
 {
-  "detection_mode": "k_and_offsets",
-  "k_expected_height_px": 500,
-  "segment_count": 7,
-  "k_merge_threshold_px": 6,
   "per_ring_offsets": {
     "0": {"B1": -517.4, "B2": 473.0, "A1": -1215.1, "A2": -2048.7, "A3": -2035.5, "A4": 1194.7},
     "1": {"B1": -491.4, "B2": 460.9, "A1": -1345.3, "A2": -1912.0, "A3": 1949.1, "A4": -730.1},
@@ -12,6 +8,7 @@
     "5": {"B1": 542.3, "B2": 1348.8, "A1": 1223.6, "A2": 2073.6, "A3": -2069.0, "A4": -1207.9},
     "6": {"B1": 525.5, "B2": -449.7, "A1": 1215.1, "A2": 1926.4, "A3": 1852.4, "A4": -1152.3}
   },
+  "k_expected_height_px": 500,
   "angle_pos_min": 6.0,
   "angle_pos_max": 9.0,
   "angle_neg_min": -9.0,
@@ -19,6 +16,5 @@
   "binary_threshold": 127,
   "hough_threshold": 50,
   "hough_min_length": 100,
-  "hough_max_gap": 40,
-  "output_filename": "all_segments.csv"
+  "hough_max_gap": 40
 }

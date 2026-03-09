@@ -18,6 +18,8 @@ Parameters (from parameters_segmentation.json):
     boundaries_per_ring — dict of ring_idx → list of {y, block}
     ring_half_width     — X extent of ring band (default: image_width / ring_count / 2)
     k_cap, ab_cap       — fallback adaptive-cap params when no boundaries
+    r_surface_min       — radial cutoff (m): points with r < r_surface_min keep pred=0
+                          to drop groove false positives; None = disabled
 """
 
 import os
@@ -36,6 +38,8 @@ DEFAULTS = {
     "ring_half_width": None,
     "k_cap": 130,
     "ab_cap": 390,
+    "r_surface_min": None,
+    "slot_inset_y": 0,
 }
 
 
@@ -65,14 +69,18 @@ def build_boundary_label_map(
     block_to_label: dict,
     ring_half_width: float,
     boundaries_per_ring: dict,
+    slot_inset_y: float = 0,
 ) -> tuple:
     """Build label map from explicit boundary positions per ring.
 
     Each ring has N entries [{y, block}, ...] sorted by Y.
     Entry i: from y_i to y_{i+1} (circular), pixels belong to block_i.
+    If slot_inset_y > 0, slots are inset by that many pixels at each boundary
+    (reduces groove false positives; journal 2026-02-18: sy=2 gave +0.012 mIoU).
     """
     label_map = np.zeros((height, width), dtype=np.int32)
     ring_map = np.full((height, width), -1, dtype=np.int32)
+    inset = max(0, float(slot_inset_y))
 
     for ring_idx in sorted(segments_df['Ring'].unique()):
         ring_key = str(ring_idx)
@@ -95,17 +103,31 @@ def build_boundary_label_map(
             continue
 
         col_labels = np.zeros(height, dtype=np.int32)
-        ys = np.arange(height)
+        ys = np.arange(height, dtype=np.float64)
 
         for i in range(n):
             start_y = float(bounds[i]['y'])
             end_y = float(bounds[(i + 1) % n]['y'])
             label = block_to_label.get(bounds[i]['block'], 0)
 
-            if end_y > start_y:
-                mask = (ys >= start_y) & (ys < end_y)
+            if inset > 0:
+                s_ins = start_y + inset
+                e_ins = end_y - inset
+                if end_y > start_y:
+                    slot_len = end_y - start_y
+                    if slot_len <= 2 * inset:
+                        continue
+                    mask = (ys >= s_ins) & (ys < e_ins)
+                else:
+                    slot_len = (height - start_y) + end_y
+                    if slot_len <= 2 * inset:
+                        continue
+                    mask = (ys >= s_ins) | (ys < e_ins)
             else:
-                mask = (ys >= start_y) | (ys < end_y)
+                if end_y > start_y:
+                    mask = (ys >= start_y) & (ys < end_y)
+                else:
+                    mask = (ys >= start_y) | (ys < end_y)
             col_labels[mask] = label
 
         xs = np.arange(x_lo, x_hi + 1)
@@ -279,12 +301,14 @@ def run_segmentation(
         ring_half_width = width / ring_count / 2.0
 
     boundaries_per_ring = params.get("boundaries_per_ring", None)
+    slot_inset_y = params.get("slot_inset_y", DEFAULTS["slot_inset_y"])
 
     if boundaries_per_ring is not None:
         method = "boundary"
         label_map, ring_map = build_boundary_label_map(
             segments_df, height, width, block_to_label,
             ring_half_width, boundaries_per_ring,
+            slot_inset_y=slot_inset_y,
         )
     else:
         method = "adaptive_cap"
@@ -303,12 +327,39 @@ def run_segmentation(
 
     updated_df = project_back_to_point_cloud(label_map, fix_ring, pixel_to_point, df)
 
+    r_surface_min = params.get("r_surface_min", DEFAULTS["r_surface_min"])
+    r_surface_min_per_ring = params.get("r_surface_min_per_ring", None)
+    if ("r" in updated_df.columns and
+            (r_surface_min is not None or (r_surface_min_per_ring is not None and isinstance(r_surface_min_per_ring, dict)))):
+        pred_vals = updated_df["pred"].values
+        r_vals = updated_df["r"].values
+        pred_ring_vals = updated_df["pred_ring"].values
+        block_mask = pred_vals > 0
+        if r_surface_min_per_ring:
+            fallback = r_surface_min if r_surface_min is not None else 0.0
+            thresh = np.full(len(updated_df), fallback, dtype=np.float64)
+            for ring_key, t in r_surface_min_per_ring.items():
+                thresh[pred_ring_vals == int(ring_key)] = float(t)
+            reclass = block_mask & (r_vals < thresh)
+        else:
+            reclass = block_mask & (r_vals < r_surface_min)
+        n_reclass = int(reclass.sum())
+        updated_df.loc[reclass, "pred"] = 0
+        updated_df.loc[reclass, "pred_ring"] = -1
+        if n_reclass > 0:
+            label = "per_ring" if r_surface_min_per_ring else str(r_surface_min)
+            print(f"  Radial filter (r_surface_min={label}): {n_reclass:,} points → background")
+
     out_csv = os.path.join(tunnel_dir, "final.csv")
     updated_df.to_csv(out_csv, index=False)
 
     print(f"Segmentation complete: {tunnel_id}")
     print(f"  Segments: {len(segments_df)}, Points: {len(updated_df)}")
     print(f"  Method: {method}, ring_half_width={ring_half_width:.1f}")
+    if slot_inset_y != 0:
+        print(f"  slot_inset_y: {slot_inset_y}")
+    if r_surface_min is not None:
+        print(f"  r_surface_min: {r_surface_min}")
     print(f"  Output: {out_csv}")
 
     return {"df": updated_df, "label_map": label_map}

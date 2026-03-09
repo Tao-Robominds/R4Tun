@@ -1,26 +1,17 @@
 {
-  "_comment_A": "TUNNEL-PHYSICAL (measured once)",
   "ring_spacing": 1.816,
   "tunnel_diameter": 7.5,
   "depth_map_resolution": 0.005,
-
-  "_comment_B": "BO-CRITICAL — denoising",
   "radius_min": 3.526,
   "radius_max": 4.051,
   "gradient_threshold": 10.0,
   "double_zero_cutoff": false,
   "smoothing_offset": 0.0,
-
-  "_comment_B2": "BO-CRITICAL — enhancing",
   "target_distances": [0.081, 0.040, 0.02],
   "curvature_neighbors": 9,
   "interpolation_window": 5,
-
-  "_comment_B3": "BO-CRITICAL — slicing",
   "num_slicing_planes": 9,
   "samples_per_ring": 1210,
-
-  "_comment_B4": "BO-CRITICAL — outlier enhancement",
   "outlier_depth_threshold_low": 0.003,
   "outlier_depth_threshold_high": 0.008,
   "outlier_high_density_ring_start": 0,

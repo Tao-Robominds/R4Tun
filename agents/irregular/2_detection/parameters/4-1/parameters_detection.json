@@ -1,5 +1,4 @@
 {
-  "_comment_B1": "BO-CRITICAL — line detection",
   "binary_threshold": 139,
   "hough_threshold": 37,
   "hough_min_length": 31,
@@ -8,19 +7,13 @@
   "angle_pos_max": 13.55,
   "angle_neg_min": -14.67,
   "angle_neg_max": -5.82,
-
-  "_comment_B2": "BO-CRITICAL — K detection",
   "eps": 0.07,
   "k_expected_height_px": 300,
   "k_gap_tolerance_px": 150,
   "groove_snap_px": 60,
-
-  "_comment_B3": "BO-CRITICAL — ring layout",
   "ring_offset": 193.3,
   "ring_spacing_px": -360.0,
   "reverse_ring_order": true,
-
-  "_comment_B4": "BO-CRITICAL — expansion (HIGHEST sensitivity)",
   "stagger_groups": {
     "A": [0, 1, 2, 3, 4],
     "B": [5]
@@ -38,7 +31,5 @@
     "B_A2": -1625.4,
     "B_A3": 1164.6,
     "B_A4": 459.1
-  },
-
-  "output_filename": "all_segments.csv"
+  }
 }
