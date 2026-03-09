@@ -1,0 +1,22 @@
+# BO Run — {tunnel_id} / {run_id}
+
+## Metadata
+- Tunnel: {tunnel_id}
+- Run: {run_id}
+- Stage: (preprocessing | detection | sam | …)
+- Objective: (e.g. mIoU, composite score)
+
+## Search space
+- Params: (list from warm_start / critical_params)
+- Bounds: (min/max per param)
+- Priors: (optional)
+
+## Logging contract
+- Per eval: run.json, stage_manifest.json, reflection_log.json
+- Path: data/{tunnel_id}/workflow/{run_id}/08_bo_runs/
+
+## Stop rule
+- (e.g. max trials, convergence, time)
+
+## Feature bank
+- (Intrinsic metrics logged per trial for proxy training.)

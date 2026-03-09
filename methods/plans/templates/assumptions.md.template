@@ -1,0 +1,14 @@
+# Assumptions — {tunnel_id}
+
+## Explicit
+| ID | Assumption | Code ref | Impact |
+|----|------------|----------|--------|
+| (per-row) | (rule) | (file:line or slug) | (tag) |
+
+## Implicit
+| ID | Assumption | Code ref | Impact |
+|----|------------|----------|--------|
+| (per-row) | (rule) | (file:line or slug) | (tag) |
+
+## Canonical reference
+- `methods/plans/output/01_assumptions_output.md`

@@ -1,0 +1,17 @@
+# Proxy — {tunnel_id}
+
+## Model
+- (Type: e.g. GP, RF, MLP; target: e.g. mIoU.)
+
+## Validation
+- Holdout split: (e.g. tunnel or trial subset)
+- Metrics: MAE, RMSE, calibration error, coverage
+
+## Uncertainty
+- (How uncertainty is produced: posterior, ensemble, etc.)
+
+## Confidence bank
+- (Structured trust signals; see confidence_bank.json.)
+
+## Trust rule
+- (When to trust proxy vs use fallback.)

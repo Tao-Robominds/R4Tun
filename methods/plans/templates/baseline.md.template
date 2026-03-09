@@ -1,0 +1,15 @@
+# Baseline — {tunnel_id}
+
+## Solution family
+- Pipeline: sam4tun (upfolding → denoising → enhancing → detection → SAM).
+- Pattern type: (e.g. irregular / simple_staggered / continuous).
+
+## Default tunnel assumptions
+- (List from `methods/plans/output/01_assumptions_output.md` or per-tunnel overrides.)
+
+## Observed gaps
+- Gap 1: (description, evidence).
+- Gap 2: (description, evidence).
+
+## Scenario list
+- (Known scenarios / rings / subsets used.)

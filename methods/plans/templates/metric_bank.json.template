@@ -1,0 +1,13 @@
+{
+  "stage": "",
+  "metrics": [
+    {
+      "name": "",
+      "formula_or_description": "",
+      "range": [null, null],
+      "unit": ""
+    }
+  ],
+  "selected": [],
+  "guardrails": {}
+}

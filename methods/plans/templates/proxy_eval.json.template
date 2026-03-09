@@ -1,0 +1,13 @@
+{
+  "tunnel_id": "",
+  "run_id": "",
+  "holdout_trials": [],
+  "metrics": {
+    "mae": null,
+    "rmse": null,
+    "calibration_error": null,
+    "coverage_90": null
+  },
+  "trust_rule": "",
+  "timestamp": ""
+}

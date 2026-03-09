@@ -37,7 +37,7 @@ from numba import njit, prange
 from scipy.spatial import ConvexHull, KDTree, cKDTree
 from scipy.interpolate import interp1d, griddata
 from scipy.ndimage import uniform_filter1d
-from scipy.cluster.vq import kmeans2
+
 from shapely.geometry import Polygon
 from sklearn.linear_model import RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
@@ -112,6 +112,10 @@ def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
 # =============================================================================
 # CRITICAL PARAMETERS (tunable via JSON)
 # =============================================================================
+
+# Label assigned to valid surface points before segmentation.
+# Segmentation will overwrite [0, SURFACE_PRED] with block labels.
+SURFACE_PRED = 7
 
 # Unfolding - Physical constants (tunnel-specific)
 DEFAULT_RING_SPACING = 1.2
@@ -771,7 +775,7 @@ def denoise_point_cloud(
     - smoothing_offset: Additive shift to smoothed cutoff boundary (MEDIUM impact)
     """
     df = df.copy()
-    df['pred'] = 7  # Default: valid point
+    df['pred'] = SURFACE_PRED
     
     # Step 1: Initial radius filtering
     radius_mask = (df['r'] < radius_min) | (df['r'] > radius_max)
@@ -1258,92 +1262,6 @@ def save_depth_map_image(depth_map: np.ndarray, filepath: str, resolution: float
     plt.close()
 
 
-def classify_tunnel_pattern(depth_map_outlier: np.ndarray, tunnel_dir: str) -> Dict[str, Any]:
-    """Classify tunnel joint pattern from enhanced depth map."""
-    L, W = depth_map_outlier.shape
-    
-    binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
-    ret, binary = cv2.threshold(binary_map, 120, 255, cv2.THRESH_BINARY)
-    
-    lines_oblique = cv2.HoughLinesP(binary, 1, np.pi/180, 30, minLineLength=50, maxLineGap=20)
-    
-    angles = []
-    y_positions = []
-    
-    if lines_oblique is not None:
-        for line in lines_oblique[:200]:
-            x1, y1, x2, y2 = line[0]
-            angle = np.degrees(np.arctan2(-(y2 - y1), x2 - x1))
-            
-            if 5 <= abs(angle) <= 10:
-                angles.append(angle)
-                mid_y = (y1 + y2) / 2
-                y_positions.append(mid_y)
-    
-    if len(angles) > 0 and len(y_positions) > 0:
-        angle_std = np.std(angles)
-        angle_mean = np.mean(np.abs(angles))
-        y_std = np.std(y_positions)
-        y_mean = np.mean(y_positions)
-        
-        is_alternating = False
-        if len(y_positions) >= 4:
-            try:
-                y_array = np.array(y_positions).reshape(-1, 1)
-                centroids, labels = kmeans2(y_array, 2, iter=10, minit="++")
-                cluster_stds = [float(np.std(y_array[labels == i])) for i in range(2)]
-                unique_labels = len(set(labels))
-                c0 = float(np.asarray(centroids[0]).flat[0])
-                c1 = float(np.asarray(centroids[1]).flat[0])
-
-                is_alternating = (unique_labels == 2 and
-                                 all(std < 50 for std in cluster_stds) and
-                                 abs(c0 - c1) > 200)
-            except Exception:
-                pass
-        
-        if y_std < 100:
-            pattern_type = "continuous"
-            confidence = min(1.0, (100 - y_std) / 100)
-            description = "Continuous joints (T3-like): K-blocks horizontally aligned"
-        elif is_alternating:
-            pattern_type = "complex_staggered"
-            confidence = 0.8
-            description = "Simple staggered joints (T1/T2-like): Regular alternating pattern"
-        elif y_std < 250 and angle_std < 8.0:
-            pattern_type = "complex_staggered"
-            confidence = 0.7
-            description = "Simple staggered joints (T1/T2-like): Regular pattern"
-        else:
-            pattern_type = "complex_staggered"
-            confidence = 0.7
-            description = "Complex staggered joints (T4/T5-like): Irregular/variable offset"
-    else:
-        pattern_type = "unknown"
-        confidence = 0.0
-        angle_std = 0.0
-        angle_mean = 0.0
-        y_std = 0.0
-        y_mean = 0.0
-        description = "No oblique lines detected - pattern classification unavailable"
-    
-    pattern_info = {
-        "pattern_type": pattern_type,
-        "confidence": float(confidence),
-        "description": description,
-        "statistics": {
-            "oblique_lines_detected": len(angles),
-            "angle_mean_deg": float(angle_mean) if len(angles) > 0 else 0.0,
-            "angle_std_deg": float(angle_std) if len(angles) > 0 else 0.0,
-            "y_position_mean": float(y_mean) if len(y_positions) > 0 else 0.0,
-            "y_position_std": float(y_std) if len(y_positions) > 0 else 0.0,
-            "is_alternating": is_alternating if len(y_positions) >= 4 else False
-        }
-    }
-    
-    return pattern_info
-
-
 def enhance_point_cloud(
     df: pd.DataFrame,
     tunnel_dir: str,
@@ -1457,11 +1375,6 @@ def enhance_point_cloud(
     df_enhanced = pd.concat([df, all_new], ignore_index=True)
     
     df_enhanced.to_csv(os.path.join(tunnel_dir, "enhanced.csv"), index=False)
-    
-    # Pattern classification
-    pattern_info = classify_tunnel_pattern(depth_map_outlier, tunnel_dir)
-    with open(os.path.join(tunnel_dir, "pattern_type.json"), 'w') as f:
-        json.dump(pattern_info, f, indent=2)
     
     return df_enhanced
 

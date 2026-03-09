@@ -1,7 +1,7 @@
 """
-Complex Staggered Tunnel Evaluation (Stage 4)
+Irregular Tunnel Evaluation
 
-Evaluates segmentation quality for COMPLEX STAGGERED tunnels (4-1, 5-1).
+Evaluates segmentation quality for irregular tunnels.
 Auto-detects segment count (6 or 7) from tunnel geometry.
 
 This module evaluates tunnel segmentation quality. It supports two modes:
@@ -94,11 +94,11 @@ CLASS_NAMES_7 = {
     0: 'Background',
     1: 'K-block',
     2: 'B1-block',
-    3: 'B2-block',
-    4: 'A1-block',
-    5: 'A2-block',
-    6: 'A3-block',
-    7: 'A4-block'
+    3: 'A1-block',
+    4: 'A2-block',
+    5: 'A3-block',
+    6: 'A4-block',
+    7: 'B2-block'
 }
 
 
@@ -224,16 +224,23 @@ def load_data(tunnel_dir: str) -> Tuple[Optional[np.ndarray], np.ndarray, bool]:
     pred_file = os.path.join(tunnel_dir, "predictions.csv")
     
     if os.path.exists(final_file):
-        # Read only needed columns to save memory
-        df = pd.read_csv(final_file, usecols=['segment', 'pred'] if 'segment' in pd.read_csv(final_file, nrows=0).columns else ['pred'])
-        
-        pred_labels = df['pred'].values
-        
+        header_cols = pd.read_csv(final_file, nrows=0).columns
+        use_cols = ['pred']
+        if 'segment' in header_cols:
+            use_cols.append('segment')
+        df = pd.read_csv(final_file, usecols=use_cols)
+
         if 'segment' in df.columns:
-            gt_labels = df['segment'].values
+            has_nan = df['segment'].isna()
+            n_nan = has_nan.sum()
+            if n_nan > 0:
+                print(f"  Excluding {n_nan:,} points with no GT label (enhanced/upsampled)")
+                df = df[~has_nan]
+            gt_labels = df['segment'].values.astype(int)
+            pred_labels = df['pred'].values.astype(int)
             return gt_labels, pred_labels, True
         else:
-            return None, pred_labels, False
+            return None, df['pred'].values, False
     
     elif os.path.exists(pred_file):
         df = pd.read_csv(pred_file)
@@ -260,14 +267,13 @@ def calculate_metrics(
     Returns:
         Dictionary with OA, F1, mIoU, IoU_per_class, classes.
     """
-    # Filter to valid classes
-    valid_mask = (gt_labels <= max_class) & (pred_labels <= max_class)
+    valid_mask = (gt_labels >= 0) & (gt_labels <= max_class) & (pred_labels >= 0) & (pred_labels <= max_class)
     gt_filtered = gt_labels[valid_mask]
     pred_filtered = pred_labels[valid_mask]
-    
+
     if len(gt_filtered) != len(gt_labels):
         removed = len(gt_labels) - len(gt_filtered)
-        print(f"Filtered {removed} points with class > {max_class}")
+        print(f"  Excluded {removed:,} points with labels outside [0, {max_class}]")
     
     # Get classes present in data
     classes = np.sort(np.unique(np.concatenate([gt_filtered, pred_filtered])))

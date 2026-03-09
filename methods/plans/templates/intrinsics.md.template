@@ -1,0 +1,19 @@
+# Intrinsics — {tunnel_id} / {stage}
+
+## Metric bank
+- (Candidate metrics: name, formula, stage, range, unit.)
+
+## Selected metrics
+- (Subset used for guardrails / proxy.)
+
+## Ranges
+- (Valid range per metric; out-of-range = failure signature.)
+
+## Guardrails
+- (Hard constraints; fail → stop or fallback.)
+
+## Failure signatures
+- (Patterns that indicate pipeline failure.)
+
+## Knowledge write-back
+- (Path to agents/…/knowledge/ or docs.)

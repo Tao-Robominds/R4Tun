@@ -1,0 +1,10 @@
+{
+  "tunnel_id": "",
+  "metrics": {
+    "coverage_90": null,
+    "calibration_error": null,
+    "max_acceptable_uncertainty": null
+  },
+  "trust_conditions": [],
+  "fallback_trigger": ""
+}
