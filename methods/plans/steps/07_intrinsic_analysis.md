@@ -1,10 +1,10 @@
-# 09 Intrinsic Analysis
+# 07 Intrinsic Analysis
 
 ## Goal
 Produce `intrinsics.md`.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/09_intrinsic_analysis/intrinsics.md`
+`data/{tunnel_id}/workflow/{run_id}/07_intrinsic_analysis/intrinsics.md`
 
 ## Inputs
 - BO logs
@@ -30,5 +30,5 @@ Produce `intrinsics.md`.
 
 ## Verify Script
 ```bash
-python plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 09
+python methods/plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 07
 ```

@@ -1,10 +1,10 @@
-# 10 Proxy Training
+# 08 Proxy Training
 
 ## Goal
 Produce `proxy.md`.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/10_proxy_training/proxy.md`
+`data/{tunnel_id}/workflow/{run_id}/08_proxy_training/proxy.md`
 
 ## Inputs
 - intrinsic dataset
@@ -31,5 +31,5 @@ Produce `proxy.md`.
 
 ## Verify Script
 ```bash
-python plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 10
+python methods/plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 08
 ```

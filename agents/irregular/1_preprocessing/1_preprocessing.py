@@ -58,10 +58,9 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
     Load parameters from parameters_preprocessing.json.
     
     Priority:
-        1. agents/{agent_type}/1_preprocessing/parameters/<tunnel_id>/parameters_preprocessing.json
+        1. agents/.../parameters/<tunnel_id>/parameters_preprocessing.json
         2. data/<tunnel_id>/parameters_preprocessing.json
-        3. agents/{agent_type}/1_preprocessing/parameters/sample/parameters_preprocessing.json
-        4. Hardcoded defaults (if no file found)
+        3. Hardcoded defaults (if no file found)
     
     Returns:
         Tuple of (params_dict, was_loaded_from_file)
@@ -69,7 +68,6 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_preprocessing.json"
     
-    # Try centralized parameters folder first
     if tunnel_id:
         params_path = os.path.join(script_dir, "parameters", tunnel_id, param_file)
         if os.path.exists(params_path):
@@ -77,19 +75,11 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
             with open(params_path, 'r') as f:
                 return json.load(f), True
         
-        # Try data folder
         tunnel_path = os.path.join(base_dir, tunnel_id, param_file)
         if os.path.exists(tunnel_path):
             print(f"Loading parameters from {tunnel_path}")
             with open(tunnel_path, 'r') as f:
                 return json.load(f), True
-    
-    # Try sample parameters
-    sample_path = os.path.join(script_dir, "parameters", "sample", param_file)
-    if os.path.exists(sample_path):
-        print(f"Loading sample parameters from {sample_path}")
-        with open(sample_path, 'r') as f:
-            return json.load(f), True
     
     print("Warning: No parameter file found, using hardcoded defaults")
     return {}, False
@@ -109,36 +99,58 @@ def get_param(params: Dict, *keys, default=None, allow_default: bool = True):
     return value
 
 
-# =============================================================================
-# CRITICAL PARAMETERS (tunable via JSON)
-# =============================================================================
-
 # Label assigned to valid surface points before segmentation.
 # Segmentation will overwrite [0, SURFACE_PRED] with block labels.
 SURFACE_PRED = 7
 
-# Unfolding - Physical constants (tunnel-specific)
-DEFAULT_RING_SPACING = 1.2
-DEFAULT_TUNNEL_DIAMETER = 5.5
-
-# Denoising - Critical for noise removal quality
-DEFAULT_RADIUS_MIN = 2.7
-DEFAULT_RADIUS_MAX = 2.8
-DEFAULT_GRADIENT_THRESHOLD = 0.2
-
-# Enhancing - Critical for downstream detection
-DEFAULT_TARGET_DISTANCES = [0.08, 0.04, 0.02]
-DEFAULT_CURVATURE_NEIGHBORS = 20
-DEFAULT_DEPTH_MAP_RESOLUTION = 0.005
-DEFAULT_INTERPOLATION_WINDOW = 9
-
-
 # =============================================================================
-# FIXED PARAMETERS (non-critical, use proven defaults)
-# Based on BO experiments showing +0.0% to +0.1% improvement when tuned
+# A. TUNNEL-PHYSICAL — measured once per tunnel, not BO-tuned
 # =============================================================================
 
-# Unfolding fixed parameters
+DEFAULT_RING_SPACING = 1.2          # metres between ring centres
+DEFAULT_TUNNEL_DIAMETER = 5.5       # metres
+DEFAULT_DEPTH_MAP_RESOLUTION = 0.005  # metres per pixel
+
+# =============================================================================
+# B. BO-CRITICAL — tunable per tunnel via JSON, candidates for BO
+# =============================================================================
+
+# Denoising (HIGH sensitivity)
+DEFAULT_RADIUS_MIN = 2.7            # inner radial band (metres)
+DEFAULT_RADIUS_MAX = 2.8            # outer radial band (metres)
+DEFAULT_GRADIENT_THRESHOLD = 0.2    # surface cutoff steepness
+
+# Denoising (MEDIUM sensitivity)
+DEFAULT_DOUBLE_ZERO_CUTOFF = True   # consecutive-empty-bin cutoff
+DEFAULT_SMOOTHING_OFFSET = -0.003   # additive shift to smoothed boundary
+
+# Enhancing (HIGH sensitivity)
+DEFAULT_TARGET_DISTANCES = [0.08, 0.04, 0.02]  # progressive upsample
+DEFAULT_CURVATURE_NEIGHBORS = 20    # surface smoothness
+DEFAULT_INTERPOLATION_WINDOW = 9    # depth map gap filling
+
+# Slicing (MEDIUM sensitivity — decoupled from ring_spacing)
+DEFAULT_NUM_SLICING_PLANES = None   # None = auto from ring_spacing
+DEFAULT_SAMPLES_PER_RING = 1210
+
+# Outlier enhancement (MEDIUM sensitivity)
+DEFAULT_OUTLIER_DEPTH_LOW = 0.003
+DEFAULT_OUTLIER_DEPTH_HIGH = 0.008
+DEFAULT_OUTLIER_HD_RING_START = 0   # -1 = disabled
+DEFAULT_OUTLIER_HD_RING_END = 5
+DEFAULT_OUTLIER_NEIGHBORS = 20
+DEFAULT_OUTLIER_MAX_POINTS = 5000
+DEFAULT_OUTLIER_INTERP_RADIUS = 0.06
+DEFAULT_OUTLIER_NUM_INTERPS = 2
+DEFAULT_OUTLIER_DUP_THRESHOLD = 0.02
+DEFAULT_OUTLIER_BIDIRECTIONAL = False
+DEFAULT_OUTLIER_DEPTH_MAP_WINDOW = 1
+
+# =============================================================================
+# C. SAFE-FIXED — proven defaults, +0.0% to +0.1% from BO, never tuned
+# =============================================================================
+
+# Unfolding
 FIXED_SLICE_HALF_THICKNESS = 0.005
 FIXED_MAX_DISTANCE_FROM_TOP = 4.5
 FIXED_POLYNOMIAL_DEGREE = 3
@@ -146,33 +158,22 @@ FIXED_RANSAC_INLIER_RATIO = 0.75
 FIXED_RANSAC_CONFIDENCE = 0.9
 FIXED_RANSAC_MIN_SAMPLES = 5
 FIXED_RANSAC_INLIER_THRESHOLD = 0.8
-FIXED_SAMPLES_PER_RING = 1210
 FIXED_BATCH_SIZE = 1_000_000
 FIXED_NUM_JOBS = 12
 
-# Denoising fixed parameters
+# Denoising
 FIXED_THETA_STEP = 0.5
 FIXED_RADIAL_STEP = 0.001
 FIXED_GRADIENT_EPSILON = 1e-6
 FIXED_SMOOTHING_WINDOW = 3
-FIXED_SMOOTHING_OFFSET = -0.003
 
-# Enhancing fixed parameters
+# Enhancing
 FIXED_CURVATURE_THRESHOLD = 0.0005
 FIXED_UPSAMPLING_NEIGHBORS = 20
 FIXED_DISTANCE_TOLERANCE_LOW = 0.9
 FIXED_DISTANCE_TOLERANCE_HIGH = 2.0
 FIXED_RADIUS_FILTER_FACTOR = 0.15
 FIXED_MIN_NEW_POINT_DISTANCE_FACTOR = 0.2
-FIXED_DEPTH_THRESHOLD_LOW = 0.003
-FIXED_DEPTH_THRESHOLD_HIGH = 0.008
-FIXED_HIGH_DENSITY_RING_START = 0
-FIXED_HIGH_DENSITY_RING_END = 5
-FIXED_OUTLIER_NEIGHBORS = 20
-FIXED_INTERPOLATION_RADIUS = 0.06
-FIXED_NUM_INTERPOLATIONS = 2
-FIXED_DUPLICATE_THRESHOLD = 0.02
-FIXED_MAX_OUTLIER_POINTS = 5000
 
 
 # =============================================================================
@@ -584,7 +585,7 @@ def transform_to_cylindrical(
     z_params: np.ndarray,
     n_planes: int,
     tunnel_diameter: float,
-    samples_per_ring: int = FIXED_SAMPLES_PER_RING
+    samples_per_ring: int = DEFAULT_SAMPLES_PER_RING
 ) -> np.ndarray:
     """Transform points to cylindrical coordinates (r, θ, h)."""
     num_samples = n_planes * samples_per_ring
@@ -635,7 +636,7 @@ def unfold_point_cloud(
     ring_spacing: float,
     tunnel_diameter: float,
     num_slicing_planes: int = None,
-    samples_per_ring: int = FIXED_SAMPLES_PER_RING
+    samples_per_ring: int = DEFAULT_SAMPLES_PER_RING
 ) -> Tuple[pd.DataFrame, int, int]:
     """
     Execute Stage 1: Unfolding.
@@ -738,7 +739,7 @@ def compute_surface_cutoffs(
     return cutoff_values, peak_radial_values
 
 
-def smooth_cutoff_values(cutoff_values: np.ndarray, smoothing_offset: float = FIXED_SMOOTHING_OFFSET) -> np.ndarray:
+def smooth_cutoff_values(cutoff_values: np.ndarray, smoothing_offset: float = DEFAULT_SMOOTHING_OFFSET) -> np.ndarray:
     """Smooth and interpolate cutoff values for robust boundary detection."""
     nan_mask = np.isnan(cutoff_values)
     if np.any(nan_mask):
@@ -763,7 +764,7 @@ def denoise_point_cloud(
     radius_max: float,
     gradient_threshold: float,
     double_zero_cutoff: bool = True,
-    smoothing_offset: float = FIXED_SMOOTHING_OFFSET
+    smoothing_offset: float = DEFAULT_SMOOTHING_OFFSET
 ) -> pd.DataFrame:
     """
     Execute Stage 2: Denoising.
@@ -996,11 +997,11 @@ def detect_outlier_points(
     neighbor_indices: np.ndarray,
     h_min: float,
     ring_spacing: float,
-    depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
-    depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
-    high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
-    high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
-    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
+    depth_threshold_low: float = DEFAULT_OUTLIER_DEPTH_LOW,
+    depth_threshold_high: float = DEFAULT_OUTLIER_DEPTH_HIGH,
+    high_density_ring_start: int = DEFAULT_OUTLIER_HD_RING_START,
+    high_density_ring_end: int = DEFAULT_OUTLIER_HD_RING_END,
+    outlier_neighbors: int = DEFAULT_OUTLIER_NEIGHBORS,
     bidirectional: int = 0,
 ) -> np.ndarray:
     """Detect outlier points with significant local depth variation."""
@@ -1036,9 +1037,9 @@ def interpolate_between_outliers(
     outlier_indices: np.ndarray,
     points: np.ndarray,
     resolution: float,
-    interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
-    num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
-    duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
+    interpolation_radius: float = DEFAULT_OUTLIER_INTERP_RADIUS,
+    num_interpolations: int = DEFAULT_OUTLIER_NUM_INTERPS,
+    duplicate_threshold: float = DEFAULT_OUTLIER_DUP_THRESHOLD,
 ) -> np.ndarray:
     """Interpolate new points between pairs of outlier points."""
     n_outliers = len(outlier_indices)
@@ -1078,15 +1079,15 @@ def enhance_outlier_boundaries(
     df: pd.DataFrame,
     depth_map_resolution: float,
     ring_spacing: float,
-    depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
-    depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
-    high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
-    high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
-    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
-    max_outlier_points: int = FIXED_MAX_OUTLIER_POINTS,
-    interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
-    num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
-    duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
+    depth_threshold_low: float = DEFAULT_OUTLIER_DEPTH_LOW,
+    depth_threshold_high: float = DEFAULT_OUTLIER_DEPTH_HIGH,
+    high_density_ring_start: int = DEFAULT_OUTLIER_HD_RING_START,
+    high_density_ring_end: int = DEFAULT_OUTLIER_HD_RING_END,
+    outlier_neighbors: int = DEFAULT_OUTLIER_NEIGHBORS,
+    max_outlier_points: int = DEFAULT_OUTLIER_MAX_POINTS,
+    interpolation_radius: float = DEFAULT_OUTLIER_INTERP_RADIUS,
+    num_interpolations: int = DEFAULT_OUTLIER_NUM_INTERPS,
+    duplicate_threshold: float = DEFAULT_OUTLIER_DUP_THRESHOLD,
     bidirectional: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Detect outlier points and interpolate around them."""
@@ -1270,15 +1271,15 @@ def enhance_point_cloud(
     curvature_neighbors: int,
     depth_map_resolution: float,
     interpolation_window: int = DEFAULT_INTERPOLATION_WINDOW,
-    outlier_depth_threshold_low: float = FIXED_DEPTH_THRESHOLD_LOW,
-    outlier_depth_threshold_high: float = FIXED_DEPTH_THRESHOLD_HIGH,
-    outlier_high_density_ring_start: int = FIXED_HIGH_DENSITY_RING_START,
-    outlier_high_density_ring_end: int = FIXED_HIGH_DENSITY_RING_END,
-    outlier_neighbors: int = FIXED_OUTLIER_NEIGHBORS,
-    max_outlier_points: int = FIXED_MAX_OUTLIER_POINTS,
-    outlier_interpolation_radius: float = FIXED_INTERPOLATION_RADIUS,
-    outlier_num_interpolations: int = FIXED_NUM_INTERPOLATIONS,
-    outlier_duplicate_threshold: float = FIXED_DUPLICATE_THRESHOLD,
+    outlier_depth_threshold_low: float = DEFAULT_OUTLIER_DEPTH_LOW,
+    outlier_depth_threshold_high: float = DEFAULT_OUTLIER_DEPTH_HIGH,
+    outlier_high_density_ring_start: int = DEFAULT_OUTLIER_HD_RING_START,
+    outlier_high_density_ring_end: int = DEFAULT_OUTLIER_HD_RING_END,
+    outlier_neighbors: int = DEFAULT_OUTLIER_NEIGHBORS,
+    max_outlier_points: int = DEFAULT_OUTLIER_MAX_POINTS,
+    outlier_interpolation_radius: float = DEFAULT_OUTLIER_INTERP_RADIUS,
+    outlier_num_interpolations: int = DEFAULT_OUTLIER_NUM_INTERPS,
+    outlier_duplicate_threshold: float = DEFAULT_OUTLIER_DUP_THRESHOLD,
     outlier_bidirectional: bool = False,
     outlier_depth_map_window: int = 1,
 ) -> pd.DataFrame:
@@ -1421,27 +1422,27 @@ def run_preprocessing(tunnel_id: str, base_dir: str = "data") -> None:
     interpolation_window = get_param(params, 'interpolation_window', default=DEFAULT_INTERPOLATION_WINDOW, allow_default=True)  # Always allow default (LOW impact)
     
     # Slicing / sampling parameters (decoupled from ring_spacing)
-    num_slicing_planes = params.get('num_slicing_planes', None)
+    num_slicing_planes = params.get('num_slicing_planes', DEFAULT_NUM_SLICING_PLANES)
     if num_slicing_planes is not None:
         num_slicing_planes = int(num_slicing_planes)
-    samples_per_ring = int(params.get('samples_per_ring', FIXED_SAMPLES_PER_RING))
-    
-    # Outlier enhancement parameters (new tunable params)
-    outlier_depth_threshold_low = params.get('outlier_depth_threshold_low', FIXED_DEPTH_THRESHOLD_LOW)
-    outlier_depth_threshold_high = params.get('outlier_depth_threshold_high', FIXED_DEPTH_THRESHOLD_HIGH)
-    outlier_high_density_ring_start = int(params.get('outlier_high_density_ring_start', FIXED_HIGH_DENSITY_RING_START))
-    outlier_high_density_ring_end = int(params.get('outlier_high_density_ring_end', FIXED_HIGH_DENSITY_RING_END))
-    outlier_neighbors = int(params.get('outlier_neighbors', FIXED_OUTLIER_NEIGHBORS))
-    max_outlier_points = int(params.get('max_outlier_points', FIXED_MAX_OUTLIER_POINTS))
-    outlier_interpolation_radius = float(params.get('outlier_interpolation_radius', FIXED_INTERPOLATION_RADIUS))
-    outlier_num_interpolations = int(params.get('outlier_num_interpolations', FIXED_NUM_INTERPOLATIONS))
-    outlier_duplicate_threshold = float(params.get('outlier_duplicate_threshold', FIXED_DUPLICATE_THRESHOLD))
-    outlier_bidirectional = bool(params.get('outlier_bidirectional', False))
-    outlier_depth_map_window = int(params.get('outlier_depth_map_window', 1))
-    
+    samples_per_ring = int(params.get('samples_per_ring', DEFAULT_SAMPLES_PER_RING))
+
+    # Outlier enhancement parameters (BO-tunable)
+    outlier_depth_threshold_low = params.get('outlier_depth_threshold_low', DEFAULT_OUTLIER_DEPTH_LOW)
+    outlier_depth_threshold_high = params.get('outlier_depth_threshold_high', DEFAULT_OUTLIER_DEPTH_HIGH)
+    outlier_high_density_ring_start = int(params.get('outlier_high_density_ring_start', DEFAULT_OUTLIER_HD_RING_START))
+    outlier_high_density_ring_end = int(params.get('outlier_high_density_ring_end', DEFAULT_OUTLIER_HD_RING_END))
+    outlier_neighbors = int(params.get('outlier_neighbors', DEFAULT_OUTLIER_NEIGHBORS))
+    max_outlier_points = int(params.get('max_outlier_points', DEFAULT_OUTLIER_MAX_POINTS))
+    outlier_interpolation_radius = float(params.get('outlier_interpolation_radius', DEFAULT_OUTLIER_INTERP_RADIUS))
+    outlier_num_interpolations = int(params.get('outlier_num_interpolations', DEFAULT_OUTLIER_NUM_INTERPS))
+    outlier_duplicate_threshold = float(params.get('outlier_duplicate_threshold', DEFAULT_OUTLIER_DUP_THRESHOLD))
+    outlier_bidirectional = bool(params.get('outlier_bidirectional', DEFAULT_OUTLIER_BIDIRECTIONAL))
+    outlier_depth_map_window = int(params.get('outlier_depth_map_window', DEFAULT_OUTLIER_DEPTH_MAP_WINDOW))
+
     # Denoising surface cutoff parameters (BO-tunable)
-    double_zero_cutoff = bool(params.get('double_zero_cutoff', True))
-    smoothing_offset = float(params.get('smoothing_offset', FIXED_SMOOTHING_OFFSET))
+    double_zero_cutoff = bool(params.get('double_zero_cutoff', DEFAULT_DOUBLE_ZERO_CUTOFF))
+    smoothing_offset = float(params.get('smoothing_offset', DEFAULT_SMOOTHING_OFFSET))
     
     print("\nCritical parameters:")
     print(f"  ring_spacing:       {ring_spacing}")

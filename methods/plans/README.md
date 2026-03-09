@@ -27,14 +27,12 @@ Steps are **strictly sequential**. Each step requires the output of all previous
 | 01 | Assumptions | — | `01_assumptions/` | `output/01_assumptions_output.md` |
 | 02 | Challenge map | 01 | `02_challenge_map/` | `output/02_challenge_map_output.md` |
 | 03 | Upgrade solution | 01, 02 | `03_upgrade_solution/` | — |
-| 04 | Parameter inventory | 03 | `04_parameter_inventory/` | — |
-| 05 | Data-flow graph | 04 | `05_data_flow_graph/` | — |
-| 06 | Critical param set | 02, 04, 05 | `06_critical_param_set/` | — |
-| 07 | GT warm start | 06 | `07_gt_warm_start/` | — |
-| 08 | BO runs | 06, 07 | `08_bo_runs/` | — |
-| 09 | Intrinsic analysis | 08 | `09_intrinsic_analysis/` | — |
-| 10 | Proxy training | 09 | `10_proxy_training/` | — |
-| 11 | Reflection agent | 09, 10 | `11_reflection_agent/` | — |
+| 04 | Critical params for BO | 02, 03 | `04_critical_params_for_bo/` | `critical_params.yaml` |
+| 05 | GT warm start | 04 | `05_gt_warm_start/` | — |
+| 06 | BO runs | 04, 05 | `06_bo_runs/` | — |
+| 07 | Intrinsic analysis | 06 | `07_intrinsic_analysis/` | — |
+| 08 | Proxy training | 07 | `08_proxy_training/` | — |
+| 09 | Reflection agent | 07, 08 | `09_reflection_agent/` | — |
 
 **Rule:** Without the previous step's verified output, the current step cannot proceed.
 
@@ -44,14 +42,12 @@ Steps are **strictly sequential**. Each step requires the output of all previous
 | `01` | scope + assumptions + gaps + evidence present | stop; restate baseline and assumptions |
 | `02` | every assumption marked stable/broken with evidence, class, failure mode, response | stop; compare GT and classify gaps |
 | `03` | edits + structural limits + risks present | stop; split code vs structural |
-| `04` | all params have stage + type + source + value | stop; complete inventory |
-| `05` | nodes + edges + critical path present | stop; rebuild graph |
-| `06` | rule + selected + excluded + safe fixed present | stop; restate selection rule |
-| `07` | warm start + fixed + bounds + priors present | stop; redo GT reverse-engineering |
-| `08` | metadata + params + GT + artefacts + feature bank + reflection logs present | stop; fix log schema |
-| `09` | metric bank + selected intrinsics + ranges + guardrails + knowledge write-back present | stop; refine intrinsic analysis |
-| `10` | validation + calibration + uncertainty + confidence bank + trust rule present | stop; do not deploy proxy |
-| `11` | case rules + actions + fallback + uncertainty logic present | stop; rewrite policy prompt |
+| `04` | critical params: selected + excluded + safe fixed + rule documented | stop; complete inventory + data-flow + selection |
+| `05` | warm start + fixed + bounds + priors present | stop; redo GT reverse-engineering |
+| `06` | metadata + params + GT + artefacts + feature bank + reflection logs present | stop; fix log schema |
+| `07` | metric bank + selected intrinsics + ranges + guardrails + knowledge write-back present | stop; refine intrinsic analysis |
+| `08` | validation + calibration + uncertainty + confidence bank + trust rule present | stop; do not deploy proxy |
+| `09` | case rules + actions + fallback + uncertainty logic present | stop; rewrite policy prompt |
 
 ## Non-Negotiable
 - Proxy uncertainty is mandatory.

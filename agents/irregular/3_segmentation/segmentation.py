@@ -34,21 +34,30 @@ SURFACE_PRED = 7
 DEFAULT_EXPANSION_BLOCKS_7 = ['B1', 'A1', 'A2', 'A3', 'A4', 'B2']
 DEFAULT_EXPANSION_BLOCKS_6 = ['B1', 'A1', 'A2', 'A3', 'B2']
 
+# =============================================================================
+# A. BO-CRITICAL — template shape parameters, tunable per tunnel
+#    22 dimensions total. ALL loaded from JSON; DEFAULTS are safe fallbacks.
+# =============================================================================
+
 DEFAULTS = {
+    # K-block trapezoid (4 params)
     "K_half_width": 125,
     "K_half_height_pos": 124,
     "K_half_height_neg": 92,
     "K_centre_offset": 0,
+    # B1-block trapezoid (5 params)
     "B1_half_width": 125,
     "B1_half_height_top": 324,
     "B1_half_height_bottom_pos": 308,
     "B1_half_height_bottom_neg": 340,
     "B1_centre_offset": 0,
+    # B2-block trapezoid (5 params)
     "B2_half_width": 125,
     "B2_half_height_top_pos": 308,
     "B2_half_height_top_neg": 340,
     "B2_half_height_bottom": 324,
     "B2_centre_offset": 0,
+    # A-block rectangles (9 params: shared width + per-block height/offset)
     "segment_half_width": 125,
     "A1_half_height": 324,
     "A2_half_height": 324,
@@ -58,9 +67,16 @@ DEFAULTS = {
     "A2_centre_offset": 0,
     "A3_centre_offset": 0,
     "A4_centre_offset": 0,
+    # Global shrink (2 params)
     "shrink_x": 0,
     "shrink_y": 0,
 }
+
+# =============================================================================
+# B. SAFE-FIXED — no tunable constants in segmentation beyond DEFAULTS above
+# =============================================================================
+# All algorithmic choices (trapezoid vs rectangle, overlap resolution by
+# nearest-centre, y-axis wrapping) are structural, not parameterised.
 
 
 # =============================================================================
@@ -72,13 +88,12 @@ def get_param(params: dict, key: str):
 
 
 def load_parameters(tunnel_id: str, base_dir: str = "data") -> dict:
-    """Load from parameters/<tunnel_id>/parameters_geometric_template.json or parameters_geometric.json."""
+    """Load from parameters/<tunnel_id>/parameters_segmentation.json."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    for name in ("parameters_geometric_template.json", "parameters_geometric.json"):
-        path = os.path.join(script_dir, "parameters", tunnel_id, name)
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return json.load(f)
+    path = os.path.join(script_dir, "parameters", tunnel_id, "parameters_segmentation.json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
     return {}
 
 

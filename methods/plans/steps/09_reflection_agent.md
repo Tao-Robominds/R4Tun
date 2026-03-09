@@ -1,10 +1,10 @@
-# 11 Reflection Agent
+# 09 Reflection Agent
 
 ## Goal
 Produce `policy_prompt.md`.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/11_reflection_agent/policy_prompt.md`
+`data/{tunnel_id}/workflow/{run_id}/09_reflection_agent/policy_prompt.md`
 
 ## Inputs
 - guardrails
@@ -31,5 +31,5 @@ Produce `policy_prompt.md`.
 
 ## Verify Script
 ```bash
-python plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 11
+python methods/plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 09
 ```

@@ -1,13 +1,13 @@
-# 07 GT Warm Start
+# 05 GT Warm Start
 
 ## Goal
 Produce `warm_start.yaml`.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/07_gt_warm_start/warm_start.yaml`
+`data/{tunnel_id}/workflow/{run_id}/05_gt_warm_start/warm_start.yaml`
 
 ## Inputs
-- critical param set
+- critical param set (from step 04)
 - ground truth analysis
 
 ## Actions
@@ -24,5 +24,5 @@ Produce `warm_start.yaml`.
 
 ## Verify Script
 ```bash
-python plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 07
+python methods/plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 05
 ```

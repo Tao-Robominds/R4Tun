@@ -39,8 +39,7 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
     Priority:
         1. agents/.../parameters/<tunnel_id>/parameters_detection.json
         2. data/<tunnel_id>/parameters_detection.json
-        3. agents/.../parameters/sample/parameters_detection.json
-        4. Empty dict (hardcoded defaults)
+        3. Empty dict (hardcoded defaults)
     """
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_detection.json"
@@ -56,11 +55,6 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
             with open(tunnel_path, 'r') as f:
                 return json.load(f), True
 
-    sample_path = os.path.join(script_dir, "parameters", "sample", param_file)
-    if os.path.exists(sample_path):
-        with open(sample_path, 'r') as f:
-            return json.load(f), True
-
     return {}, False
 
 
@@ -70,28 +64,58 @@ def get_param(params: Dict, key: str, default=None):
 
 
 # =============================================================================
-# Default Parameters
+# A. TUNNEL-PHYSICAL — geometry from preprocessing, not BO-tuned
+# =============================================================================
+# tunnel_diameter, depth_map_resolution: loaded at runtime from preprocessing JSON.
+# ring_count: loaded from ring_count.txt.
+# These derive k_height_mm, ab_height_mm via calculate_segment_heights().
+
+# =============================================================================
+# B. BO-CRITICAL — tunable per tunnel via JSON, candidates for BO
 # =============================================================================
 
-DEFAULT_BINARY_THRESHOLD = 127
+# B1. Line detection — oblique groove finding (HIGH sensitivity)
+DEFAULT_BINARY_THRESHOLD = 127     # depth map binarisation
 DEFAULT_HOUGH_OBLIQUE_THRESHOLD = 50
-DEFAULT_ANGLE_POSITIVE_MIN = 6.0
+DEFAULT_HOUGH_OBLIQUE_MIN_LENGTH = 100
+DEFAULT_HOUGH_OBLIQUE_MAX_GAP = 40
+DEFAULT_ANGLE_POSITIVE_MIN = 6.0   # groove angle band (degrees)
 DEFAULT_ANGLE_POSITIVE_MAX = 9.0
 DEFAULT_ANGLE_NEGATIVE_MIN = -9.0
 DEFAULT_ANGLE_NEGATIVE_MAX = -6.0
-DEFAULT_HOUGH_VERTICAL_THRESHOLD = 500
+
+# B2. K-block detection — DBSCAN + groove fusion (HIGH sensitivity)
+DEFAULT_EPS = 0.07                 # DBSCAN normalised spacing
+DEFAULT_K_EXPECTED_HEIGHT_PX = 300 # expected K height in pixels
+DEFAULT_K_GAP_TOLERANCE_PX = 150.0
+DEFAULT_K_CANDIDATES_PER_RING = 8
+DEFAULT_GROOVE_SNAP_PX = 60.0      # max distance to snap to groove
+
+# B3. Ring layout (HIGH sensitivity)
+DEFAULT_RING_OFFSET = None         # None = auto (W / 2*ring_count)
+DEFAULT_RING_SPACING_PX = None     # None = auto (W / ring_count)
+DEFAULT_REVERSE_RING_ORDER = False
+
+# B4. Expansion — stagger groups and per-group offsets (HIGHEST sensitivity)
+#   stagger_groups: Dict[str, List[int]]  e.g. {"A": [4,5,6], "B": [0,1,2,3]}
+#   group_offsets: Dict[str, float]       e.g. {"A_B1": -460.9, ...}
+# These are loaded from JSON at runtime; no compile-time defaults.
+
+# =============================================================================
+# C. SAFE-FIXED — proven defaults, negligible BO improvement
+# =============================================================================
+
+# Line detection helpers
+DEFAULT_DILATION_KERNEL_SIZE = 3
+DEFAULT_DILATION_ITERATIONS = 1
+DEFAULT_CANNY_LOW = 50
+DEFAULT_CANNY_HIGH = 150
 DEFAULT_HOUGH_HORIZONTAL_THRESHOLD = 50
 DEFAULT_HOUGH_HORIZONTAL_MIN_LENGTH = 100
 DEFAULT_HOUGH_HORIZONTAL_MAX_GAP = 10
 DEFAULT_HORIZONTAL_ANGLE_TOLERANCE = 1.0
+DEFAULT_HOUGH_VERTICAL_THRESHOLD = 500
 DEFAULT_MERGE_DISTANCE_THRESHOLD = 3.0
-DEFAULT_DILATION_KERNEL_SIZE = 3
-DEFAULT_DILATION_ITERATIONS = 1
-DEFAULT_HOUGH_OBLIQUE_MIN_LENGTH = 100
-DEFAULT_HOUGH_OBLIQUE_MAX_GAP = 40
-DEFAULT_CANNY_LOW = 50
-DEFAULT_CANNY_HIGH = 150
-
 FIXED_MERGE_CLOSE_THRESHOLD = 6.0
 
 PREPROCESSING_PARAMS_DIR = os.path.join(
@@ -105,11 +129,10 @@ PREPROCESSING_PARAMS_DIR = os.path.join(
 
 def load_preprocessing_params(tunnel_id: str, base_dir: str = "data") -> Dict:
     """Load preprocessing parameters for inherited physical constants."""
-    for subdir in [tunnel_id, "sample"]:
-        params_path = os.path.join(PREPROCESSING_PARAMS_DIR, subdir, "parameters_preprocessing.json")
-        if os.path.exists(params_path):
-            with open(params_path, 'r') as f:
-                return json.load(f)
+    params_path = os.path.join(PREPROCESSING_PARAMS_DIR, tunnel_id, "parameters_preprocessing.json")
+    if os.path.exists(params_path):
+        with open(params_path, 'r') as f:
+            return json.load(f)
 
     tunnel_path = os.path.join(base_dir, tunnel_id, "parameters_preprocessing.json")
     if os.path.exists(tunnel_path):

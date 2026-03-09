@@ -1,14 +1,14 @@
-# 08 BO Runs
+# 06 BO Runs
 
 ## Goal
 Produce `bo_run.md`.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/08_bo_runs/bo_run.md`
+`data/{tunnel_id}/workflow/{run_id}/06_bo_runs/bo_run.md`
 
 ## Inputs
-- warm start
-- critical set
+- warm start (step 05)
+- critical set (step 04)
 - objective definition
 
 ## Actions
@@ -34,5 +34,5 @@ Produce `bo_run.md`.
 
 ## Verify Script
 ```bash
-python plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 08
+python methods/plans/scripts/verify_step.py --root data/{tunnel_id}/workflow/{run_id} --step 06
 ```

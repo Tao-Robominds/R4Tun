@@ -1,8 +1,5 @@
 {
-  "k_detection_method": "combined",
-  "ring_offset": 157.2320545465917,
-  "ring_spacing_px": 363.4734829630978,
-  "reverse_ring_order": true,
+  "_comment_B1": "BO-CRITICAL — line detection",
   "binary_threshold": 178,
   "hough_threshold": 50,
   "hough_min_length": 85,
@@ -11,23 +8,22 @@
   "angle_pos_max": 12.06,
   "angle_neg_min": -12.52,
   "angle_neg_max": -5.86,
-  "eps": 0.057013,
+
+  "_comment_B2": "BO-CRITICAL — K detection",
+  "eps": 0.057,
   "k_expected_height_px": 300,
   "k_gap_tolerance_px": 150,
   "groove_snap_px": 60,
-  "expansion_method": "grouped_offsets",
+
+  "_comment_B3": "BO-CRITICAL — ring layout",
+  "ring_offset": 157.2,
+  "ring_spacing_px": 363.5,
+  "reverse_ring_order": true,
+
+  "_comment_B4": "BO-CRITICAL — expansion (HIGHEST sensitivity)",
   "stagger_groups": {
-    "A": [
-      4,
-      5,
-      6
-    ],
-    "B": [
-      0,
-      1,
-      2,
-      3
-    ]
+    "A": [4, 5, 6],
+    "B": [0, 1, 2, 3]
   },
   "group_offsets": {
     "A_B1": -460.9,
@@ -43,5 +39,6 @@
     "B_A3": -1405.4,
     "B_A4": -940.7
   },
+
   "output_filename": "all_segments.csv"
 }
