@@ -1049,21 +1049,17 @@ def expand_k_with_per_ring_offsets(
     img_height: int,
     per_ring_offsets: Dict[str, Dict[str, float]],
 ) -> pd.DataFrame:
-    """Expand K positions to all segments using per-ring individual offsets.
+    """Expand K positions to all segments using per-ring boundary offsets.
 
     per_ring_offsets: {"ring_idx": {"block_name": dy, ...}, ...}
-    Each offset is a signed circular distance from K_Y to the block centroid.
+    Each offset is a signed circular distance from detected K_Y to the
+    block's boundary Y position.  All blocks (including K) must be present.
     """
     rows = []
     for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
         k_x = float(k_row['X'])
         k_y = float(k_row['Y'])
         quality = float(k_row.get('Confidence', 1.0))
-
-        rows.append({
-            'Ring': ring_idx, 'Block': 'K',
-            'X': k_x, 'Y': k_y % img_height, 'quality': quality,
-        })
 
         ring_offsets = per_ring_offsets.get(str(ring_idx), {})
         for block, offset in ring_offsets.items():
@@ -1079,46 +1075,26 @@ def expand_k_with_per_ring_offsets(
 
 
 # =============================================================================
-# Centroid → Boundary Conversion (warm start for boundary-based segmentation)
+# Segments → Boundary JSON (per_ring_offsets are already boundary positions)
 # =============================================================================
 
-def centroids_to_boundaries(
-    all_segments: pd.DataFrame, img_height: int
-) -> Dict[str, list]:
-    """Convert detected centroids to boundary positions per ring.
+def segments_to_boundaries(all_segments: pd.DataFrame) -> Dict[str, list]:
+    """Convert all_segments Y values directly to boundary JSON.
 
-    For each ring, sorts blocks by centroid Y, then places each boundary at
-    the circular midpoint between adjacent centroids. The boundary at position
-    i marks the start of block i (the block whose centroid follows).
-
-    Returns dict suitable for parameters_segmentation.json:
-        {"0": [{"y": 528, "block": "A2"}, ...], "1": [...], ...}
+    per_ring_offsets store boundary offsets from K, so Y in all_segments
+    already represents the boundary start position for each block.
     """
     result = {}
     for ring_idx in sorted(all_segments['Ring'].unique()):
         ring_segs = all_segments[all_segments['Ring'] == ring_idx].copy()
         ring_segs = ring_segs.sort_values('Y').reset_index(drop=True)
 
-        n = len(ring_segs)
-        if n == 0:
-            continue
-
-        ys = ring_segs['Y'].values.astype(float)
-        blocks = ring_segs['Block'].values
-
         boundaries = []
-        for i in range(n):
-            prev_y = ys[(i - 1) % n]
-            curr_y = ys[i]
-            d = curr_y - prev_y
-            if d < 0:
-                d += img_height
-            mid = (prev_y + d / 2.0) % img_height
+        for _, row in ring_segs.iterrows():
             boundaries.append({
-                'y': round(float(mid), 1),
-                'block': str(blocks[i]),
+                'y': round(float(row['Y']), 1),
+                'block': str(row['Block']),
             })
-
         result[str(ring_idx)] = boundaries
     return result
 
@@ -1286,7 +1262,7 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> Tuple[pd.DataFrame,
     all_segments.to_csv(os.path.join(tunnel_dir, output_filename), index=False)
     print(f"  Segments: {len(all_segments)} total (mode={detection_mode})")
 
-    boundaries = centroids_to_boundaries(all_segments, img_height=L)
+    boundaries = segments_to_boundaries(all_segments)
     boundaries_path = os.path.join(tunnel_dir, 'boundaries_per_ring.json')
     with open(boundaries_path, 'w') as f:
         json.dump(boundaries, f, indent=2)

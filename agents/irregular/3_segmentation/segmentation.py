@@ -2,12 +2,8 @@
 Irregular Tunnel Geometric Segmentation — Boundary-Based
 
 Each ring is divided into N slots by boundary Y positions on the circular axis.
-Each slot is labeled by its block name. Boundaries can come from:
-  - Detected groove lines (warm start)
-  - BO-tuned per ring
-  - Parameters file (pre-computed)
-
-Fallback: adaptive-cap Voronoi when no boundaries are provided.
+Boundaries: from detection only — tunnel_dir/boundaries_per_ring.json (written by 2_detection.py).
+If that file is missing: adaptive-cap Voronoi (k_cap, ab_cap).
 
 Pipeline:
     1_preprocessing.py → depth_map.png, enhanced.csv, pixel_to_point.pkl
@@ -15,9 +11,8 @@ Pipeline:
     segmentation.py    → final.csv (segmented point cloud)
 
 Parameters (from parameters_segmentation.json):
-    boundaries_per_ring — dict of ring_idx → list of {y, block}
     ring_half_width     — X extent of ring band (default: image_width / ring_count / 2)
-    k_cap, ab_cap       — fallback adaptive-cap params when no boundaries
+    k_cap, ab_cap       — used only when boundaries_per_ring.json is missing (Voronoi fallback)
     r_surface_min       — radial cutoff (m): points with r < r_surface_min keep pred=0
                           to drop groove false positives; None = disabled
 """
@@ -300,7 +295,11 @@ def run_segmentation(
     if ring_half_width is None:
         ring_half_width = width / ring_count / 2.0
 
-    boundaries_per_ring = params.get("boundaries_per_ring", None)
+    boundaries_path = os.path.join(tunnel_dir, "boundaries_per_ring.json")
+    boundaries_per_ring = None
+    if os.path.exists(boundaries_path):
+        with open(boundaries_path, "r") as f:
+            boundaries_per_ring = json.load(f)
     slot_inset_y = params.get("slot_inset_y", DEFAULTS["slot_inset_y"])
 
     if boundaries_per_ring is not None:
