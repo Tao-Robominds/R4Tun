@@ -1,0 +1,65 @@
+{
+  "trial_id": "k_detect_5-1_142",
+  "timestamp_utc": "2026-02-24T22:35:36Z",
+  "tunnel_id": "5-1",
+  "method": "dbscan",
+  "params": {
+    "k_detection_method": "combined",
+    "ring_offset": 157.2320545465917,
+    "ring_spacing_px": 363.4734829630978,
+    "reverse_ring_order": true,
+    "binary_threshold": 124,
+    "hough_threshold": 112,
+    "hough_min_length": 122,
+    "hough_max_gap": 101,
+    "angle_pos_min": 7.83066961927869,
+    "angle_pos_max": 11.57825020275195,
+    "angle_neg_min": -9.204191478065248,
+    "angle_neg_max": -5.560580803517128,
+    "eps": 0.08023531242740758,
+    "k_expected_height_px": 300,
+    "k_gap_tolerance_px": 150,
+    "groove_snap_px": 60,
+    "expansion_method": "grouped_offsets",
+    "stagger_groups": {
+      "A": [
+        4,
+        5,
+        6
+      ],
+      "B": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "group_offsets": {
+      "A_B1": -460.9,
+      "A_B2": -1222.7,
+      "A_A1": -1999.5,
+      "A_A2": 1992.4,
+      "A_A3": 1223.6,
+      "A_A4": 429.0,
+      "B_B1": 517.8,
+      "B_B2": 925.0,
+      "B_A1": 1924.9,
+      "B_A2": -1957.8,
+      "B_A3": -1405.4,
+      "B_A4": -940.7
+    },
+    "output_filename": "all_segments.csv",
+    "complex_subdivision_threshold": 1.1486889466871253,
+    "complex_max_subdivisions": 3,
+    "reg_target_gap": 163.00001773489282,
+    "reg_gap_tolerance": 0.33364270204169655,
+    "reg_blend_weight": 0.22989688751886156,
+    "reg_max_det_line_dist": 506.78170429854316
+  },
+  "objective_value": 1029.9006327037032,
+  "mean_k_distance": 546.7116568436988,
+  "n_far": 3,
+  "n_matched": 7,
+  "runtime_sec": 1.854097604751587,
+  "n_detected": 7
+}

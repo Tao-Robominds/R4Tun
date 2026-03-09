@@ -1,0 +1,1005 @@
+"""
+Bayesian Optimization for SAM Segmentation Parameters with mIoU Objective
+
+Optimizes SAM segmentation parameters to maximize mIoU (mean Intersection over Union)
+against ground truth segment labels.
+
+Uses forest_minimize (Random Forest surrogate) for 10D SAM search space.
+SAM reads detected.csv from detection stage and produces final.csv with pred column.
+"""
+
+import os
+import sys
+import json
+import glob
+import time
+import argparse
+import importlib.util
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple, Optional
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from skopt import forest_minimize
+from skopt.space import Real, Integer
+from sklearn.metrics import jaccard_score
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# Extract agent_type from directory name
+DEFAULT_AGENT_TYPE = Path(__file__).parent.name
+
+# Map complex_staggered -> irregular for actual code path
+AGENT_CODE_PATH = 'irregular' if DEFAULT_AGENT_TYPE == 'complex_staggered' else DEFAULT_AGENT_TYPE
+
+# Import SAM functions (use irregular path for complex_staggered)
+sam_dir = PROJECT_ROOT / 'agents' / AGENT_CODE_PATH / '3_segmentation'
+sys.path.insert(0, str(sam_dir))
+
+sam_file = sam_dir / "3_sam.py"
+if not sam_file.exists():
+    raise FileNotFoundError(f"SAM module not found: {sam_file}")
+
+spec = importlib.util.spec_from_file_location("sam", str(sam_file))
+sam_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sam_module)
+
+run_sam = sam_module.run_sam
+
+# Import evaluation for mIoU computation
+eval_dir = PROJECT_ROOT / 'agents' / AGENT_CODE_PATH
+sys.path.insert(0, str(eval_dir))
+
+spec = importlib.util.spec_from_file_location(
+    "evaluation",
+    os.path.join(eval_dir, "evaluation.py")
+)
+eval_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(eval_module)
+
+calculate_metrics = eval_module.calculate_metrics
+get_class_names = eval_module.get_class_names
+detect_segment_count = eval_module.detect_segment_count
+
+
+# =============================================================================
+# Search Space Definition (10 parameters)
+# =============================================================================
+
+def get_sam_dimensions(
+    tunnel_id: str = None,
+    agent_type: str = DEFAULT_AGENT_TYPE
+) -> Tuple[List, List[str], Dict]:
+    """
+    Define search space for SAM parameters (10D).
+    
+    Loads per-tunnel config from bo/{agent_type}/configs/sam_{tunnel_id}.json if it exists.
+    If config exists:
+        - Excludes parameters listed in fixed_params from search space
+        - Overrides bounds from narrowed_bounds
+    If no config: returns full 10D default space.
+    
+    Args:
+        tunnel_id: Tunnel identifier (e.g., '1-4')
+        agent_type: Agent type (e.g., 'simple_staggered')
+    
+    Returns:
+        Tuple of (dimensions list, parameter names list, fixed_params dict)
+    """
+    # Default bounds (10D + 8 physical params for complex_staggered)
+    default_bounds = {
+        'segment_width': (1050.0, 1350.0),
+        'angle_deg': (5.5, 9.0),
+        'k_mask_width': (500.0, 750.0),
+        'k_mask_height_pos': (500.0, 750.0),
+        'k_mask_height_neg': (350.0, 650.0),
+        'ab_mask_width': (500.0, 750.0),
+        'ab_mask_height': (1400.0, 1800.0),
+        'padding': (80, 200),
+        'crop_margin': (25, 90),
+        'y_bound_lower': (3000.0, 5500.0),
+        'y_bound_upper': (11000.0, 14000.0),
+        'crop_expansion': (0, 500),
+        'min_quality_threshold': (0.2, 0.6),
+        # Physical params (complex_staggered)
+        'k_height': (950.0, 1350.0),
+        'ab_height': (3000.0, 3600.0),
+        'b1_height_top': (1300.0, 1800.0),
+        'b1_height_bottom_pos': (1400.0, 1700.0),
+        'b1_height_bottom_neg': (1550.0, 1850.0),
+        'b2_height_top_pos': (1400.0, 1700.0),
+        'b2_height_top_neg': (1550.0, 1850.0),
+        'b2_height_bottom': (1300.0, 1800.0),
+    }
+    
+    # Load per-tunnel config if it exists
+    fixed_params = {}
+    narrowed_bounds = {}
+    
+    if tunnel_id:
+        config_file = PROJECT_ROOT / 'bo' / agent_type / 'configs' / f'sam_{tunnel_id}.json'
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            fixed_params = config.get('fixed_params', {})
+            narrowed_bounds = config.get('narrowed_bounds', {})
+            # Convert JSON arrays to tuples
+            narrowed_bounds_converted = {}
+            for key, value in narrowed_bounds.items():
+                if isinstance(value, list):
+                    narrowed_bounds_converted[key] = tuple(value)
+                else:
+                    narrowed_bounds_converted[key] = value
+            narrowed_bounds = narrowed_bounds_converted
+    
+    # Build bounds dict (narrowed overrides default)
+    bounds = default_bounds.copy()
+    bounds.update(narrowed_bounds)
+    
+    # Build dimensions and param_names, excluding fixed params
+    dimensions = []
+    param_names = []
+    
+    param_defs = [
+        ('segment_width', Real, bounds['segment_width']),
+        ('angle_deg', Real, bounds['angle_deg']),
+        ('k_mask_width', Real, bounds['k_mask_width']),
+        ('k_mask_height_pos', Real, bounds['k_mask_height_pos']),
+        ('k_mask_height_neg', Real, bounds['k_mask_height_neg']),
+        ('ab_mask_width', Real, bounds['ab_mask_width']),
+        ('ab_mask_height', Real, bounds['ab_mask_height']),
+        ('padding', Integer, bounds['padding']),
+        ('crop_margin', Integer, bounds['crop_margin']),
+        ('y_bound_lower', Real, bounds['y_bound_lower']),
+        ('y_bound_upper', Real, bounds['y_bound_upper']),
+        ('crop_expansion', Integer, bounds['crop_expansion']),
+        ('min_quality_threshold', Real, bounds['min_quality_threshold']),
+        ('k_height', Real, bounds['k_height']),
+        ('ab_height', Real, bounds['ab_height']),
+        ('b1_height_top', Real, bounds['b1_height_top']),
+        ('b1_height_bottom_pos', Real, bounds['b1_height_bottom_pos']),
+        ('b1_height_bottom_neg', Real, bounds['b1_height_bottom_neg']),
+        ('b2_height_top_pos', Real, bounds['b2_height_top_pos']),
+        ('b2_height_top_neg', Real, bounds['b2_height_top_neg']),
+        ('b2_height_bottom', Real, bounds['b2_height_bottom']),
+    ]
+    
+    for name, param_type, (low, high) in param_defs:
+        if name not in fixed_params:
+            dimensions.append(param_type(low, high, name=name))
+            param_names.append(name)
+    
+    return dimensions, param_names, fixed_params
+
+
+def params_to_sam_json(params: List, param_names: List[str], fixed_params: Dict = None) -> Dict:
+    """
+    Convert BO parameters to SAM JSON structure.
+    
+    Preserves non-BO fields from fixed_params (e.g. resolution, k_height, ab_height,
+    B1/B2 heights for complex_staggered) so SAM runs with correct physical parameters.
+    
+    Args:
+        params: List of BO-tuned parameter values
+        param_names: List of parameter names corresponding to params
+        fixed_params: Dict of fixed parameter values (not in BO search space)
+    
+    Returns:
+        SAM parameters dict
+    """
+    if fixed_params is None:
+        fixed_params = {}
+    
+    # Start with fixed_params (preserves resolution, k_height, ab_height, B1/B2, etc.)
+    result = dict(fixed_params)
+    
+    # Override with BO-tuned params
+    param_dict = dict(zip(param_names, params))
+    int_keys = {'padding', 'crop_margin', 'crop_expansion'}
+    for key, val in param_dict.items():
+        result[key] = int(val) if key in int_keys else float(val)
+    
+    result.setdefault('use_quality_weighting', True)
+    
+    return result
+
+
+# =============================================================================
+# mIoU Computation
+# =============================================================================
+
+def compute_miou(tunnel_id: str, tunnel_dir: str, segment_count: int) -> Dict:
+    """
+    Compute mIoU from final.csv (pred vs segment columns).
+    
+    Args:
+        tunnel_id: Tunnel identifier
+        tunnel_dir: Path to tunnel data directory
+        segment_count: Number of segments per ring (6 or 7)
+    
+    Returns:
+        Dictionary with mIoU, OA, F1, and per-class IoU
+    """
+    final_csv = os.path.join(tunnel_dir, 'final.csv')
+    if not os.path.exists(final_csv):
+        raise FileNotFoundError(f"final.csv not found at {final_csv}. Run SAM first.")
+    
+    df = pd.read_csv(final_csv)
+    
+    if 'segment' not in df.columns:
+        raise ValueError(f"final.csv missing 'segment' column (ground truth)")
+    if 'pred' not in df.columns:
+        raise ValueError(f"final.csv missing 'pred' column (predictions)")
+    
+    gt_labels = df['segment'].values
+    pred_labels = df['pred'].values
+    
+    # Convert to int, handling NaN
+    gt_labels = np.nan_to_num(gt_labels, nan=-1).astype(int)
+    pred_labels = np.nan_to_num(pred_labels, nan=-1).astype(int)
+    
+    # Get class names
+    class_names = get_class_names(segment_count)
+    max_class = segment_count  # B2-block (6) or B2-block (7)
+    
+    # Calculate metrics
+    results = calculate_metrics(gt_labels, pred_labels, class_names, max_class)
+    
+    return results
+
+
+# =============================================================================
+# Objective Function
+# =============================================================================
+
+class SamObjective:
+    """Objective function for SAM BO: maximize mIoU."""
+    
+    def __init__(
+        self,
+        tunnel_id: str,
+        data_dir: str = 'data',
+        verbose: bool = True,
+        eval_offset: int = 0,
+        agent_type: str = DEFAULT_AGENT_TYPE,
+    ):
+        self.tunnel_id = tunnel_id
+        self.data_dir = data_dir
+        self.verbose = verbose
+        self.eval_offset = eval_offset
+        self.agent_type = agent_type
+        
+        self.tunnel_dir = os.path.join(data_dir, tunnel_id)
+        # Map agent_type to code path
+        code_path = 'irregular' if agent_type == 'complex_staggered' else agent_type
+        self.params_dir = os.path.join(
+            PROJECT_ROOT,
+            'agents', code_path, '3_segmentation',
+            'parameters', tunnel_id
+        )
+        os.makedirs(self.params_dir, exist_ok=True)
+        
+        self.logs_dir = os.path.join(
+            PROJECT_ROOT,
+            'bo', agent_type, 'logs'
+        )
+        os.makedirs(self.logs_dir, exist_ok=True)
+        
+        # Verify inputs exist
+        detected_csv = os.path.join(self.tunnel_dir, 'detected.csv')
+        if not os.path.exists(detected_csv):
+            raise FileNotFoundError(
+                f"detected.csv not found at {detected_csv}. Run detection first."
+            )
+        
+        # Get search space
+        self.dimensions, self.param_names, self.fixed_params = get_sam_dimensions(
+            tunnel_id, agent_type
+        )
+        
+        # Detect segment count (default 6 for simple_staggered/continuous, 7 for complex_staggered)
+        if agent_type == 'complex_staggered':
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=7)
+        elif agent_type == 'continuous':
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=6)
+        else:
+            self.segment_count = detect_segment_count(self.tunnel_dir, default=6)
+        
+        # Track best
+        self.best_score = -1.0
+        self.best_params = None
+        self.eval_count = 0
+        self.history = []
+        
+        if verbose:
+            print(f"SAM BO for tunnel {tunnel_id}")
+            print(f"Segment count: {self.segment_count} (auto-detected)")
+            print(f"Parameters: {len(self.param_names)} (fixed: {len(self.fixed_params)})")
+            if self.fixed_params:
+                print(f"Fixed parameters: {list(self.fixed_params.keys())}")
+            print(f"Eval numbering starts at: {self.eval_offset + 1}")
+            print(f"Logs directory: {self.logs_dir}")
+    
+    @property
+    def global_eval_index(self) -> int:
+        """Current global eval index (offset + local count)."""
+        return self.eval_offset + self.eval_count
+    
+    def __call__(self, params: List) -> float:
+        """
+        Evaluate SAM parameters.
+        
+        Args:
+            params: List of parameter values in order of param_names
+        
+        Returns:
+            Negative mIoU (for minimization)
+        """
+        self.eval_count += 1
+        start_time = time.time()
+        
+        try:
+            # Convert params to dict (merge with fixed params)
+            param_dict = params_to_sam_json(params, self.param_names, self.fixed_params)
+            
+            # Save parameters
+            params_file = os.path.join(self.params_dir, 'parameters_sam.json')
+            with open(params_file, 'w') as f:
+                json.dump(param_dict, f, indent=4)
+            
+            # Run SAM (suppress output)
+            import io
+            from contextlib import redirect_stdout, redirect_stderr
+            
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                run_sam(self.tunnel_id, self.data_dir)
+            
+            # Compute mIoU
+            results = compute_miou(self.tunnel_id, self.tunnel_dir, self.segment_count)
+            miou = results['mIoU']
+            
+            runtime = time.time() - start_time
+            
+            # Track best
+            if miou > self.best_score:
+                self.best_score = miou
+                self.best_params = param_dict.copy()
+                if self.verbose:
+                    print(f"  [Eval {self.global_eval_index}] New best mIoU: {miou:.4f} "
+                          f"(OA={results['OA']:.4f}, F1={results['F1']:.4f})")
+            
+            # Log trial
+            self._log_trial(
+                param_dict,
+                results,
+                runtime,
+                False,
+            )
+            
+            # Record history
+            self.history.append({
+                'eval': self.global_eval_index,
+                'params': param_dict,
+                'miou': miou,
+                'oa': results['OA'],
+                'f1': results['F1'],
+            })
+            
+            if self.verbose and self.eval_count % 10 == 0:
+                print(f"  [Eval {self.global_eval_index}] mIoU: {miou:.4f}, "
+                      f"OA={results['OA']:.4f}, F1={results['F1']:.4f}")
+            
+            return -miou  # Negative for minimization
+            
+        except Exception as e:
+            runtime = time.time() - start_time
+            if self.verbose:
+                print(f"  [Eval {self.global_eval_index}] Error: {e}")
+            # Log failed trial
+            self._log_trial(
+                params_to_sam_json(params, self.param_names, self.fixed_params),
+                None,
+                runtime,
+                False,
+                error=str(e),
+            )
+            return 0.0  # Return worst score on error
+    
+    def _log_trial(
+        self,
+        params: Dict,
+        results: Optional[Dict],
+        runtime: float,
+        cached: bool,
+        error: Optional[str] = None,
+    ):
+        """Log trial to JSON file."""
+        global_idx = self.global_eval_index
+        trial_id = f"sam_{self.tunnel_id}_{global_idx:03d}"
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        log_data = {
+            'schema_version': 'r4tun.sam.v1',
+            'trial': {
+                'trial_id': trial_id,
+                'timestamp_utc': timestamp,
+                'tunnel_id': self.tunnel_id,
+                'assembly_type': self.agent_type,
+            },
+            'params': params,
+        }
+        
+        if error:
+            log_data['trace'] = {'warnings': [f"Error: {error}"]}
+            log_data['bo'] = {
+                'objective_name': 'miou',
+                'objective_value': 0.0,
+                'eval_index': global_idx,
+                'runtime_sec': runtime,
+                'is_feasible': False,
+                'cached': cached,
+            }
+        else:
+            log_data['outputs'] = {
+                'metrics': {
+                    'OA': results['OA'],
+                    'F1': results['F1'],
+                    'mIoU': results['mIoU'],
+                },
+                'iou_per_class': results['IoU_per_class'].tolist(),
+                'classes': results['classes'].tolist(),
+            }
+            log_data['bo'] = {
+                'objective_name': 'miou',
+                'objective_value': float(results['mIoU']),
+                'eval_index': global_idx,
+                'runtime_sec': float(runtime),
+                'is_feasible': True,
+                'cached': cached,
+            }
+        
+        # Save log file
+        log_file = os.path.join(self.logs_dir, f"{trial_id}.json")
+        with open(log_file, 'w') as f:
+            json.dump(log_data, f, indent=2)
+    
+    def save_best_params(self) -> Optional[str]:
+        """Save best parameters to JSON file."""
+        if self.best_params is None:
+            return None
+        
+        params_file = os.path.join(self.params_dir, 'parameters_sam.json')
+        with open(params_file, 'w') as f:
+            json.dump(self.best_params, f, indent=4)
+        
+        return params_file
+
+
+# =============================================================================
+# Utilities
+# =============================================================================
+
+def find_max_trial_index(logs_dir: str, tunnel_id: str) -> int:
+    """Find maximum trial index for eval offset."""
+    pattern = os.path.join(logs_dir, f"sam_{tunnel_id}_*.json")
+    log_files = glob.glob(pattern)
+    
+    max_idx = -1
+    for log_file in log_files:
+        filename = os.path.basename(log_file)
+        # Extract index from sam_{tunnel_id}_{idx:03d}.json
+        try:
+            idx_str = filename.split('_')[-1].replace('.json', '')
+            idx = int(idx_str)
+            max_idx = max(max_idx, idx)
+        except (ValueError, IndexError):
+            continue
+    
+    return max_idx
+
+
+def load_best_from_logs(
+    logs_dir: str,
+    tunnel_id: str,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+    fixed_params: Dict = None
+) -> Optional[Tuple[List[float], float]]:
+    """
+    Load the best trial from existing logs to use as warm-start x0/y0.
+    Falls back to current parameters_sam.json if no logs exist.
+    
+    Args:
+        logs_dir: Directory containing BO log files
+        tunnel_id: Tunnel identifier
+        agent_type: Agent type
+        fixed_params: Dict of fixed parameters (to exclude from warm-start vector)
+    
+    Returns:
+        Tuple of (param_values_list, negative_miou) or None if no params found.
+    """
+    if fixed_params is None:
+        fixed_params = {}
+    
+    pattern = os.path.join(logs_dir, f"sam_{tunnel_id}_*.json")
+    log_files = glob.glob(pattern)
+    
+    best_miou = -1
+    best_params = None
+    
+    # First, try to load from previous BO logs
+    for log_file in log_files:
+        with open(log_file, 'r') as f:
+            data = json.load(f)
+        
+        if 'bo' not in data or 'objective_value' not in data['bo']:
+            continue
+        
+        miou = data['bo']['objective_value']
+        if miou > best_miou:
+            best_miou = miou
+            best_params = data.get('params', {})
+    
+    # If no logs found, try to load from current parameters file
+    if best_params is None or best_miou <= 0:
+        code_path = 'irregular' if agent_type == 'complex_staggered' else agent_type
+        params_file = os.path.join(
+            PROJECT_ROOT,
+            'agents', code_path, '3_segmentation',
+            'parameters', tunnel_id, 'parameters_sam.json'
+        )
+        
+        if os.path.exists(params_file):
+            with open(params_file, 'r') as f:
+                best_params = json.load(f)
+            # Use a conservative mIoU estimate (0.5) for parameters file
+            best_miou = 0.5
+            print(f"  No previous BO logs found, using current parameters_sam.json as warm-start")
+    
+    if best_params is None:
+        return None
+    
+    # Build param list in dimension order, EXCLUDING fixed params
+    _, param_names, _ = get_sam_dimensions(tunnel_id, agent_type)
+    
+    param_extractors = {
+        'segment_width': lambda p: p.get('segment_width', 1200.0),
+        'angle_deg': lambda p: p.get('angle_deg', 7.5),
+        'k_mask_width': lambda p: p.get('k_mask_width', 625.0),
+        'k_mask_height_pos': lambda p: p.get('k_mask_height_pos', 620.0),
+        'k_mask_height_neg': lambda p: p.get('k_mask_height_neg', 460.0),
+        'ab_mask_width': lambda p: p.get('ab_mask_width', 625.0),
+        'ab_mask_height': lambda p: p.get('ab_mask_height', 1620.0),
+        'padding': lambda p: p.get('padding', 150),
+        'crop_margin': lambda p: p.get('crop_margin', 50),
+        'y_bound_lower': lambda p: p.get('y_bound_lower', 4200.0),
+        'y_bound_upper': lambda p: p.get('y_bound_upper', 13100.0),
+        'crop_expansion': lambda p: p.get('crop_expansion', 0),
+        'min_quality_threshold': lambda p: p.get('min_quality_threshold', 0.3),
+        'k_height': lambda p: p.get('k_height', 1200.0),
+        'ab_height': lambda p: p.get('ab_height', 3270.0),
+        'b1_height_top': lambda p: p.get('b1_height_top', 1500.0),
+        'b1_height_bottom_pos': lambda p: p.get('b1_height_bottom_pos', 1540.69),
+        'b1_height_bottom_neg': lambda p: p.get('b1_height_bottom_neg', 1699.08),
+        'b2_height_top_pos': lambda p: p.get('b2_height_top_pos', 1540.69),
+        'b2_height_top_neg': lambda p: p.get('b2_height_top_neg', 1699.08),
+        'b2_height_bottom': lambda p: p.get('b2_height_bottom', 1500.0),
+    }
+    
+    param_values = []
+    for name in param_names:
+        if name in fixed_params:
+            continue
+        extractor = param_extractors.get(name, lambda p: 0.0)
+        param_values.append(extractor(best_params))
+    
+    return param_values, -best_miou  # negative for minimization
+
+
+# =============================================================================
+# Main Optimization
+# =============================================================================
+
+def run_sam_bo(
+    tunnel_id: str,
+    data_dir: str = 'data',
+    n_calls: int = 60,
+    n_initial_points: int = 10,
+    verbose: bool = True,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+) -> Dict:
+    """
+    Run SAM Bayesian Optimization.
+    
+    Args:
+        tunnel_id: Tunnel identifier (e.g., '1-4')
+        data_dir: Base data directory
+        n_calls: Number of BO iterations
+        n_initial_points: Number of initial random points
+        verbose: Print progress
+        agent_type: Agent type (defaults to script's directory name)
+    
+    Returns:
+        Dictionary with best parameters and mIoU
+    """
+    print(f"\n{'='*70}")
+    print(f"SAM BAYESIAN OPTIMIZATION - Tunnel {tunnel_id} ({agent_type})")
+    print(f"{'='*70}")
+    
+    logs_dir = os.path.join(
+        PROJECT_ROOT,
+        'bo', agent_type, 'logs'
+    )
+    os.makedirs(logs_dir, exist_ok=True)
+    
+    # Determine eval offset from existing logs
+    eval_offset = find_max_trial_index(logs_dir, tunnel_id)
+    
+    # Initialize objective
+    objective = SamObjective(
+        tunnel_id=tunnel_id,
+        data_dir=data_dir,
+        verbose=verbose,
+        eval_offset=eval_offset,
+        agent_type=agent_type,
+    )
+    
+    print(f"\nSearch space: {len(objective.param_names)} parameters")
+    print(f"N calls: {n_calls}, N initial: {n_initial_points}")
+    print(f"Objective: mIoU (mean Intersection over Union)")
+    print(f"Algorithm: forest_minimize (Random Forest surrogate)")
+    
+    x0 = None
+    y0 = None
+    warm_start = load_best_from_logs(logs_dir, tunnel_id, agent_type, objective.fixed_params)
+    if warm_start is not None:
+        x0_vals, y0_val = warm_start
+        # Clamp warm-start values to current search space bounds
+        clamped_x0 = []
+        for i, (name, val) in enumerate(zip(objective.param_names, x0_vals)):
+            dim = objective.dimensions[i]
+            # Get bounds from dimension
+            if hasattr(dim, 'low') and hasattr(dim, 'high'):
+                clamped_val = max(dim.low, min(dim.high, val))
+                clamped_x0.append(clamped_val)
+            else:
+                clamped_x0.append(val)
+        
+        x0 = [clamped_x0]
+        y0 = [y0_val]
+        source = "previous BO logs" if eval_offset > 0 else "current parameters_sam.json"
+        print(f"\nWarm-starting from {source} (estimated mIoU={-y0_val:.4f}):")
+        for name, val, clamped in zip(objective.param_names, x0_vals, clamped_x0):
+            if abs(val - clamped) > 1e-6:
+                print(f"  {name}: {val:.4f} -> {clamped:.4f} (clamped to bounds)")
+            else:
+                print(f"  {name}: {val:.4f}")
+    
+    # Run optimization
+    print(f"\nStarting optimization...")
+    result = forest_minimize(
+        objective,
+        objective.dimensions,
+        n_calls=n_calls,
+        n_initial_points=n_initial_points,
+        x0=x0,
+        y0=y0,
+        random_state=42,
+        verbose=False,
+    )
+    
+    # Results
+    best_params = params_to_sam_json(result.x, objective.param_names, objective.fixed_params)
+    best_miou = -result.fun  # Negate back
+    
+    print(f"\n{'='*70}")
+    print(f"OPTIMIZATION COMPLETE")
+    print(f"{'='*70}")
+    print(f"Best mIoU score: {best_miou:.4f}")
+    print(f"\nBest parameters:")
+    for name, value in best_params.items():
+        if isinstance(value, float):
+            print(f"  {name}: {value:.6f}")
+        else:
+            print(f"  {name}: {value}")
+    
+    # Save best parameters
+    filepath = objective.save_best_params()
+    if filepath:
+        print(f"\nSaved parameters to: {filepath}")
+    
+    return {
+        'tunnel_id': tunnel_id,
+        'best_miou': best_miou,
+        'best_params': best_params,
+    }
+
+
+# =============================================================================
+# Geometric BO — groove-guided boundary correction
+# =============================================================================
+
+geo_spec = importlib.util.spec_from_file_location(
+    "geometric",
+    os.path.join(sam_dir, "3_geometric.py"),
+)
+geo_module = importlib.util.module_from_spec(geo_spec)
+geo_spec.loader.exec_module(geo_module)
+
+run_geometric = geo_module.run_geometric
+
+
+def get_geometric_dimensions(
+    tunnel_id: str = None,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+) -> Tuple[List, List[str], Dict]:
+    """
+    Define search space for the 20 geometric parameters.
+
+    Returns (dimensions, param_names, fixed_params) exactly like
+    get_sam_dimensions so the same BO machinery can be reused.
+    """
+    default_bounds = {
+        'K_half_height': (100.0, 250.0),
+        'B1_half_height': (300.0, 550.0),
+        'B2_half_height': (250.0, 500.0),
+        'A1_half_height': (250.0, 500.0),
+        'A2_half_height': (250.0, 500.0),
+        'A3_half_height': (250.0, 500.0),
+        'A4_half_height': (250.0, 500.0),
+        'K_centre_offset': (-80.0, 80.0),
+        'B1_centre_offset': (-80.0, 80.0),
+        'B2_centre_offset': (-80.0, 80.0),
+        'A1_centre_offset': (-80.0, 80.0),
+        'A2_centre_offset': (-80.0, 80.0),
+        'A3_centre_offset': (-80.0, 80.0),
+        'A4_centre_offset': (-80.0, 80.0),
+        'segment_half_width': (150.0, 250.0),
+        'shrink_x': (0.0, 20.0),
+        'shrink_y': (0.0, 20.0),
+        'snap_radius': (0, 200),
+        'groove_threshold': (10.0, 100.0),
+        'snap_weight': (0.0, 1.0),
+    }
+
+    fixed_params = {}
+    narrowed_bounds = {}
+
+    if tunnel_id:
+        config_file = PROJECT_ROOT / 'bo' / agent_type / 'configs' / f'geometric_{tunnel_id}.json'
+        if config_file.exists():
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            fixed_params = config.get('fixed_params', {})
+            for key, value in config.get('narrowed_bounds', {}).items():
+                narrowed_bounds[key] = tuple(value) if isinstance(value, list) else value
+
+    bounds = default_bounds.copy()
+    bounds.update(narrowed_bounds)
+
+    dimensions = []
+    param_names = []
+
+    int_params = {'snap_radius'}
+    for name, (lo, hi) in bounds.items():
+        if name in fixed_params:
+            continue
+        ptype = Integer if name in int_params else Real
+        dimensions.append(ptype(lo, hi, name=name))
+        param_names.append(name)
+
+    return dimensions, param_names, fixed_params
+
+
+class GeometricObjective:
+    """Objective function for geometric BO: maximise intrinsic groove score."""
+
+    def __init__(
+        self,
+        tunnel_id: str,
+        data_dir: str = 'data',
+        segments_file: str = None,
+        verbose: bool = True,
+        agent_type: str = DEFAULT_AGENT_TYPE,
+    ):
+        self.tunnel_id = tunnel_id
+        self.data_dir = data_dir
+        self.segments_file = segments_file
+        self.verbose = verbose
+        self.agent_type = agent_type
+
+        self.tunnel_dir = os.path.join(data_dir, tunnel_id)
+        self.params_dir = os.path.join(
+            PROJECT_ROOT, 'agents', agent_type,
+            '3_segmentation', 'parameters', tunnel_id,
+        )
+        os.makedirs(self.params_dir, exist_ok=True)
+
+        self.logs_dir = os.path.join(PROJECT_ROOT, 'bo', agent_type, 'logs_geometric')
+        os.makedirs(self.logs_dir, exist_ok=True)
+
+        self.dimensions, self.param_names, self.fixed_params = get_geometric_dimensions(
+            tunnel_id, agent_type,
+        )
+
+        self.segment_count = 7
+        self.best_score = -1.0
+        self.best_params = None
+        self.eval_count = 0
+
+        if verbose:
+            print(f"Geometric BO for tunnel {tunnel_id}")
+            print(f"  Parameters: {len(self.param_names)} tunable, {len(self.fixed_params)} fixed")
+            print(f"  Segments file: {segments_file or 'all_segments.csv (default)'}")
+
+    def __call__(self, params: List) -> float:
+        self.eval_count += 1
+        start_time = time.time()
+
+        try:
+            param_dict = dict(self.fixed_params)
+            for name, val in zip(self.param_names, params):
+                param_dict[name] = int(val) if name == 'snap_radius' else float(val)
+
+            result = run_geometric(
+                self.tunnel_id,
+                base_dir=self.data_dir,
+                segments_file=self.segments_file,
+                override_params=param_dict,
+            )
+
+            groove_score = result['groove_score']
+            runtime = time.time() - start_time
+
+            miou_str = ''
+            df = result['df']
+            if 'segment' in df.columns:
+                gt = np.nan_to_num(df['segment'].values, nan=-1).astype(int)
+                pr = np.nan_to_num(df['pred'].values, nan=-1).astype(int)
+                mask = (gt >= 1) & (gt <= 7) & (pr >= 0) & (pr <= 7)
+                if mask.sum() > 0:
+                    from sklearn.metrics import jaccard_score as _js
+                    miou = _js(gt[mask], pr[mask], average='macro',
+                               labels=np.arange(1, 8), zero_division=0)
+                    miou_str = f', mIoU={miou:.4f}'
+
+            if groove_score > self.best_score:
+                self.best_score = groove_score
+                self.best_params = param_dict.copy()
+
+            if self.verbose and (self.eval_count <= 5 or self.eval_count % 5 == 0):
+                print(f"  [Eval {self.eval_count}] groove={groove_score:.2f}{miou_str}"
+                      f"  ({runtime:.1f}s)")
+
+            trial_id = f"geo_{self.tunnel_id}_{self.eval_count:03d}"
+            log_file = os.path.join(self.logs_dir, f"{trial_id}.json")
+            with open(log_file, 'w') as f:
+                json.dump({
+                    'trial_id': trial_id,
+                    'params': param_dict,
+                    'groove_score': groove_score,
+                    'runtime_sec': runtime,
+                }, f, indent=2)
+
+            return -groove_score
+
+        except Exception as e:
+            if self.verbose:
+                print(f"  [Eval {self.eval_count}] Error: {e}")
+            return 0.0
+
+    def save_best_params(self) -> Optional[str]:
+        if self.best_params is None:
+            return None
+        params_file = os.path.join(self.params_dir, 'parameters_geometric.json')
+        with open(params_file, 'w') as f:
+            json.dump(self.best_params, f, indent=4)
+        return params_file
+
+
+def run_geometric_bo(
+    tunnel_id: str,
+    data_dir: str = 'data',
+    segments_file: str = None,
+    n_calls: int = 60,
+    n_initial_points: int = 15,
+    verbose: bool = True,
+    agent_type: str = DEFAULT_AGENT_TYPE,
+) -> Dict:
+    """
+    Run Bayesian Optimization for geometric segmentation parameters.
+
+    Optimises the intrinsic boundary-groove alignment score (no GT needed).
+    When GT is available, also reports mIoU for validation.
+    """
+    print(f"\n{'='*70}")
+    print(f"GEOMETRIC BAYESIAN OPTIMIZATION — Tunnel {tunnel_id} ({agent_type})")
+    print(f"{'='*70}")
+
+    objective = GeometricObjective(
+        tunnel_id=tunnel_id,
+        data_dir=data_dir,
+        segments_file=segments_file,
+        verbose=verbose,
+        agent_type=agent_type,
+    )
+
+    print(f"\nSearch space: {len(objective.param_names)} parameters")
+    print(f"N calls: {n_calls}, N initial: {n_initial_points}")
+    print(f"Objective: intrinsic groove alignment score")
+    print(f"Algorithm: forest_minimize (Random Forest surrogate)")
+    print(f"\nStarting optimization...")
+
+    result = forest_minimize(
+        objective,
+        objective.dimensions,
+        n_calls=n_calls,
+        n_initial_points=n_initial_points,
+        random_state=42,
+        verbose=False,
+    )
+
+    best_groove = -result.fun
+    best_params_dict = dict(objective.fixed_params)
+    for name, val in zip(objective.param_names, result.x):
+        best_params_dict[name] = int(val) if name == 'snap_radius' else float(val)
+
+    print(f"\n{'='*70}")
+    print(f"OPTIMIZATION COMPLETE")
+    print(f"{'='*70}")
+    print(f"Best groove alignment score: {best_groove:.4f}")
+    print(f"\nBest parameters:")
+    for name, value in sorted(best_params_dict.items()):
+        if isinstance(value, float):
+            print(f"  {name}: {value:.4f}")
+        else:
+            print(f"  {name}: {value}")
+
+    filepath = objective.save_best_params()
+    if filepath:
+        print(f"\nSaved parameters to: {filepath}")
+
+    return {
+        'tunnel_id': tunnel_id,
+        'best_groove_score': best_groove,
+        'best_params': best_params_dict,
+    }
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="SAM / Geometric Bayesian Optimization")
+    parser.add_argument("tunnel_id", help="Tunnel identifier (e.g., 1-4)")
+    parser.add_argument("--data-dir", default="data", help="Base data directory")
+    parser.add_argument("--n-calls", type=int, default=60, help="Number of BO iterations")
+    parser.add_argument("--n-initial", type=int, default=10, help="Number of initial random points")
+    parser.add_argument("--agent-type", default=DEFAULT_AGENT_TYPE, help="Agent type")
+    parser.add_argument(
+        "--mode", choices=["sam", "geometric"], default="sam",
+        help="Optimisation mode: 'sam' (SAM mIoU) or 'geometric' (groove alignment)",
+    )
+    parser.add_argument(
+        "--segments-file", default=None,
+        help="Segments CSV for geometric mode (default: all_segments.csv)",
+    )
+
+    args = parser.parse_args()
+
+    if args.mode == "geometric":
+        run_geometric_bo(
+            tunnel_id=args.tunnel_id,
+            data_dir=args.data_dir,
+            segments_file=args.segments_file,
+            n_calls=args.n_calls,
+            n_initial_points=args.n_initial,
+            agent_type=args.agent_type,
+        )
+    else:
+        run_sam_bo(
+            tunnel_id=args.tunnel_id,
+            data_dir=args.data_dir,
+            n_calls=args.n_calls,
+            n_initial_points=args.n_initial,
+            agent_type=args.agent_type,
+        )

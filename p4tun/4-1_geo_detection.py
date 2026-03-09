@@ -243,11 +243,13 @@ def run_geo_detection(
     base_dir: str = "data",
     use_gt_k: bool = False,
     use_gt_x: bool = False,
+    k_csv: str = None,
     output_file: str = "all_segments.csv",
 ) -> pd.DataFrame:
     """
-    Run detection: line detection + K (combined or from GT) + per-ring offset expansion.
+    Run detection: line detection + K (combined or from GT or from CSV) + per-ring offset expansion.
     Offsets are always GT-derived from all_segments_gt.csv when that file exists.
+    k_csv: if set, load K positions from this file (path relative to tunnel dir or absolute); use GT-derived offsets.
     """
     tunnel_dir = os.path.join(base_dir, tunnel_id)
     depth_map_path = os.path.join(tunnel_dir, "depth_map_outlier.npy")
@@ -267,13 +269,27 @@ def run_geo_detection(
     resolution = preprocessing_params.get("depth_map_resolution", 0.005)
     k_height_mm, ab_height_mm = calculate_segment_heights(tunnel_diameter)
 
-    # Step 1: Line detection
-    print(f"[Step 1] Detecting lines...")
-    line_data = detect_lines(depth_map_outlier, params)
-    print(f"  Positive: {len(line_data['positive_lines'])}, Negative: {len(line_data['negative_lines'])}")
+    # Step 1: Line detection (skip if K from CSV or GT)
+    if k_csv or use_gt_k:
+        line_data = None
+    else:
+        print(f"[Step 1] Detecting lines...")
+        line_data = detect_lines(depth_map_outlier, params)
+        print(f"  Positive: {len(line_data['positive_lines'])}, Negative: {len(line_data['negative_lines'])}")
 
-    # Step 2: K positions (detected or from GT)
-    if use_gt_k:
+    # Step 2: K positions (from CSV, GT, or detected)
+    if k_csv:
+        k_path = os.path.join(tunnel_dir, k_csv) if not os.path.isabs(k_csv) else k_csv
+        if not os.path.exists(k_path):
+            raise FileNotFoundError(f"K CSV not found: {k_path}")
+        k_positions = pd.read_csv(k_path)
+        if "Type" in k_positions.columns and (k_positions["Type"].str.upper() == "K").any():
+            k_positions = k_positions[k_positions["Type"].str.upper() == "K"].copy()
+        if "Confidence" not in k_positions.columns:
+            k_positions["Confidence"] = 0.9
+        k_positions = k_positions[["X", "Y", "Confidence"]].reset_index(drop=True)
+        print(f"[Step 2] K positions from {k_csv}: {len(k_positions)} rings")
+    elif use_gt_k:
         gt_path = os.path.join(tunnel_dir, "all_segments_gt.csv")
         if not os.path.exists(gt_path):
             raise FileNotFoundError(f"--use-gt-k requires {gt_path}")
@@ -328,6 +344,7 @@ def main():
     parser.add_argument("--data-dir", default="data", help="Base data directory")
     parser.add_argument("--use-gt-k", action="store_true", help="Use K positions from all_segments_gt.csv")
     parser.add_argument("--use-gt-x", action="store_true", help="Use per-block X from GT (implies GT-derived offsets)")
+    parser.add_argument("--k-csv", default=None, help="Use K positions from this CSV (e.g. detected_k_dbscan.csv); path relative to tunnel dir")
     parser.add_argument("--output", default="all_segments.csv", help="Output filename")
     args = parser.parse_args()
     run_geo_detection(
@@ -335,6 +352,7 @@ def main():
         base_dir=args.data_dir,
         use_gt_k=args.use_gt_k,
         use_gt_x=args.use_gt_x,
+        k_csv=args.k_csv,
         output_file=args.output,
     )
 

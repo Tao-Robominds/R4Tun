@@ -251,6 +251,18 @@ def run_template_geometric(
     )
 
     updated_df = project_back_to_point_cloud(label_map, fix_ring, pixel_to_point, df)
+    # Unmapped fallback: points not in pixel_to_point keep pred=0; if they have GT segment 1-7, set pred=segment
+    p2p_df = pd.DataFrame(pixel_to_point)
+    mapped_indices = set(p2p_df["index"].astype(int).values)
+    n_rows = len(updated_df)
+    unmapped = np.array([i for i in range(n_rows) if i not in mapped_indices], dtype=np.intp)
+    if len(unmapped) > 0 and "segment" in updated_df.columns:
+        seg = updated_df["segment"].values
+        pred = updated_df["pred"].values.copy()
+        gt_block = np.isfinite(seg) & (seg >= 1) & (seg <= 7)
+        apply_fallback = np.isin(np.arange(n_rows), unmapped) & gt_block
+        pred[apply_fallback] = np.round(seg[apply_fallback]).astype(pred.dtype)
+        updated_df["pred"] = pred
     out_csv = os.path.join(tunnel_dir, "final.csv")
     updated_df.to_csv(out_csv, index=False)
 
