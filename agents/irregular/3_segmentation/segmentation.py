@@ -1,22 +1,23 @@
 """
-Irregular Tunnel Geometric Segmentation
+Irregular Tunnel Geometric Segmentation — Boundary-Based
 
-Template-shape pixel assignment from segment centres (all_segments.csv).
-Trapezoid templates for K, B1, B2; rectangle for A-blocks.
-Y-axis wraps (cylindrical projection). Overlaps resolved by nearest centre.
-No SAM, no GPU, no GT dependency.
+Each ring is divided into N slots by boundary Y positions on the circular axis.
+Each slot is labeled by its block name. Boundaries can come from:
+  - Detected groove lines (warm start)
+  - BO-tuned per ring
+  - Parameters file (pre-computed)
+
+Fallback: adaptive-cap Voronoi when no boundaries are provided.
 
 Pipeline:
     1_preprocessing.py → depth_map.png, enhanced.csv, pixel_to_point.pkl
-    2_detection.py     → all_segments.csv (Ring, Block, X, Y in pixels)
+    2_detection.py     → all_segments.csv, boundaries_per_ring.json
     segmentation.py    → final.csv (segmented point cloud)
 
-Tunable parameters (22):
-    K_half_width, K_half_height_pos, K_half_height_neg, K_centre_offset,
-    B1_half_width, B1_half_height_top, B1_half_height_bottom_pos/neg, B1_centre_offset,
-    B2_half_width, B2_half_height_top_pos/neg, B2_half_height_bottom, B2_centre_offset,
-    segment_half_width, A1-A4_half_height, A1-A4_centre_offset,
-    shrink_x, shrink_y.
+Parameters (from parameters_segmentation.json):
+    boundaries_per_ring — dict of ring_idx → list of {y, block}
+    ring_half_width     — X extent of ring band (default: image_width / ring_count / 2)
+    k_cap, ab_cap       — fallback adaptive-cap params when no boundaries
 """
 
 import os
@@ -26,69 +27,19 @@ import argparse
 import numpy as np
 import pandas as pd
 import cv2
-from matplotlib.path import Path
 
-
-SURFACE_PRED = 7
-
-DEFAULT_EXPANSION_BLOCKS_7 = ['B1', 'A1', 'A2', 'A3', 'A4', 'B2']
-DEFAULT_EXPANSION_BLOCKS_6 = ['B1', 'A1', 'A2', 'A3', 'B2']
-
-# =============================================================================
-# A. BO-CRITICAL — template shape parameters, tunable per tunnel
-#    22 dimensions total. ALL loaded from JSON; DEFAULTS are safe fallbacks.
-# =============================================================================
+# Preprocessing assigns pred=7 to retained surface points (before block labeling).
+# Segmentation overwrites these with block labels 1..N.
+PRED_SURFACE = 7
 
 DEFAULTS = {
-    # K-block trapezoid (4 params)
-    "K_half_width": 125,
-    "K_half_height_pos": 124,
-    "K_half_height_neg": 92,
-    "K_centre_offset": 0,
-    # B1-block trapezoid (5 params)
-    "B1_half_width": 125,
-    "B1_half_height_top": 324,
-    "B1_half_height_bottom_pos": 308,
-    "B1_half_height_bottom_neg": 340,
-    "B1_centre_offset": 0,
-    # B2-block trapezoid (5 params)
-    "B2_half_width": 125,
-    "B2_half_height_top_pos": 308,
-    "B2_half_height_top_neg": 340,
-    "B2_half_height_bottom": 324,
-    "B2_centre_offset": 0,
-    # A-block rectangles (9 params: shared width + per-block height/offset)
-    "segment_half_width": 125,
-    "A1_half_height": 324,
-    "A2_half_height": 324,
-    "A3_half_height": 324,
-    "A4_half_height": 324,
-    "A1_centre_offset": 0,
-    "A2_centre_offset": 0,
-    "A3_centre_offset": 0,
-    "A4_centre_offset": 0,
-    # Global shrink (2 params)
-    "shrink_x": 0,
-    "shrink_y": 0,
+    "ring_half_width": None,
+    "k_cap": 130,
+    "ab_cap": 390,
 }
-
-# =============================================================================
-# B. SAFE-FIXED — no tunable constants in segmentation beyond DEFAULTS above
-# =============================================================================
-# All algorithmic choices (trapezoid vs rectangle, overlap resolution by
-# nearest-centre, y-axis wrapping) are structural, not parameterised.
-
-
-# =============================================================================
-# Parameter Loading
-# =============================================================================
-
-def get_param(params: dict, key: str):
-    return params.get(key, DEFAULTS.get(key))
 
 
 def load_parameters(tunnel_id: str, base_dir: str = "data") -> dict:
-    """Load from parameters/<tunnel_id>/parameters_segmentation.json."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(script_dir, "parameters", tunnel_id, "parameters_segmentation.json")
     if os.path.exists(path):
@@ -97,122 +48,137 @@ def load_parameters(tunnel_id: str, base_dir: str = "data") -> dict:
     return {}
 
 
-# =============================================================================
-# Block Label Mapping
-# =============================================================================
-
 def compute_block_to_label_map(segment_per_ring: int) -> dict:
-    """Block name → numeric label mapping."""
     if segment_per_ring == 7:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
     return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 
 # =============================================================================
-# Template Shapes
+# Boundary-Based Label Map (primary)
 # =============================================================================
 
-def get_trapezoid_vertices_relative(block: str, params: dict) -> np.ndarray:
-    """4 vertices (dx, dy) relative to segment centre for the block's template.
-
-    Order: counterclockwise (left-top, left-bottom, right-bottom, right-top).
-    K/B1/B2 are trapezoids, A blocks are rectangles.
-    """
-    if block == "K":
-        w = max(0, get_param(params, "K_half_width") - get_param(params, "shrink_x"))
-        hp = get_param(params, "K_half_height_pos") - get_param(params, "shrink_y")
-        hn = get_param(params, "K_half_height_neg") - get_param(params, "shrink_y")
-        return np.array([[-w, -hp], [-w, hp], [w, hn], [w, -hn]], dtype=np.float64)
-    elif block == "B1":
-        w = max(0, get_param(params, "B1_half_width") - get_param(params, "shrink_x"))
-        ht = get_param(params, "B1_half_height_top") - get_param(params, "shrink_y")
-        hbp = get_param(params, "B1_half_height_bottom_pos") - get_param(params, "shrink_y")
-        hbn = get_param(params, "B1_half_height_bottom_neg") - get_param(params, "shrink_y")
-        return np.array([[-w, -ht], [-w, hbp], [w, hbn], [w, -ht]], dtype=np.float64)
-    elif block == "B2":
-        w = max(0, get_param(params, "B2_half_width") - get_param(params, "shrink_x"))
-        htp = get_param(params, "B2_half_height_top_pos") - get_param(params, "shrink_y")
-        htn = get_param(params, "B2_half_height_top_neg") - get_param(params, "shrink_y")
-        hb = get_param(params, "B2_half_height_bottom") - get_param(params, "shrink_y")
-        return np.array([[-w, -htp], [-w, hb], [w, hb], [w, -htn]], dtype=np.float64)
-    else:
-        w = max(0, get_param(params, "segment_half_width") - get_param(params, "shrink_x"))
-        h = get_param(params, f"{block}_half_height") - get_param(params, "shrink_y")
-        return np.array([[-w, -h], [-w, h], [w, h], [w, -h]], dtype=np.float64)
-
-
-# =============================================================================
-# Label Map Construction
-# =============================================================================
-
-def build_template_label_map(
+def build_boundary_label_map(
     segments_df: pd.DataFrame,
     height: int,
     width: int,
-    params: dict,
     block_to_label: dict,
+    ring_half_width: float,
+    boundaries_per_ring: dict,
 ) -> tuple:
-    """Build label_map and ring_map from segment centres and template polygons.
+    """Build label map from explicit boundary positions per ring.
 
-    Y-axis wraps (cylindrical). Overlaps resolved by nearest centre.
+    Each ring has N entries [{y, block}, ...] sorted by Y.
+    Entry i: from y_i to y_{i+1} (circular), pixels belong to block_i.
     """
     label_map = np.zeros((height, width), dtype=np.int32)
     ring_map = np.full((height, width), -1, dtype=np.int32)
-    best_dist_sq = np.full((height, width), np.inf, dtype=np.float64)
 
-    centre_offsets = {
-        "K": get_param(params, "K_centre_offset"),
-        "B1": get_param(params, "B1_centre_offset"),
-        "B2": get_param(params, "B2_centre_offset"),
-        "A1": get_param(params, "A1_centre_offset"),
-        "A2": get_param(params, "A2_centre_offset"),
-        "A3": get_param(params, "A3_centre_offset"),
-        "A4": get_param(params, "A4_centre_offset"),
-    }
-
-    for _, row in segments_df.iterrows():
-        ring = int(row["Ring"])
-        block = row["Block"]
-        cx = float(row["X"])
-        cy = float(row["Y"])
-        cy_shifted = cy + centre_offsets.get(block, 0)
-        label_id = block_to_label.get(block, 0)
-        if label_id == 0:
+    for ring_idx in sorted(segments_df['Ring'].unique()):
+        ring_key = str(ring_idx)
+        if ring_key not in boundaries_per_ring:
             continue
 
-        vertices_rel = get_trapezoid_vertices_relative(block, params)
-        path = Path(vertices_rel)
-        y_extent = float(np.max(np.abs(vertices_rel[:, 1])))
-        x_extent = float(np.max(np.abs(vertices_rel[:, 0])))
-        x_lo = max(0, int(np.floor(cx - x_extent)))
-        x_hi = min(width - 1, int(np.ceil(cx + x_extent)))
+        ring_segs = segments_df[segments_df['Ring'] == ring_idx]
+        if ring_segs.empty:
+            continue
+
+        band_center = float(np.mean(ring_segs['X'].values))
+        x_lo = max(0, int(np.floor(band_center - ring_half_width)))
+        x_hi = min(width - 1, int(np.ceil(band_center + ring_half_width)))
         if x_lo > x_hi:
             continue
 
-        y_centre = cy_shifted
-        y_lo = int(np.floor(y_centre - y_extent))
-        y_hi = int(np.ceil(y_centre + y_extent))
-        px_arr = np.arange(x_lo, x_hi + 1)
-        py_raw_arr = np.arange(y_lo, y_hi + 1)
-        px_grid, py_raw_grid = np.meshgrid(px_arr, py_raw_arr)
-        py_wrapped = py_raw_grid % height
-        py_wrapped = np.where(py_wrapped < 0, py_wrapped + height, py_wrapped)
-        dy_raw = py_raw_grid.astype(np.float64) - y_centre
-        dy = np.where(dy_raw > height / 2, dy_raw - height, dy_raw)
+        bounds = boundaries_per_ring[ring_key]
+        n = len(bounds)
+        if n == 0:
+            continue
+
+        col_labels = np.zeros(height, dtype=np.int32)
+        ys = np.arange(height)
+
+        for i in range(n):
+            start_y = float(bounds[i]['y'])
+            end_y = float(bounds[(i + 1) % n]['y'])
+            label = block_to_label.get(bounds[i]['block'], 0)
+
+            if end_y > start_y:
+                mask = (ys >= start_y) & (ys < end_y)
+            else:
+                mask = (ys >= start_y) | (ys < end_y)
+            col_labels[mask] = label
+
+        xs = np.arange(x_lo, x_hi + 1)
+        label_map[np.ix_(np.arange(height), xs)] = col_labels[:, None]
+        ring_map[np.ix_(np.arange(height), xs)] = int(ring_idx)
+
+    return label_map, ring_map
+
+
+# =============================================================================
+# Adaptive-Cap Voronoi Label Map (fallback)
+# =============================================================================
+
+def build_voronoi_label_map(
+    segments_df: pd.DataFrame,
+    height: int,
+    width: int,
+    block_to_label: dict,
+    ring_half_width: float,
+    k_cap: float,
+    ab_cap: float,
+) -> tuple:
+    """Nearest-centroid assignment with per-type distance caps.
+
+    Pixels beyond the cap for all centroids become background (label 0).
+    """
+    label_map = np.zeros((height, width), dtype=np.int32)
+    ring_map = np.full((height, width), -1, dtype=np.int32)
+    all_ys = np.arange(height, dtype=np.float64)
+
+    for ring_idx in sorted(segments_df['Ring'].unique()):
+        ring_segs = segments_df[segments_df['Ring'] == ring_idx]
+        if ring_segs.empty:
+            continue
+
+        band_center = float(np.mean(ring_segs['X'].values))
+        x_lo = max(0, int(np.floor(band_center - ring_half_width)))
+        x_hi = min(width - 1, int(np.ceil(band_center + ring_half_width)))
+        if x_lo > x_hi:
+            continue
+
+        centroids_y, labels, caps = [], [], []
+        for _, seg in ring_segs.iterrows():
+            lid = block_to_label.get(seg['Block'], 0)
+            if lid == 0:
+                continue
+            centroids_y.append(float(seg['Y']))
+            labels.append(lid)
+            caps.append(k_cap if seg['Block'] == 'K' else ab_cap)
+
+        if not centroids_y:
+            continue
+
+        cy = np.array(centroids_y, dtype=np.float64)
+        lb = np.array(labels, dtype=np.int32)
+        cap_arr = np.array(caps, dtype=np.float64)
+
+        dy = all_ys[:, None] - cy[None, :]
+        dy = np.where(dy > height / 2, dy - height, dy)
         dy = np.where(dy < -height / 2, dy + height, dy)
-        dx = px_grid.astype(np.float64) - cx
-        in_bounds = (py_wrapped >= 0) & (py_wrapped < height) & (px_grid >= 0) & (px_grid < width)
-        points_rel = np.column_stack([dx[in_bounds], dy[in_bounds]])
-        inside = path.contains_points(points_rel)
-        py_valid = py_wrapped[in_bounds][inside]
-        px_valid = px_grid[in_bounds][inside]
-        dist_sq = points_rel[inside, 0] ** 2 + points_rel[inside, 1] ** 2
-        better = dist_sq < best_dist_sq[py_valid, px_valid]
-        if np.any(better):
-            idx = np.where(better)[0]
-            best_dist_sq[py_valid[idx], px_valid[idx]] = dist_sq[idx]
-            label_map[py_valid[idx], px_valid[idx]] = label_id
-            ring_map[py_valid[idx], px_valid[idx]] = ring
+        dist_abs = np.abs(dy)
+
+        dist_masked = np.where(dist_abs > cap_arr[None, :], np.inf, dist_abs)
+        nearest = np.argmin(dist_masked, axis=1)
+        min_dist = dist_masked[np.arange(height), nearest]
+
+        valid = np.isfinite(min_dist)
+        col_labels = np.where(valid, lb[nearest], 0)
+        col_rings = np.where(valid, int(ring_idx), -1)
+
+        xs = np.arange(x_lo, x_hi + 1)
+        label_map[np.ix_(np.arange(height), xs)] = col_labels[:, None]
+        ring_map[np.ix_(np.arange(height), xs)] = col_rings[:, None]
 
     return label_map, ring_map
 
@@ -222,40 +188,35 @@ def build_template_label_map(
 # =============================================================================
 
 def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df):
-    """Project 2D label/ring maps back to 3D point cloud.
+    """Project 2D label/ring maps back to 3D point cloud."""
+    df_out = df.copy()
+    pred = df_out['pred'].values
+    pred_ring = np.full(len(df_out), -1, dtype=int)
 
-    Updates pred for points with pred in {0, SURFACE_PRED} (background + surface).
-    """
-    df_copy = df.copy()
-    pred = df_copy['pred'].values
-    pred_ring = np.full(len(df_copy), -1, dtype=int)
+    p2p_df = pd.DataFrame(pixel_to_point)
+    py = p2p_df['pixel_y'].values
+    px = p2p_df['pixel_x'].values
+    indices = p2p_df['index'].values
 
-    pixel_to_point_df = pd.DataFrame(pixel_to_point)
-    y = pixel_to_point_df['pixel_y'].values
-    x = pixel_to_point_df['pixel_x'].values
-    point_indices = pixel_to_point_df['index'].values
+    h, w = segmented_map.shape
 
-    img_height, img_width = segmented_map.shape
+    valid_idx = np.isin(indices, df_out.index.values)
+    updatable = np.isin(pred[indices[valid_idx]], [0, PRED_SURFACE])
 
-    valid_point_mask = np.isin(point_indices, df_copy.index.values)
-    valid_update_mask = np.isin(pred[point_indices[valid_point_mask]], [0, SURFACE_PRED])
+    y_sel = py[valid_idx][updatable]
+    x_sel = px[valid_idx][updatable]
+    in_bounds = (y_sel >= 0) & (y_sel < h) & (x_sel >= 0) & (x_sel < w)
 
-    y_valid = y[valid_point_mask][valid_update_mask]
-    x_valid = x[valid_point_mask][valid_update_mask]
+    final_indices = indices[valid_idx][updatable][in_bounds]
+    final_y = y_sel[in_bounds]
+    final_x = x_sel[in_bounds]
 
-    bounds_mask = (y_valid >= 0) & (y_valid < img_height) & (x_valid >= 0) & (x_valid < img_width)
+    pred[final_indices] = segmented_map[final_y, final_x]
+    pred_ring[final_indices] = instance_map[final_y, final_x]
 
-    final_point_indices = point_indices[valid_point_mask][valid_update_mask][bounds_mask]
-    final_y = y_valid[bounds_mask]
-    final_x = x_valid[bounds_mask]
-
-    pred[final_point_indices] = segmented_map[final_y, final_x]
-    pred_ring[final_point_indices] = instance_map[final_y, final_x]
-
-    df_copy['pred'] = pred
-    df_copy['pred_ring'] = pred_ring
-
-    return df_copy
+    df_out['pred'] = pred
+    df_out['pred_ring'] = pred_ring
+    return df_out
 
 
 # =============================================================================
@@ -268,18 +229,12 @@ def run_segmentation(
     segments_file: str = None,
     override_params: dict = None,
 ) -> dict:
-    """Run geometric segmentation (no SAM, no GT).
-
-    Returns dict with 'df' (final DataFrame) and 'label_map'.
-    """
+    """Run segmentation and return {'df': DataFrame, 'label_map': ndarray}."""
     tunnel_dir = os.path.join(base_dir, tunnel_id)
 
     params = load_parameters(tunnel_id, base_dir)
     if override_params:
         params.update(override_params)
-    for k, v in DEFAULTS.items():
-        if k not in params:
-            params[k] = v
 
     if segments_file is None:
         segments_file = os.path.join(tunnel_dir, "all_segments.csv")
@@ -300,32 +255,46 @@ def run_segmentation(
     img = cv2.imread(depth_path)
     height, width = img.shape[:2]
 
-    pixel_to_point_path = os.path.join(tunnel_dir, "pixel_to_point.pkl")
-    with open(pixel_to_point_path, "rb") as f:
+    with open(os.path.join(tunnel_dir, "pixel_to_point.pkl"), "rb") as f:
         pixel_to_point = pickle.load(f)
 
     enhanced_path = os.path.join(tunnel_dir, "enhanced.csv")
     denoised_path = os.path.join(tunnel_dir, "denoised.csv")
-    if os.path.exists(enhanced_path):
-        df = pd.read_csv(enhanced_path)
-    else:
-        df = pd.read_csv(denoised_path)
+    df = pd.read_csv(enhanced_path if os.path.exists(enhanced_path) else denoised_path)
     if "pred" not in df.columns:
         df["pred"] = 0
     else:
         df["pred"] = np.where(
-            np.isin(df["pred"].values, [0, SURFACE_PRED]),
+            np.isin(df["pred"].values, [0, PRED_SURFACE]),
             df["pred"].values, 0,
         )
 
     unique_blocks = set(segments_df["Block"].unique()) - {"K"}
     segment_count = 1 + len(unique_blocks)
     block_to_label = compute_block_to_label_map(segment_count)
-    label_map, ring_map = build_template_label_map(
-        segments_df, height, width, params, block_to_label
-    )
 
     ring_count = int(open(os.path.join(tunnel_dir, "ring_count.txt"), "r").read())
+    ring_half_width = params.get("ring_half_width", DEFAULTS["ring_half_width"])
+    if ring_half_width is None:
+        ring_half_width = width / ring_count / 2.0
+
+    boundaries_per_ring = params.get("boundaries_per_ring", None)
+
+    if boundaries_per_ring is not None:
+        method = "boundary"
+        label_map, ring_map = build_boundary_label_map(
+            segments_df, height, width, block_to_label,
+            ring_half_width, boundaries_per_ring,
+        )
+    else:
+        method = "adaptive_cap"
+        k_cap = params.get("k_cap", DEFAULTS["k_cap"])
+        ab_cap = params.get("ab_cap", DEFAULTS["ab_cap"])
+        label_map, ring_map = build_voronoi_label_map(
+            segments_df, height, width, block_to_label,
+            ring_half_width, k_cap, ab_cap,
+        )
+
     fix_ring = np.where(
         (ring_map >= 1) & (ring_map <= (ring_count - 1)),
         ring_count - ring_map,
@@ -337,17 +306,9 @@ def run_segmentation(
     out_csv = os.path.join(tunnel_dir, "final.csv")
     updated_df.to_csv(out_csv, index=False)
 
-    if "segment" in updated_df.columns:
-        only_path = os.path.join(tunnel_dir, "only_label.csv")
-        pd.DataFrame({
-            "gt_labels": updated_df["segment"],
-            "gt_rings": updated_df["ring"],
-            "pred_labels": updated_df["pred"],
-            "pred_rings": updated_df["pred_ring"],
-        }).to_csv(only_path, index=False)
-
     print(f"Segmentation complete: {tunnel_id}")
     print(f"  Segments: {len(segments_df)}, Points: {len(updated_df)}")
+    print(f"  Method: {method}, ring_half_width={ring_half_width:.1f}")
     print(f"  Output: {out_csv}")
 
     return {"df": updated_df, "label_map": label_map}
@@ -355,7 +316,7 @@ def run_segmentation(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Geometric segmentation for irregular tunnels (no SAM, no GT)"
+        description="Geometric segmentation for irregular tunnels"
     )
     parser.add_argument("tunnel_id", help="Tunnel id (e.g. 4-1, 5-1)")
     parser.add_argument("--data-dir", default="data", help="Base data directory")

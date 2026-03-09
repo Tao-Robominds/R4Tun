@@ -1,26 +1,22 @@
 """
 Irregular Tunnel Detection Pipeline
 
-Detects oblique lines, finds K-block positions via combined DBSCAN + groove-pair
-fusion, and expands K to all segment positions via grouped offsets.
+Detects oblique groove lines in the depth map, finds K-block positions,
+and expands to all segment positions via per-ring offsets.
 
-Produces all_segments.csv (Ring, Block, X, Y, quality) for downstream segmentation.
+Outputs:
+  - all_segments.csv (Ring, Block, X, Y, quality) — segment centroids
+  - boundaries_per_ring.json — boundary positions for downstream segmentation
+  - detected_lines.png — visualization
 
-Tunable parameters:
-  Line detection (8): binary_threshold, hough_threshold, hough_min_length,
-    hough_max_gap, angle_pos_min/max, angle_neg_min/max
-  K detection (5): eps, k_expected_height_px, k_gap_tolerance_px,
-    k_candidates_per_ring, groove_snap_px
-  Expansion (14): stagger_groups, group_offsets (2 groups x 6 blocks = 12D),
-    ring_offset, ring_spacing_px
-
-Physical constants (tunnel_diameter, resolution) inherited from preprocessing.
+Detection modes (set via parameters_detection.json):
+  - k_and_offsets (default): detect K via groove pairs, expand with per-ring offsets
+  - groove_slots: direct groove-based slot detection
+  - combined (legacy): DBSCAN + groove-pair fusion
 """
 
 import os
-import sys
 import json
-import math
 import cv2
 import numpy as np
 import pandas as pd
@@ -58,54 +54,11 @@ def load_parameters(tunnel_id: str = None, base_dir: str = "data") -> Tuple[Dict
     return {}, False
 
 
-def get_param(params: Dict, key: str, default=None):
-    """Get parameter value with default fallback."""
-    return params.get(key, default)
-
-
 # =============================================================================
-# A. TUNNEL-PHYSICAL — geometry from preprocessing, not BO-tuned
-# =============================================================================
-# tunnel_diameter, depth_map_resolution: loaded at runtime from preprocessing JSON.
-# ring_count: loaded from ring_count.txt.
-# These derive k_height_mm, ab_height_mm via calculate_segment_heights().
-
-# =============================================================================
-# B. BO-CRITICAL — tunable per tunnel via JSON, candidates for BO
+# Defaults (safe-fixed values, overridable via params JSON)
 # =============================================================================
 
-# B1. Line detection — oblique groove finding (HIGH sensitivity)
-DEFAULT_BINARY_THRESHOLD = 127     # depth map binarisation
-DEFAULT_HOUGH_OBLIQUE_THRESHOLD = 50
-DEFAULT_HOUGH_OBLIQUE_MIN_LENGTH = 100
-DEFAULT_HOUGH_OBLIQUE_MAX_GAP = 40
-DEFAULT_ANGLE_POSITIVE_MIN = 6.0   # groove angle band (degrees)
-DEFAULT_ANGLE_POSITIVE_MAX = 9.0
-DEFAULT_ANGLE_NEGATIVE_MIN = -9.0
-DEFAULT_ANGLE_NEGATIVE_MAX = -6.0
-
-# B2. K-block detection — DBSCAN + groove fusion (HIGH sensitivity)
-DEFAULT_EPS = 0.07                 # DBSCAN normalised spacing
-DEFAULT_K_EXPECTED_HEIGHT_PX = 300 # expected K height in pixels
-DEFAULT_K_GAP_TOLERANCE_PX = 150.0
-DEFAULT_K_CANDIDATES_PER_RING = 8
-DEFAULT_GROOVE_SNAP_PX = 60.0      # max distance to snap to groove
-
-# B3. Ring layout (HIGH sensitivity)
-DEFAULT_RING_OFFSET = None         # None = auto (W / 2*ring_count)
-DEFAULT_RING_SPACING_PX = None     # None = auto (W / ring_count)
-DEFAULT_REVERSE_RING_ORDER = False
-
-# B4. Expansion — stagger groups and per-group offsets (HIGHEST sensitivity)
-#   stagger_groups: Dict[str, List[int]]  e.g. {"A": [4,5,6], "B": [0,1,2,3]}
-#   group_offsets: Dict[str, float]       e.g. {"A_B1": -460.9, ...}
-# These are loaded from JSON at runtime; no compile-time defaults.
-
-# =============================================================================
-# C. SAFE-FIXED — proven defaults, negligible BO improvement
-# =============================================================================
-
-# Line detection helpers
+DEFAULT_K_EXPECTED_HEIGHT_PX = 300
 DEFAULT_DILATION_KERNEL_SIZE = 3
 DEFAULT_DILATION_ITERATIONS = 1
 DEFAULT_CANNY_LOW = 50
@@ -543,7 +496,6 @@ def calculate_k_positions_combined(
                 total += 1.0 + (groove_snap_px - min_dist) / groove_snap_px
         return total
 
-    # --- DBSCAN path ---
     extended_positive = [extend_line_to_bounds(*line, W, L) for line in positive_lines]
     extended_negative = [extend_line_to_bounds(*line, W, L) for line in negative_lines]
     intersections = find_line_intersections(extended_positive, extended_negative, W, L)
@@ -572,7 +524,6 @@ def calculate_k_positions_combined(
                 dbscan_candidates[ring_idx] = []
             dbscan_candidates[ring_idx].append((cluster_x, cluster_y, conf))
 
-    # --- Groove-pair path ---
     groove_pair_candidates = {}
     for i in range(ring_count):
         band_center = ring_offset + i * ring_spacing_px
@@ -613,7 +564,6 @@ def calculate_k_positions_combined(
                 break
         groove_pair_candidates[i] = deduped
 
-    # --- Per-ring fusion ---
     k_positions = []
     groove_scores = []
     banded_df = calculate_k_positions_banded(line_data, ring_count, params)
@@ -675,6 +625,353 @@ def calculate_k_positions_combined(
     )
     df.attrs['groove_scores_per_ring'] = [float(s) for s in groove_scores]
     return df.sort_values(by='X').reset_index(drop=True)
+
+
+# =============================================================================
+# Groove-Based Slot Detection
+# =============================================================================
+
+def _grooves_to_slots(
+    groove_ys: List[float], circumference: float
+) -> List[Dict]:
+    """Convert sorted groove positions to circular slots.
+
+    Returns list of dicts with keys: start, end, height, centroid.
+    Heights sum to *circumference* by construction.
+    """
+    n = len(groove_ys)
+    slots = []
+    for i in range(n):
+        start = groove_ys[i]
+        end = groove_ys[(i + 1) % n]
+        if end > start:
+            height = end - start
+            centroid = (start + end) / 2.0
+        else:
+            height = (end + circumference) - start
+            centroid = (start + height / 2.0) % circumference
+        slots.append({
+            'start': start, 'end': end,
+            'height': height, 'centroid': centroid,
+        })
+    return slots
+
+
+def _identify_k_slot(
+    slots: List[Dict], k_expected_height_px: float
+) -> int:
+    """Identify the K slot using engineering constraints.
+
+    K = the slot whose height is closest to k_expected_height_px AND whose
+    both circular neighbors are larger than itself.  When multiple candidates
+    tie, prefer the one forming the best [large, SMALL, large] triplet.
+    """
+    n = len(slots)
+    best_score = float('inf')
+    best_idx = 0
+
+    for i in range(n):
+        h = slots[i]['height']
+        prev_h = slots[(i - 1) % n]['height']
+        next_h = slots[(i + 1) % n]['height']
+
+        h_err = abs(h - k_expected_height_px) / max(k_expected_height_px, 1)
+
+        neighbor_penalty = 0.0
+        if prev_h <= h:
+            neighbor_penalty += 1.0
+        if next_h <= h:
+            neighbor_penalty += 1.0
+
+        avg_neighbor = (prev_h + next_h) / 2.0
+        triplet_ratio = h / max(avg_neighbor, 1)
+
+        score = h_err + neighbor_penalty * 2.0 + triplet_ratio
+        if score < best_score:
+            best_score = score
+            best_idx = i
+
+    return best_idx
+
+
+def _label_slots(
+    slots: List[Dict], k_idx: int, segment_count: int
+) -> Dict[int, str]:
+    """Assign block labels to all slots given the K slot index.
+
+    Labeling order from K: B1 (prev), B2 (next), then A1..A4 continuing
+    clockwise from B2 until wrapping back to B1.
+    """
+    b1_idx = (k_idx - 1) % segment_count
+    b2_idx = (k_idx + 1) % segment_count
+
+    labels = {k_idx: 'K', b1_idx: 'B1', b2_idx: 'B2'}
+
+    a_names = ['A1', 'A2', 'A3', 'A4']
+    idx = (b2_idx + 1) % segment_count
+    a_count = 0
+    while idx != b1_idx and a_count < len(a_names):
+        labels[idx] = a_names[a_count]
+        a_count += 1
+        idx = (idx + 1) % segment_count
+
+    return labels
+
+
+def _find_density_peaks(
+    ys: List[float], circumference: float, bandwidth: float, n_peaks: int,
+    min_spacing: float,
+) -> List[float]:
+    """Find top-n peaks in 1D circular kernel density of Y values.
+
+    Uses a histogram approximation with wrap-around handling.
+    Returns sorted peak Y positions.
+    """
+    if len(ys) == 0:
+        return [i * circumference / n_peaks for i in range(n_peaks)]
+
+    n_bins = int(circumference / bandwidth) + 1
+    counts = np.zeros(n_bins, dtype=np.float64)
+    for y in ys:
+        b = int(y / bandwidth) % n_bins
+        counts[b] += 1.0
+
+    kernel_half = max(1, int(bandwidth / (circumference / n_bins)))
+    smoothed = np.zeros_like(counts)
+    for i in range(n_bins):
+        for d in range(-kernel_half, kernel_half + 1):
+            smoothed[i] += counts[(i + d) % n_bins]
+
+    peaks = []
+    for i in range(n_bins):
+        prev_val = smoothed[(i - 1) % n_bins]
+        next_val = smoothed[(i + 1) % n_bins]
+        if smoothed[i] > prev_val and smoothed[i] >= next_val and smoothed[i] > 0:
+            peak_y = (i + 0.5) * bandwidth
+            if peak_y >= circumference:
+                peak_y -= circumference
+            peaks.append((peak_y, smoothed[i]))
+
+    peaks.sort(key=lambda x: -x[1])
+
+    def _circ_dist(a, b):
+        d = abs(a - b)
+        return min(d, circumference - d)
+
+    selected: List[float] = []
+    for y, strength in peaks:
+        if len(selected) >= n_peaks:
+            break
+        if all(_circ_dist(y, s) >= min_spacing for s in selected):
+            selected.append(y)
+
+    while len(selected) < n_peaks:
+        sel_sorted = sorted(selected) if selected else []
+        if len(sel_sorted) == 0:
+            selected.append(0.0)
+            continue
+        max_gap = 0
+        max_i = 0
+        for i in range(len(sel_sorted)):
+            j = (i + 1) % len(sel_sorted)
+            gap = (sel_sorted[j] - sel_sorted[i]) if j != 0 else \
+                  (sel_sorted[0] + circumference - sel_sorted[-1])
+            if gap > max_gap:
+                max_gap = gap
+                max_i = i
+        j = (max_i + 1) % len(sel_sorted)
+        if j == 0:
+            new_y = ((sel_sorted[max_i] + sel_sorted[0] + circumference) / 2.0) % circumference
+        else:
+            new_y = (sel_sorted[max_i] + sel_sorted[j]) / 2.0
+        selected.append(new_y)
+
+    return sorted(selected[:n_peaks])
+
+
+def detect_k_groove_pair(
+    line_data: Dict,
+    ring_count: int,
+    params: Dict,
+) -> pd.DataFrame:
+    """Detect K Y position per ring via groove-pair crossing.
+
+    For each ring band:
+      1. Find where pos/neg line segments cross the ring center vertical.
+      2. Merge nearby crossings.
+      3. Determine K_Y from the best pos+neg pair whose gap matches
+         k_expected_height_px. Falls back to single-crossing estimate
+         or neighbor propagation.
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+    positive_lines = line_data['positive_lines']
+    negative_lines = line_data['negative_lines']
+
+    k_expected_height_px = params.get('k_expected_height_px', 500.0)
+    merge_threshold = params.get('k_merge_threshold_px', 6.0)
+
+    def _segment_crossing_y(segment, vertical_x):
+        x1, y1, x2, y2 = segment
+        if x1 == x2:
+            return None
+        if min(x1, x2) <= vertical_x <= max(x1, x2):
+            t = (vertical_x - x1) / (x2 - x1)
+            return y1 + t * (y2 - y1)
+        return None
+
+    def _merge_close(points, threshold):
+        if len(points) == 0:
+            return []
+        arr = np.array(sorted(points))
+        merged = []
+        while len(arr) > 0:
+            p = arr[0]
+            close = np.abs(arr - p) < threshold
+            merged.append(float(np.mean(arr[close])))
+            arr = arr[~close]
+        return merged
+
+    rows = []
+    ring_spacing = W / ring_count
+    gap_tolerance = k_expected_height_px * 0.3
+
+    for ring_idx in range(ring_count):
+        ring_center_x = (ring_idx + 0.5) * ring_spacing
+
+        pos_crossings = []
+        for seg in positive_lines:
+            y = _segment_crossing_y(seg, ring_center_x)
+            if y is not None:
+                pos_crossings.append(y)
+
+        neg_crossings = []
+        for seg in negative_lines:
+            y = _segment_crossing_y(seg, ring_center_x)
+            if y is not None:
+                neg_crossings.append(y)
+
+        pos_merged = _merge_close(pos_crossings, merge_threshold)
+        neg_merged = _merge_close(neg_crossings, merge_threshold)
+
+        k_y = None
+        det_type = 'none'
+        conf = 0.0
+
+        if pos_merged and neg_merged:
+            best_gap_err = float('inf')
+            for py in pos_merged:
+                for ny in neg_merged:
+                    d = abs(py - ny)
+                    d_circ = min(d, L - d)
+                    gap_err = abs(d_circ - k_expected_height_px)
+                    if gap_err < best_gap_err and gap_err <= gap_tolerance:
+                        best_gap_err = gap_err
+                        if d <= L / 2:
+                            k_y = (py + ny) / 2.0
+                        else:
+                            k_y = ((py + ny) / 2.0 + L / 2.0) % L
+                        det_type = 'midpoint'
+                        conf = max(0.6, 1.0 - gap_err / k_expected_height_px)
+
+        if k_y is None and pos_merged:
+            k_y = (pos_merged[0] - 0.5 * k_expected_height_px) % L
+            det_type = 'pos_only'
+            conf = 0.4
+
+        if k_y is None and neg_merged:
+            k_y = (neg_merged[0] + 0.5 * k_expected_height_px) % L
+            det_type = 'neg_only'
+            conf = 0.4
+
+        rows.append((det_type, ring_center_x, k_y, conf))
+
+    for i in range(len(rows)):
+        if rows[i][2] is None:
+            for nb in [i - 1, i + 1, i - 2, i + 2, i - 3, i + 3]:
+                if 0 <= nb < len(rows) and rows[nb][2] is not None:
+                    rows[i] = ('propagate', rows[i][1], rows[nb][2], 0.1)
+                    break
+            if rows[i][2] is None:
+                rows[i] = ('default', rows[i][1], L / 2.0, 0.05)
+
+    return pd.DataFrame(rows, columns=['Type', 'X', 'Y', 'Confidence'])
+
+
+def detect_all_segments_from_grooves(
+    line_data: Dict,
+    ring_count: int,
+    params: Dict,
+) -> pd.DataFrame:
+    """Groove-based slot detection — finds all segment positions directly.
+
+    For each ring band: collect groove line crossings, find density peaks,
+    form circular slots, identify K by height constraint, label all blocks.
+    Slot heights sum to image height (circumference tiling) by construction.
+    """
+    L = line_data['image_height']
+    W = line_data['image_width']
+    all_lines = line_data['positive_lines'] + line_data['negative_lines']
+
+    ring_offset = params.get('ring_offset', W / (2 * ring_count))
+    ring_spacing_px = params.get('ring_spacing_px', W / ring_count)
+    k_expected_height_px = params.get('k_expected_height_px', DEFAULT_K_EXPECTED_HEIGHT_PX)
+    groove_merge_px = params.get('groove_merge_px', 40.0)
+    segment_count = params.get('segment_count', 7)
+
+    def _crossing_y_segment(x1, y1, x2, y2, x_target, margin=0.15):
+        if x2 == x1:
+            return None
+        t = (x_target - x1) / (x2 - x1)
+        if t < -margin or t > 1.0 + margin:
+            return None
+        y = y1 + t * (y2 - y1)
+        return y if 0 <= y <= L else None
+
+    all_rows = []
+    ring_stats = []
+
+    for ring_idx in range(ring_count):
+        band_center = ring_offset + ring_idx * ring_spacing_px
+
+        crossing_ys = []
+        for x1, y1, x2, y2 in all_lines:
+            y_c = _crossing_y_segment(x1, y1, x2, y2, band_center)
+            if y_c is not None:
+                crossing_ys.append(y_c)
+
+        min_spacing = max(k_expected_height_px * 0.3, 90.0)
+        groove_ys = _find_density_peaks(
+            crossing_ys, L, groove_merge_px, segment_count, min_spacing
+        )
+        slots = _grooves_to_slots(groove_ys, L)
+
+        k_idx = _identify_k_slot(slots, k_expected_height_px)
+        labels = _label_slots(slots, k_idx, segment_count)
+
+        ring_stats.append({
+            'crossings': len(crossing_ys),
+            'k_height': slots[k_idx]['height'],
+        })
+
+        for slot_idx, slot in enumerate(slots):
+            block = labels.get(slot_idx, f'X{slot_idx}')
+            all_rows.append({
+                'Ring': ring_idx,
+                'Block': block,
+                'X': round(band_center, 1),
+                'Y': round(slot['centroid'], 1),
+                'quality': 1.0,
+            })
+
+    crossing_counts = [s['crossings'] for s in ring_stats]
+    k_heights = [s['k_height'] for s in ring_stats]
+    print(f"  Groove slots: crossings {min(crossing_counts)}-{max(crossing_counts)}, "
+          f"bandwidth {groove_merge_px}px, target {segment_count}")
+    print(f"  K heights: {', '.join(f'{h:.0f}' for h in k_heights)} px "
+          f"(expected ~{k_expected_height_px:.0f})")
+
+    return pd.DataFrame(all_rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
 
 # =============================================================================
@@ -747,6 +1044,85 @@ def expand_k_with_grouped_offsets(
     return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
 
+def expand_k_with_per_ring_offsets(
+    k_positions: pd.DataFrame,
+    img_height: int,
+    per_ring_offsets: Dict[str, Dict[str, float]],
+) -> pd.DataFrame:
+    """Expand K positions to all segments using per-ring individual offsets.
+
+    per_ring_offsets: {"ring_idx": {"block_name": dy, ...}, ...}
+    Each offset is a signed circular distance from K_Y to the block centroid.
+    """
+    rows = []
+    for ring_idx, (_, k_row) in enumerate(k_positions.iterrows()):
+        k_x = float(k_row['X'])
+        k_y = float(k_row['Y'])
+        quality = float(k_row.get('Confidence', 1.0))
+
+        rows.append({
+            'Ring': ring_idx, 'Block': 'K',
+            'X': k_x, 'Y': k_y % img_height, 'quality': quality,
+        })
+
+        ring_offsets = per_ring_offsets.get(str(ring_idx), {})
+        for block, offset in ring_offsets.items():
+            y = (k_y + offset) % img_height
+            if y < 0:
+                y += img_height
+            rows.append({
+                'Ring': ring_idx, 'Block': block,
+                'X': k_x, 'Y': round(y, 1), 'quality': quality,
+            })
+
+    return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
+
+
+# =============================================================================
+# Centroid → Boundary Conversion (warm start for boundary-based segmentation)
+# =============================================================================
+
+def centroids_to_boundaries(
+    all_segments: pd.DataFrame, img_height: int
+) -> Dict[str, list]:
+    """Convert detected centroids to boundary positions per ring.
+
+    For each ring, sorts blocks by centroid Y, then places each boundary at
+    the circular midpoint between adjacent centroids. The boundary at position
+    i marks the start of block i (the block whose centroid follows).
+
+    Returns dict suitable for parameters_segmentation.json:
+        {"0": [{"y": 528, "block": "A2"}, ...], "1": [...], ...}
+    """
+    result = {}
+    for ring_idx in sorted(all_segments['Ring'].unique()):
+        ring_segs = all_segments[all_segments['Ring'] == ring_idx].copy()
+        ring_segs = ring_segs.sort_values('Y').reset_index(drop=True)
+
+        n = len(ring_segs)
+        if n == 0:
+            continue
+
+        ys = ring_segs['Y'].values.astype(float)
+        blocks = ring_segs['Block'].values
+
+        boundaries = []
+        for i in range(n):
+            prev_y = ys[(i - 1) % n]
+            curr_y = ys[i]
+            d = curr_y - prev_y
+            if d < 0:
+                d += img_height
+            mid = (prev_y + d / 2.0) % img_height
+            boundaries.append({
+                'y': round(float(mid), 1),
+                'block': str(blocks[i]),
+            })
+
+        result[str(ring_idx)] = boundaries
+    return result
+
+
 # =============================================================================
 # Visualization
 # =============================================================================
@@ -797,10 +1173,7 @@ def visualize_detection(
 # =============================================================================
 
 def run_detection(tunnel_id: str, base_dir: str = "data") -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Run the detection pipeline: lines → K positions (combined) → all segments.
-
-    Returns (k_positions, all_segments) DataFrames.
-    """
+    """Run the detection pipeline. Returns (k_positions, all_segments) DataFrames."""
     print(f"Detection Pipeline: {tunnel_id}")
 
     params, params_loaded = load_parameters(tunnel_id, base_dir)
@@ -825,18 +1198,81 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> Tuple[pd.DataFrame,
     print(f"  Lines: +{len(line_data['positive_lines'])} -{len(line_data['negative_lines'])} "
           f"H{len(line_data['horizontal_lines'])} V{len(line_data['vertical_lines'])}")
 
-    print(f"  K positions: combined detection (ring_count={ring_count})...")
-    k_positions = calculate_k_positions_combined(
-        line_data, ring_count, k_height_mm, resolution, params
-    )
-    print(f"  K positions: {len(k_positions)} found, "
-          f"types={k_positions['Type'].value_counts().to_dict()}")
+    detection_mode = params.get('detection_mode', 'k_and_offsets')
+    k_y_override = params.get('k_y_positions', None)
+    per_ring_offsets = params.get('per_ring_offsets', None)
 
-    reverse_ring_order = params.get('reverse_ring_order', False)
-    if reverse_ring_order:
-        k_positions = k_positions.iloc[::-1].reset_index(drop=True)
+    if detection_mode == 'k_and_offsets':
+        ring_spacing = W / ring_count
 
-    k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
+        if k_y_override is not None and len(k_y_override) == ring_count:
+            print(f"  K positions: using k_y_positions override ({ring_count} rings)")
+            rows = []
+            for i in range(ring_count):
+                band_x = (i + 0.5) * ring_spacing
+                rows.append(('k_override', band_x, k_y_override[i], 1.0))
+            k_positions = pd.DataFrame(rows, columns=['Type', 'X', 'Y', 'Confidence'])
+        else:
+            print(f"  K positions: groove-pair detection ({ring_count} rings)...")
+            k_positions = detect_k_groove_pair(
+                line_data, ring_count, params
+            )
+            print(f"  K positions: {len(k_positions)} found")
+
+        k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
+
+        if per_ring_offsets is not None:
+            print(f"  Expanding K → all segments (per-ring offsets, "
+                  f"{len(per_ring_offsets)} rings)...")
+            all_segments = expand_k_with_per_ring_offsets(
+                k_positions, img_height=L,
+                per_ring_offsets=per_ring_offsets,
+            )
+        else:
+            print(f"  WARNING: No per_ring_offsets found, using group_offsets fallback")
+            n_rings = len(k_positions)
+            stagger_groups = params.get('stagger_groups', {"A": list(range(n_rings))})
+            group_offsets = params.get('group_offsets', {})
+            all_segments = expand_k_with_grouped_offsets(
+                k_positions, img_height=L,
+                stagger_groups=stagger_groups, group_offsets=group_offsets,
+            )
+
+    elif detection_mode == 'groove_slots':
+        print(f"  Detection mode: groove_slots (direct slot detection)")
+        all_segments = detect_all_segments_from_grooves(
+            line_data, ring_count, params
+        )
+        k_rows = all_segments[all_segments['Block'] == 'K']
+        k_positions = pd.DataFrame({
+            'Type': 'groove_slot',
+            'X': k_rows['X'].values,
+            'Y': k_rows['Y'].values,
+            'Confidence': k_rows['quality'].values,
+        })
+        k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
+
+    else:
+        print(f"  K positions: combined detection (ring_count={ring_count})...")
+        k_positions = calculate_k_positions_combined(
+            line_data, ring_count, k_height_mm, resolution, params
+        )
+        print(f"  K positions: {len(k_positions)} found, "
+              f"types={k_positions['Type'].value_counts().to_dict()}")
+        reverse_ring_order = params.get('reverse_ring_order', False)
+        if reverse_ring_order:
+            k_positions = k_positions.iloc[::-1].reset_index(drop=True)
+
+        k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
+
+        print(f"  Expanding K → all segments...")
+        n_rings = len(k_positions)
+        stagger_groups = params.get('stagger_groups', {"A": list(range(n_rings))})
+        group_offsets = params.get('group_offsets', {})
+        all_segments = expand_k_with_grouped_offsets(
+            k_positions, img_height=L,
+            stagger_groups=stagger_groups, group_offsets=group_offsets,
+        )
 
     groove_meta = {
         'groove_alignment_total': k_positions.attrs.get('groove_alignment_total', None),
@@ -846,21 +1282,18 @@ def run_detection(tunnel_id: str, base_dir: str = "data") -> Tuple[pd.DataFrame,
     with open(os.path.join(tunnel_dir, 'groove_alignment.json'), 'w') as f:
         json.dump(groove_meta, f, indent=2)
 
-    print(f"  Expanding K → all segments...")
-    n_rings = len(k_positions)
-    stagger_groups = params.get('stagger_groups', {"A": list(range(n_rings))})
-    group_offsets = params.get('group_offsets', {})
-    all_segments = expand_k_with_grouped_offsets(
-        k_positions, img_height=L,
-        stagger_groups=stagger_groups, group_offsets=group_offsets,
-    )
-
     output_filename = params.get('output_filename', 'all_segments.csv')
     all_segments.to_csv(os.path.join(tunnel_dir, output_filename), index=False)
-    print(f"  Segments: {len(k_positions)} K → {len(all_segments)} total")
+    print(f"  Segments: {len(all_segments)} total (mode={detection_mode})")
+
+    boundaries = centroids_to_boundaries(all_segments, img_height=L)
+    boundaries_path = os.path.join(tunnel_dir, 'boundaries_per_ring.json')
+    with open(boundaries_path, 'w') as f:
+        json.dump(boundaries, f, indent=2)
+    print(f"  Boundaries: {len(boundaries)} rings → {boundaries_path}")
 
     visualize_detection(line_data, k_positions, tunnel_dir, all_segments=all_segments)
-    print(f"  Saved: detected.csv, {output_filename}, detected_lines.png")
+    print(f"  Saved: detected.csv, {output_filename}, boundaries_per_ring.json, detected_lines.png")
 
     return k_positions, all_segments
 

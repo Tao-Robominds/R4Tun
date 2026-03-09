@@ -1,33 +1,69 @@
 {
-  "_comment": "BO-CRITICAL — all 22 template shape params",
-
-  "K_half_width": 181,
-  "K_half_height_pos": 147,
-  "K_half_height_neg": 147,
-  "K_centre_offset": 0,
-
-  "B1_half_width": 181,
-  "B1_half_height_top": 441,
-  "B1_half_height_bottom_pos": 441,
-  "B1_half_height_bottom_neg": 441,
-  "B1_centre_offset": 0,
-
-  "B2_half_width": 181,
-  "B2_half_height_top_pos": 441,
-  "B2_half_height_top_neg": 441,
-  "B2_half_height_bottom": 441,
-  "B2_centre_offset": 0,
-
-  "segment_half_width": 181,
-  "A1_half_height": 441,
-  "A2_half_height": 441,
-  "A3_half_height": 441,
-  "A4_half_height": 441,
-  "A1_centre_offset": 0,
-  "A2_centre_offset": 0,
-  "A3_centre_offset": 0,
-  "A4_centre_offset": 0,
-
-  "shrink_x": 0,
-  "shrink_y": 0
+  "k_cap": 130,
+  "ab_cap": 390,
+  "boundaries_per_ring": {
+    "0": [
+      {"y": 528, "block": "A2"},
+      {"y": 1269, "block": "A1"},
+      {"y": 2016, "block": "B1"},
+      {"y": 2756, "block": "K"},
+      {"y": 3015, "block": "B2"},
+      {"y": 3752, "block": "A4"},
+      {"y": 4498, "block": "A3"}
+    ],
+    "1": [
+      {"y": 281, "block": "A3"},
+      {"y": 1021, "block": "A2"},
+      {"y": 1765, "block": "A1"},
+      {"y": 2428, "block": "B1"},
+      {"y": 3255, "block": "K"},
+      {"y": 3514, "block": "B2"},
+      {"y": 4251, "block": "A4"}
+    ],
+    "2": [
+      {"y": 529, "block": "A1"},
+      {"y": 1282, "block": "B1"},
+      {"y": 2008, "block": "K"},
+      {"y": 2559, "block": "B2"},
+      {"y": 3013, "block": "A4"},
+      {"y": 3756, "block": "A3"},
+      {"y": 4474, "block": "A2"}
+    ],
+    "3": [
+      {"y": 14, "block": "A1"},
+      {"y": 707, "block": "A2"},
+      {"y": 1452, "block": "A3"},
+      {"y": 2281, "block": "A4"},
+      {"y": 2946, "block": "B2"},
+      {"y": 3690, "block": "K"},
+      {"y": 3953, "block": "B1"}
+    ],
+    "4": [
+      {"y": 211, "block": "A2"},
+      {"y": 958, "block": "A3"},
+      {"y": 1702, "block": "A4"},
+      {"y": 2448, "block": "B2"},
+      {"y": 3190, "block": "K"},
+      {"y": 3450, "block": "B1"},
+      {"y": 4184, "block": "A1"}
+    ],
+    "5": [
+      {"y": 459, "block": "K"},
+      {"y": 719, "block": "B1"},
+      {"y": 1453, "block": "A1"},
+      {"y": 2279, "block": "A2"},
+      {"y": 2945, "block": "A3"},
+      {"y": 3689, "block": "A4"},
+      {"y": 4429, "block": "B2"}
+    ],
+    "6": [
+      {"y": 215, "block": "A4"},
+      {"y": 955, "block": "B2"},
+      {"y": 1697, "block": "K"},
+      {"y": 1950, "block": "B1"},
+      {"y": 2694, "block": "A1"},
+      {"y": 3440, "block": "A2"},
+      {"y": 4183, "block": "A3"}
+    ]
+  }
 }

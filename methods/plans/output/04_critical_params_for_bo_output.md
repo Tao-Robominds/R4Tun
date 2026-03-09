@@ -192,7 +192,7 @@ Point cloud (.txt)
 
 **Critical path:** `radius_min/max → depth_map → binary_threshold + angles → K positions → group_offsets → template shapes → mIoU`.
 
-Bottleneck: `group_offsets` (12D) has the highest single-parameter impact. Every 100 px of offset error costs ~0.03 mIoU.
+Bottleneck: `group_offsets` (12D) has the highest single-parameter impact. Every 100 px of offset error costs ~0.03 mIoU. **However, `group_offsets` is BO-tunable but structurally capped** — the group assumption (all rings in a group share offsets) is wrong for irregular tunnels where A2/A3 sit on opposite sides of K depending on ring. BO can find the best compromise (realistic ceiling ~0.52–0.55 mIoU) but cannot close the gap to GT centres (0.720). Per-ring offsets would fix this but explode dimensionality to `ring_count × 6` (42D). See Step 06 for mitigation strategies.
 
 ---
 
@@ -204,9 +204,7 @@ All parameters stored in `agents/irregular/{stage}/parameters/{tunnel_id}/`.
 |-------|-----------|-----------|
 | Preprocessing | `parameters_preprocessing.json` | 25 |
 | Detection | `parameters_detection.json` | 18 |
-| Segmentation | `parameters_geometric_template.json` | 22 |
-
-Sample templates in `parameters/sample/` for new tunnels.
+| Segmentation | `parameters_segmentation.json` | 22 |
 
 ---
 
