@@ -377,6 +377,82 @@ def compute_gt_line_metric(
     return {"matched_frac": matched_frac, "mae_avg": mae_avg, "n_matched": n_matched, "n_gt": n_gt}
 
 
+def compute_gt_line_metric_one_ring(
+    tunnel_dir: str,
+    depth_map: np.ndarray,
+    params: dict,
+    ring_index: int,
+    match_thresh_px: float = 20.0,
+) -> dict:
+    """
+    Same as compute_gt_line_metric but for a single ring only.
+    Returns dict with: matched_frac, mae_avg, n_matched, n_gt.
+    """
+    import json
+    L, W = depth_map.shape
+    ring_count = int(open(os.path.join(tunnel_dir, "ring_count.txt")).read())
+    if ring_index < 0 or ring_index >= ring_count:
+        return {"matched_frac": 0.0, "mae_avg": float("nan"), "n_matched": 0, "n_gt": 0}
+    unwrapped_path = os.path.join(tunnel_dir, "unwrapped.csv")
+    df_uw = pd.read_csv(unwrapped_path)
+    theta_min = float(df_uw["theta"].min())
+    theta_max = float(df_uw["theta"].max())
+    preproc_dir = os.path.join(DETECTION_DIR, "..", "1_preprocessing", "parameters")
+    tunnel_id = os.path.basename(tunnel_dir)
+    preproc_json = os.path.join(preproc_dir, tunnel_id, "parameters_preprocessing.json")
+    resolution = 0.005
+    if os.path.exists(preproc_json):
+        with open(preproc_json) as f:
+            preproc = json.load(f)
+        resolution = float(preproc.get("depth_map_resolution", 0.005))
+    line_data = detect_lines(depth_map, params)
+    line_data = filter_horizontal_lines_by_ring_width(line_data, ring_count, min_ratio=0.5)
+    import io
+    import contextlib
+    k_height_px = float(params.get("k_expected_height_px", 500))
+    k_df = detect_k_dbscan(line_data, ring_count, params)
+    with contextlib.redirect_stdout(io.StringIO()):
+        _k_df, _u1, _u2, per_ring_k_pair = apply_k_regulator(
+            k_df, line_data, ring_count, k_height_px, params
+        )
+    r = ring_index
+    gt_y = load_gt_boundaries_one_ring(tunnel_dir, r, resolution, theta_min, theta_max, L)
+    if len(gt_y) == 0:
+        return {"matched_frac": 0.0, "mae_avg": float("nan"), "n_matched": 0, "n_gt": 0}
+    pos_lines = line_data.get("positive_lines", [])
+    neg_lines = line_data.get("negative_lines", [])
+    vertical_x = (r + 0.5) * (W / ring_count)
+    pos_idx, neg_idx = per_ring_k_pair[r] if r < len(per_ring_k_pair) else (None, None)
+    k_ys = []
+    if pos_idx is not None and pos_idx < len(pos_lines):
+        yp = line_segment_vertical_intersection(vertical_x, pos_lines[pos_idx])
+        if yp is not None:
+            k_ys.append(yp)
+    if neg_idx is not None and neg_idx < len(neg_lines):
+        yn = line_segment_vertical_intersection(vertical_x, neg_lines[neg_idx])
+        if yn is not None:
+            k_ys.append(yn)
+    horizontal_ys = get_horizontal_y_at_x(line_data, vertical_x, merge_radius_px=25.0)
+    detected_y_before_fill = _merge_nearby_y(k_ys + horizontal_ys, 25.0)
+    detected_y_before_fill = sorted(detected_y_before_fill)
+    detected_y = fill_missing_boundaries(
+        list(detected_y_before_fill), expected_count=len(gt_y), image_height=L
+    )
+    gt_y = np.asarray(gt_y)
+    det_arr = np.array(detected_y) if detected_y else np.array([float("inf")])
+    total_matched = 0
+    mae_sum = 0.0
+    for gy in gt_y:
+        d = np.min(np.abs(det_arr - gy))
+        mae_sum += d
+        if d <= match_thresh_px:
+            total_matched += 1
+    n_gt = len(gt_y)
+    matched_frac = (total_matched / n_gt) if n_gt else 0.0
+    mae_avg = (mae_sum / n_gt) if n_gt else float("nan")
+    return {"matched_frac": matched_frac, "mae_avg": mae_avg, "n_matched": total_matched, "n_gt": n_gt}
+
+
 def run_one_ring(
     tunnel_dir: str,
     tunnel_id: str,
