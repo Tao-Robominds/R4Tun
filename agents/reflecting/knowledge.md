@@ -3,7 +3,8 @@
 ### 1. What the reflecting stage sees
 - **Inputs**:
   - `data/{tunnel_id}/final.csv` – per‑point predictions with `pred` labels.
-  - `data/ablation/{tunnel_id}/characteristics/algorithm4_characteristics.json` – geometry & layout metadata (if present; plugin may emit `detected_characteristics.json` under the same folder).
+  - `data/sample/characteristics/…` – reference-sample plugin JSON (universal baseline).
+  - `data/ablation/memory/{tunnel_id}/characteristics/algorithm4_characteristics.json` – per-tunnel metadata when present (see `ABLATION_TUNNEL_SUBROOT` in `sam4tun/plugins/paths.py`; plugin may emit `detected_characteristics.json` there).
   - `data/{tunnel_id}/detected.csv` – prompt point locations & types.
   - `configurable/{tunnel_id}/parameters_sam.json` – current SAM prompting configuration.
 - **Outputs**:

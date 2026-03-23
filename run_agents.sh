@@ -40,8 +40,13 @@ python3 sam4tun/plugins/raw_characteristics.py --tunnel_id "$TUNNEL_ID" || {
     exit 1
 }
 
-if [ ! -f "data/ablation/${TUNNEL_ID}/characteristics/raw_characteristics.json" ]; then
-    echo "❌ Error: raw_characteristics.json was not created"
+if [ "$TUNNEL_ID" = "sample" ]; then
+    CHAR_RAW="data/sample/characteristics/raw_characteristics.json"
+else
+    CHAR_RAW="data/ablation/memory/${TUNNEL_ID}/characteristics/raw_characteristics.json"
+fi
+if [ ! -f "$CHAR_RAW" ]; then
+    echo "❌ Error: raw_characteristics.json was not created at $CHAR_RAW"
     exit 1
 fi
 echo "✅ Raw characteristics created"
@@ -195,7 +200,11 @@ echo ""
 echo "📁 Output files:"
 echo "  - Parameters: configurable/${TUNNEL_ID}/parameters_*.json"
 echo "  - Analysis: data/${TUNNEL_ID}/analysis/*.md"
-echo "  - Characteristics: data/ablation/${TUNNEL_ID}/characteristics/*.json"
+if [ "$TUNNEL_ID" = "sample" ]; then
+    echo "  - Characteristics: data/sample/characteristics/*.json"
+else
+    echo "  - Characteristics: data/ablation/memory/${TUNNEL_ID}/characteristics/*.json"
+fi
 echo "  - Results: data/${TUNNEL_ID}/*.csv"
 if [ -d "data/${TUNNEL_ID}/evaluation" ]; then
     echo "  - Evaluation: data/${TUNNEL_ID}/evaluation/"

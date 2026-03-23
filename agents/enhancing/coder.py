@@ -8,6 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir
+
+
 class EnhancingParameterExtractor:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
@@ -291,7 +294,10 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable enhancing completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/enhanced.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/enhanced_characteristics.json")
+            print(
+                f"📁 Characteristics saved to: "
+                f"{tunnel_characteristics_dir(self.tunnel_id)}/enhanced_characteristics.json"
+            )
         return True
 
 def main():

@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 import requests
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir
+
 
 class ReflectingAnalyser:
     """
@@ -173,9 +175,7 @@ class ReflectingAnalyser:
         coverage = self._load_coverage_summary()
 
         # Tunnel characteristics (algorithm 4) if available
-        characteristics_path = (
-            Path("data/ablation") / self.tunnel_id / "characteristics" / "algorithm4_characteristics.json"
-        )
+        characteristics_path = Path(tunnel_characteristics_dir(self.tunnel_id)) / "algorithm4_characteristics.json"
         characteristics_json = self._read_optional_json(
             characteristics_path, "Algorithm4 tunnel characteristics"
         )

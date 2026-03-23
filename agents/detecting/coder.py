@@ -9,13 +9,16 @@ import sys
 from pathlib import Path
 import time
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir
+
+
 class DetectingParameterExtractor:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = Path(f"data/ablation/{tunnel_id}/characteristics")
+        self.characteristics_dir = Path(tunnel_characteristics_dir(tunnel_id))
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         
@@ -297,7 +300,10 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable detecting completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/detected.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/detected_characteristics.json")
+            print(
+                f"📁 Characteristics saved to: "
+                f"{tunnel_characteristics_dir(self.tunnel_id)}/detected_characteristics.json"
+            )
         return True
 
 def main():

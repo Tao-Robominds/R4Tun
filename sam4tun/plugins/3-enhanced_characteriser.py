@@ -22,7 +22,11 @@ from scipy.stats import entropy
 from typing import Dict, Tuple, List
 import sys
 
-from sam4tun.plugins.paths import tunnel_ablation_dir, tunnel_pipeline_dir
+from sam4tun.plugins.paths import (
+    tunnel_characteristics_dir,
+    tunnel_characteristics_parent_dir,
+    tunnel_pipeline_dir,
+)
 
 def load_enhanced_data(tunnel_id: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load enhanced point cloud data from Algorithm 3"""
@@ -340,9 +344,9 @@ def characterize_algorithm3_results(tunnel_id: str) -> Dict:
     print(f"=== Characterizing Algorithm 3 Results for Tunnel {tunnel_id} ===")
     
     pipeline_dir = tunnel_pipeline_dir(tunnel_id)
-    out_base = tunnel_ablation_dir(tunnel_id)
+    out_base = tunnel_characteristics_parent_dir(tunnel_id)
     print(f"Pipeline data directory: {pipeline_dir}")
-    print(f"Characteristics output: {out_base}/characteristics/")
+    print(f"Characteristics output: {tunnel_characteristics_dir(tunnel_id)}/")
     
     # Load enhanced and pre-enhanced data
     enhanced_df, pre_enhanced_df = load_enhanced_data(tunnel_id)
@@ -369,7 +373,6 @@ def characterize_algorithm3_results(tunnel_id: str) -> Dict:
         }
     }
     
-    # Save all outputs under data/ablation/{tunnel_id}/characteristics/
     save_algorithm3_characteristics(characteristics, out_base)
     
     # Print summary
@@ -396,4 +399,4 @@ if __name__ == "__main__":
     characteristics = characterize_algorithm3_results(tunnel_id)
     
     print(f"\n✅ Algorithm 3 characterization complete for tunnel {tunnel_id}")
-    print(f"📁 Results saved in: data/ablation/{tunnel_id}/characteristics/")
+    print(f"📁 Results saved in: {tunnel_characteristics_dir(tunnel_id)}/")

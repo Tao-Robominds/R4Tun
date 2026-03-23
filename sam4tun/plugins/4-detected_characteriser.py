@@ -27,7 +27,11 @@ from scipy.stats import entropy
 from typing import Dict, Tuple, List
 import sys
 
-from sam4tun.plugins.paths import tunnel_ablation_dir, tunnel_pipeline_dir
+from sam4tun.plugins.paths import (
+    tunnel_characteristics_dir,
+    tunnel_characteristics_parent_dir,
+    tunnel_pipeline_dir,
+)
 
 def load_sam_workflow_data(tunnel_id: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load detection points (SAM prompts) and enhanced point cloud (SAM target)"""
@@ -396,9 +400,9 @@ def characterize_sam_workflow(tunnel_id: str) -> Dict:
     print("Analyzing detection points as SAM prompts for enhanced point cloud segmentation")
     
     pipeline_dir = tunnel_pipeline_dir(tunnel_id)
-    out_base = tunnel_ablation_dir(tunnel_id)
+    out_base = tunnel_characteristics_parent_dir(tunnel_id)
     print(f"Pipeline data directory: {pipeline_dir}")
-    print(f"Characteristics output: {out_base}/characteristics/")
+    print(f"Characteristics output: {tunnel_characteristics_dir(tunnel_id)}/")
     
     # Load SAM workflow data
     detection_points_df, enhanced_df = load_sam_workflow_data(tunnel_id)
@@ -429,7 +433,6 @@ def characterize_sam_workflow(tunnel_id: str) -> Dict:
         }
     }
     
-    # Save all outputs under data/ablation/{tunnel_id}/characteristics/
     save_sam_analysis_characteristics(characteristics, out_base)
     
     # Print summary
@@ -458,4 +461,4 @@ if __name__ == "__main__":
     characteristics = characterize_sam_workflow(tunnel_id)
     
     print(f"\n✅ SAM workflow analysis complete for tunnel {tunnel_id}")
-    print(f"📁 Results saved in: data/ablation/{tunnel_id}/characteristics/") 
+    print(f"📁 Results saved in: {tunnel_characteristics_dir(tunnel_id)}/") 

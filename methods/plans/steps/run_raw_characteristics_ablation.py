@@ -3,7 +3,9 @@
 Run raw point-cloud characterisation (non-GT) for the reference sample and all subset tunnels.
 
 Uses sam4tun.plugins.raw_characteristics.analyze_point_cloud and writes:
-  data/ablation/{tunnel_id}/characteristics/raw_characteristics.json
+  - tunnel_id ``sample`` -> data/sample/characteristics/raw_characteristics.json
+  - any other stem       -> data/ablation/memory/{tunnel_id}/characteristics/raw_characteristics.json
+    (see sam4tun.plugins.paths.ABLATION_TUNNEL_SUBROOT to change layout)
 
 Default inputs:
   - Sample:  data/sample.txt   -> tunnel_id "sample"

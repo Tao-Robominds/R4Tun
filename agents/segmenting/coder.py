@@ -8,13 +8,16 @@ import subprocess
 from pathlib import Path
 import time
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir
+
+
 class SegmentingParameterExtractor:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = Path(f"data/ablation/{tunnel_id}/characteristics")
+        self.characteristics_dir = Path(tunnel_characteristics_dir(tunnel_id))
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         

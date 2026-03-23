@@ -8,6 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir
+
+
 class DenoisingParameterExtractor:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
@@ -279,7 +282,10 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable denoising completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/denoised.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/denoised_characteristics.json")
+            print(
+                f"📁 Characteristics saved to: "
+                f"{tunnel_characteristics_dir(self.tunnel_id)}/denoised_characteristics.json"
+            )
         return True
 
 def main():

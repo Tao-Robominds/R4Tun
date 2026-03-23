@@ -38,12 +38,12 @@ Assign each file a **tunnel_id** (e.g. stem without `.txt`). Materialise working
 
 **Raw point cloud (pre-pipeline) characteristics:** from the repo root run  
 `python methods/plans/steps/run_raw_characteristics_ablation.py`  
-which reads `data/sample.txt` and `data/subsets/*.txt` and writes `raw_characteristics.json` under `data/ablation/{tunnel_id}/characteristics/` for `tunnel_id` = `sample` or each subset stem.
+which reads `data/sample.txt` and `data/subsets/*.txt` and writes `raw_characteristics.json` under **`data/sample/characteristics/`** for the reference sample and **`data/ablation/memory/{tunnel_id}/characteristics/`** for each subset stem (layout knob: `ABLATION_TUNNEL_SUBROOT` in `sam4tun/plugins/paths.py`).
 
 **Outputs (convention):**
 
-- Reference sample: **`data/ablation/sample/characteristics/`** (JSON artefacts per plugin; use folder name **`characteristics`**, not `charateristics`).
-- Each subset tunnel_id: **`data/ablation/{tunnel_id}/characteristics/`** (mirror structure under `sample`).
+- Reference sample (universal baseline): **`data/sample/characteristics/`** (JSON artefacts per plugin; folder name **`characteristics`**, not `charateristics`).
+- Each subset tunnel_id: **`data/ablation/memory/{tunnel_id}/characteristics/`** (same filenames as sample side, e.g. `raw_characteristics.json`, `unfolded_characteristics.json`, …).
 
 If a plugin currently assumes paths like `data/{tunnel_id}/`, either run it after copying/symlinking the subset into `data/{tunnel_id}/` or adapt invocations so tunnel_id resolves correctly; the methodology requires **one clear row in the journal** listing exact commands and paths.
 
@@ -105,8 +105,8 @@ Do **not** pool all subsets into one global p-value without a clear hierarchical
 flowchart TB
   subgraph plugins [Step 1 Plugins]
     P[sam4tun/plugins]
-    S[data/ablation/sample/characteristics]
-    U[data/ablation/tunnel_id/characteristics]
+    S[data/sample/characteristics]
+    U[data/ablation/memory/tunnel_id/characteristics]
     P --> S
     P --> U
   end
@@ -150,7 +150,8 @@ flowchart TB
 |-------|----------|
 | Subset point clouds | `data/subsets/*.txt` |
 | Reference sample | `data/sample.txt` |
-| Characteristics output | `data/ablation/sample/characteristics/`, `data/ablation/{tunnel_id}/characteristics/` |
+| Characteristics output | Reference: `data/sample/characteristics/` · Subsets: `data/ablation/memory/{tunnel_id}/characteristics/` |
+| Path layout knob | `ABLATION_TUNNEL_SUBROOT` in `sam4tun/plugins/paths.py` (e.g. `memory`) |
 | Configurable stages | `configurable/configurable_unfolding.py`, `configurable_denoising.py`, `configurable_enhancing.py`, `configurable_detecting.py`, `configurable_sam.py` |
 | Denoising analyst | `agents/denoising/analyst.py` |
 | Denoising knowledge (level 3+) | `agents/denoising/knowledge.md` |
@@ -165,7 +166,7 @@ flowchart TB
 
 - [ ] Map each `data/subsets/*.txt` to **tunnel_id** and **family** (1–2 / 3 / 4–5).
 - [ ] Materialise `data/{tunnel_id}/` inputs as required.
-- [ ] Run plugins → `data/ablation/sample/characteristics/` and per-tunnel `data/ablation/{tunnel_id}/characteristics/`.
+- [ ] Run plugins → reference under `data/sample/characteristics/`, each subset under `data/ablation/memory/{tunnel_id}/characteristics/`.
 - [ ] Run **fixed** sam4tun baseline → evaluate → copy/summarise to `data/logs/{tunnel_id}/`.
 - [ ] For levels 1→4, run **configurable** + analyst rules + reflecting only at 4; save params under `configurable/ablation/level_xx/{tunnel_id}/`.
 - [ ] Evaluate ablation mIoU (correct schema per family).

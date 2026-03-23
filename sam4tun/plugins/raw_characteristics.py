@@ -121,8 +121,8 @@ def analyze_point_cloud(file_path, tunnel_id=None):
     
     return results
 
-def process_all_datasets(data_dir='data', output_dir='data/ablation'):
-    """Process all .txt files in data_dir; write JSON under output_dir/{tunnel_id}/characteristics/."""
+def process_all_datasets(data_dir='data'):
+    """Process all .txt files in data_dir; write JSON via tunnel_characteristics_dir (see sam4tun.plugins.paths)."""
     
     # Find all .txt files in the data directory
     pattern = os.path.join(data_dir, '*.txt')
@@ -134,9 +134,7 @@ def process_all_datasets(data_dir='data', output_dir='data/ablation'):
     
     print(f"Found {len(data_files)} datasets to process")
     print("Note: Generating characteristics for x, y, z, intensity only (excluding ground truth data)")
-    print(f"Output root: {output_dir} (data/ablation/{{tunnel_id}}/characteristics/)")
-    
-    os.makedirs(output_dir, exist_ok=True)
+    print("Output: data/sample/characteristics/ for sample; data/ablation/memory/{tunnel_id}/characteristics/ otherwise")
     
     # Process each dataset
     all_results = {}
@@ -149,7 +147,7 @@ def process_all_datasets(data_dir='data', output_dir='data/ablation'):
         
         try:
             results = analyze_point_cloud(data_file, tunnel_id)
-            characteristics_dir = os.path.join(output_dir, tunnel_id, "characteristics")
+            characteristics_dir = tunnel_characteristics_dir(tunnel_id)
             os.makedirs(characteristics_dir, exist_ok=True)
             output_file = os.path.join(characteristics_dir, "raw_characteristics.json")
             with open(output_file, 'w') as f:
@@ -165,7 +163,7 @@ def process_all_datasets(data_dir='data', output_dir='data/ablation'):
 
     
     print(f"\nProcessing complete!")
-    print(f"Individual results saved in: {output_dir}/[tunnel_id]/characteristics/raw_characteristics.json")
+    print(f"Individual results under data/sample/characteristics/ or data/ablation/memory/[tunnel_id]/characteristics/")
     print(f"Total datasets processed: {len(all_results)}")
     print(f"📊 Generated characteristics include:")
     print(f"   ✓ Basic statistics (total_points, coordinate_ranges, intensity_range)")
@@ -190,19 +188,13 @@ Examples:
   # Process all datasets in data directory
   python raw_characteristics.py
   
-  # Process with custom directories
-  python raw_characteristics.py --data_dir custom_data --output_dir results
+  # Process all .txt in a directory (paths follow tunnel_id; sample → data/sample/characteristics)
+  python raw_characteristics.py --data_dir custom_data
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument('--tunnel_id', type=str, help='Specific tunnel ID to process (e.g., 3-1). If not provided, processes all datasets.')
     parser.add_argument('--data_dir', type=str, default='data', help='Base directory for data files (default: data)')
-    parser.add_argument(
-        '--output_dir',
-        type=str,
-        default='data/ablation',
-        help='Base directory for ablation outputs (default: data/ablation → data/ablation/{tunnel_id}/characteristics/)',
-    )
     
     args = parser.parse_args()
     
@@ -232,7 +224,7 @@ Examples:
     
     else:
         # Process all datasets
-        process_all_datasets(args.data_dir, args.output_dir)
+        process_all_datasets(args.data_dir)
 
 if __name__ == "__main__":
     main() 
