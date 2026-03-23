@@ -40,7 +40,7 @@ python3 sam4tun/plugins/raw_characteristics.py --tunnel_id "$TUNNEL_ID" || {
     exit 1
 }
 
-if [ ! -f "data/${TUNNEL_ID}/characteristics/raw_characteristics.json" ]; then
+if [ ! -f "data/ablation/${TUNNEL_ID}/characteristics/raw_characteristics.json" ]; then
     echo "❌ Error: raw_characteristics.json was not created"
     exit 1
 fi
@@ -195,7 +195,7 @@ echo ""
 echo "📁 Output files:"
 echo "  - Parameters: configurable/${TUNNEL_ID}/parameters_*.json"
 echo "  - Analysis: data/${TUNNEL_ID}/analysis/*.md"
-echo "  - Characteristics: data/${TUNNEL_ID}/characteristics/*.json"
+echo "  - Characteristics: data/ablation/${TUNNEL_ID}/characteristics/*.json"
 echo "  - Results: data/${TUNNEL_ID}/*.csv"
 if [ -d "data/${TUNNEL_ID}/evaluation" ]; then
     echo "  - Evaluation: data/${TUNNEL_ID}/evaluation/"

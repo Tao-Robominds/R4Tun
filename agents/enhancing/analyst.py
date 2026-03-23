@@ -41,11 +41,11 @@ class EnhancingAnalyser:
         instructions_content = self._read_required_text(instructions_path, "Chain-of-thought instructions")
         
         # Load original sample denoised characteristics (reference)
-        sample_characteristics_path = Path("data/sample/characteristics/denoised_characteristics.json")
+        sample_characteristics_path = Path("data/ablation/sample/characteristics/denoised_characteristics.json")
         sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample denoised characteristics")
         
         # Load new tunnel denoised characteristics
-        new_characteristics_path = Path(f"data/{self.tunnel_id}/characteristics/denoised_characteristics.json")
+        new_characteristics_path = Path(f"data/ablation/{self.tunnel_id}/characteristics/denoised_characteristics.json")
         new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel denoised characteristics")
         
         # Load original code with parameters

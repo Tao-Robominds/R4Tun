@@ -27,9 +27,11 @@ from scipy.stats import entropy
 from typing import Dict, Tuple, List
 import sys
 
+from sam4tun.plugins.paths import tunnel_ablation_dir, tunnel_pipeline_dir
+
 def load_sam_workflow_data(tunnel_id: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load detection points (SAM prompts) and enhanced point cloud (SAM target)"""
-    base_dir = f"data/{tunnel_id}"
+    base_dir = tunnel_pipeline_dir(tunnel_id)
     
     # Load detection points (SAM template centers)
     detection_points_file = os.path.join(base_dir, "detected.csv")
@@ -393,8 +395,10 @@ def characterize_sam_workflow(tunnel_id: str) -> Dict:
     print(f"\n=== Characterizing SAM Workflow for Tunnel {tunnel_id} ===")
     print("Analyzing detection points as SAM prompts for enhanced point cloud segmentation")
     
-    base_dir = f"data/{tunnel_id}"
-    print(f"Working directory: {base_dir}")
+    pipeline_dir = tunnel_pipeline_dir(tunnel_id)
+    out_base = tunnel_ablation_dir(tunnel_id)
+    print(f"Pipeline data directory: {pipeline_dir}")
+    print(f"Characteristics output: {out_base}/characteristics/")
     
     # Load SAM workflow data
     detection_points_df, enhanced_df = load_sam_workflow_data(tunnel_id)
@@ -420,13 +424,13 @@ def characterize_sam_workflow(tunnel_id: str) -> Dict:
             'prompt_source': 'Algorithm 4 - Depth Image Detection',
             'target_data': 'Algorithm 3 - Enhanced Point Cloud',
             'workflow': 'Detection Points → SAM Templates → 2D Segmentation → 3D Projection',
-            'output_directory': base_dir,
+            'output_directory': pipeline_dir,
             'timestamp': pd.Timestamp.now().isoformat()
         }
     }
     
-    # Save all outputs
-    save_sam_analysis_characteristics(characteristics, base_dir)
+    # Save all outputs under data/ablation/{tunnel_id}/characteristics/
+    save_sam_analysis_characteristics(characteristics, out_base)
     
     # Print summary
     print(f"\n=== SAM Workflow Analysis Summary ===")
@@ -454,4 +458,4 @@ if __name__ == "__main__":
     characteristics = characterize_sam_workflow(tunnel_id)
     
     print(f"\n✅ SAM workflow analysis complete for tunnel {tunnel_id}")
-    print(f"📁 Results saved in: data/{tunnel_id}/characteristics/") 
+    print(f"📁 Results saved in: data/ablation/{tunnel_id}/characteristics/") 

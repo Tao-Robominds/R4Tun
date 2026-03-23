@@ -22,9 +22,11 @@ from scipy.stats import entropy
 from typing import Dict, Tuple, List
 import sys
 
+from sam4tun.plugins.paths import tunnel_ablation_dir, tunnel_pipeline_dir
+
 def load_enhanced_data(tunnel_id: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load enhanced point cloud data from Algorithm 3"""
-    base_dir = f"data/{tunnel_id}"
+    base_dir = tunnel_pipeline_dir(tunnel_id)
     
     # Load pre-enhancement and post-enhancement data
     enhanced_files = [
@@ -337,8 +339,10 @@ def characterize_algorithm3_results(tunnel_id: str) -> Dict:
     print(f"Processing Tunnel ID: {tunnel_id}")
     print(f"=== Characterizing Algorithm 3 Results for Tunnel {tunnel_id} ===")
     
-    base_dir = f"data/{tunnel_id}"
-    print(f"Working directory: {base_dir}")
+    pipeline_dir = tunnel_pipeline_dir(tunnel_id)
+    out_base = tunnel_ablation_dir(tunnel_id)
+    print(f"Pipeline data directory: {pipeline_dir}")
+    print(f"Characteristics output: {out_base}/characteristics/")
     
     # Load enhanced and pre-enhanced data
     enhanced_df, pre_enhanced_df = load_enhanced_data(tunnel_id)
@@ -360,13 +364,13 @@ def characterize_algorithm3_results(tunnel_id: str) -> Dict:
         'processing_metadata': {
             'tunnel_id': tunnel_id,
             'source_algorithm': 'Algorithm 3 - Geometry Guided Up Sampling',
-            'output_directory': base_dir,
+            'output_directory': pipeline_dir,
             'timestamp': pd.Timestamp.now().isoformat()
         }
     }
     
-    # Save all outputs
-    save_algorithm3_characteristics(characteristics, base_dir)
+    # Save all outputs under data/ablation/{tunnel_id}/characteristics/
+    save_algorithm3_characteristics(characteristics, out_base)
     
     # Print summary
     print(f"\n=== Algorithm 3 Results Summary ===")
@@ -392,4 +396,4 @@ if __name__ == "__main__":
     characteristics = characterize_algorithm3_results(tunnel_id)
     
     print(f"\n✅ Algorithm 3 characterization complete for tunnel {tunnel_id}")
-    print(f"📁 Results saved in: data/{tunnel_id}/characteristics/")
+    print(f"📁 Results saved in: data/ablation/{tunnel_id}/characteristics/")

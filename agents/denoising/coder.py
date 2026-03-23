@@ -279,7 +279,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable denoising completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/denoised.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/denoised_characteristics.json")
+            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/denoised_characteristics.json")
         return True
 
 def main():

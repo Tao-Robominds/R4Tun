@@ -8,7 +8,8 @@ import argparse
 from scipy.spatial import cKDTree
 from collections import Counter
 import glob
-import shutil
+
+from sam4tun.plugins.paths import tunnel_characteristics_dir
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -120,8 +121,8 @@ def analyze_point_cloud(file_path, tunnel_id=None):
     
     return results
 
-def process_all_datasets(data_dir='data', output_dir='data'):
-    """Process all datasets in the data directory"""
+def process_all_datasets(data_dir='data', output_dir='data/ablation'):
+    """Process all .txt files in data_dir; write JSON under output_dir/{tunnel_id}/characteristics/."""
     
     # Find all .txt files in the data directory
     pattern = os.path.join(data_dir, '*.txt')
@@ -133,8 +134,8 @@ def process_all_datasets(data_dir='data', output_dir='data'):
     
     print(f"Found {len(data_files)} datasets to process")
     print("Note: Generating characteristics for x, y, z, intensity only (excluding ground truth data)")
+    print(f"Output root: {output_dir} (data/ablation/{{tunnel_id}}/characteristics/)")
     
-    # Create base output directory
     os.makedirs(output_dir, exist_ok=True)
     
     # Process each dataset
@@ -147,29 +148,14 @@ def process_all_datasets(data_dir='data', output_dir='data'):
         print(f"Processing {tunnel_id}...")
         
         try:
-            # Analyze point cloud with tunnel_id (non-ground truth only)
             results = analyze_point_cloud(data_file, tunnel_id)
-            
-            # Create individual output directory for this tunnel
-            tunnel_output_dir = os.path.join(output_dir, tunnel_id)
-            os.makedirs(tunnel_output_dir, exist_ok=True)
-            
-            # Create required subfolders
-            subfolders = ['analysis', 'characteristics', 'parameters', 'evaluation']
-            for subfolder in subfolders:
-                subfolder_path = os.path.join(tunnel_output_dir, subfolder)
-                os.makedirs(subfolder_path, exist_ok=True)
-                print(f"📁 Created subfolder: {subfolder_path}")
-            
-            
-            # Save individual results in characteristics folder
-            output_file = os.path.join(tunnel_output_dir, "characteristics", "raw_characteristics.json")
+            characteristics_dir = os.path.join(output_dir, tunnel_id, "characteristics")
+            os.makedirs(characteristics_dir, exist_ok=True)
+            output_file = os.path.join(characteristics_dir, "raw_characteristics.json")
             with open(output_file, 'w') as f:
                 json.dump(results, f, indent=2, cls=NumpyEncoder)
             
             print(f"✓ {tunnel_id} - Non-GT characteristics saved to {output_file}")
-            
-            # Store results for summary
             all_results[tunnel_id] = results
             
         except Exception as e:
@@ -211,7 +197,12 @@ Examples:
     )
     parser.add_argument('--tunnel_id', type=str, help='Specific tunnel ID to process (e.g., 3-1). If not provided, processes all datasets.')
     parser.add_argument('--data_dir', type=str, default='data', help='Base directory for data files (default: data)')
-    parser.add_argument('--output_dir', type=str, default='data', help='Base directory for output files (default: data)')
+    parser.add_argument(
+        '--output_dir',
+        type=str,
+        default='data/ablation',
+        help='Base directory for ablation outputs (default: data/ablation → data/ablation/{tunnel_id}/characteristics/)',
+    )
     
     args = parser.parse_args()
     
@@ -221,32 +212,18 @@ Examples:
     print()
     
     if args.tunnel_id:
-        # Process single tunnel - read from data/tunnel_id.txt
+        # Process single tunnel - read from data_dir/tunnel_id.txt (e.g. data/sample.txt for tunnel_id sample)
         data_path = os.path.join(args.data_dir, f"{args.tunnel_id}.txt")
-        output_dir = os.path.join(args.data_dir, args.tunnel_id)
         
-        # Check if input file exists
         if not os.path.exists(data_path):
             print(f"❌ Error: Input file not found at {data_path}")
             return
         
-        # Create tunnel folder
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Create required subfolders
-        subfolders = ['analysis', 'characteristics', 'parameters', 'evaluation']
-        for subfolder in subfolders:
-            subfolder_path = os.path.join(output_dir, subfolder)
-            os.makedirs(subfolder_path, exist_ok=True)
-            print(f"📁 Created subfolder: {subfolder_path}")
-        
-        
-        # Analyze point cloud with tunnel_id (non-ground truth only)
         print(f"🔬 Analyzing point cloud for tunnel {args.tunnel_id} (x,y,z,intensity only)...")
         results = analyze_point_cloud(data_path, args.tunnel_id)
-        
-        # Save results in the characteristics folder as raw_characteristics.json
-        output_file = os.path.join(output_dir, "characteristics", "raw_characteristics.json")
+        characteristics_dir = tunnel_characteristics_dir(args.tunnel_id)
+        os.makedirs(characteristics_dir, exist_ok=True)
+        output_file = os.path.join(characteristics_dir, "raw_characteristics.json")
         with open(output_file, 'w') as f:
             json.dump(results, f, indent=2, cls=NumpyEncoder)
         

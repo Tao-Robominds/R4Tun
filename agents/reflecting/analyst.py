@@ -173,7 +173,9 @@ class ReflectingAnalyser:
         coverage = self._load_coverage_summary()
 
         # Tunnel characteristics (algorithm 4) if available
-        characteristics_path = self.data_dir / "characteristics" / "algorithm4_characteristics.json"
+        characteristics_path = (
+            Path("data/ablation") / self.tunnel_id / "characteristics" / "algorithm4_characteristics.json"
+        )
         characteristics_json = self._read_optional_json(
             characteristics_path, "Algorithm4 tunnel characteristics"
         )

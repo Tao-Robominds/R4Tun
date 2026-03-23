@@ -14,7 +14,7 @@ class SegmentingParameterExtractor:
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = self.data_dir / "characteristics"  # For characteriser results
+        self.characteristics_dir = Path(f"data/ablation/{tunnel_id}/characteristics")
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         

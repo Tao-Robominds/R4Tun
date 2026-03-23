@@ -23,9 +23,11 @@ from scipy.interpolate import griddata
 from typing import Dict, Tuple, List
 import argparse
 
+from sam4tun.plugins.paths import tunnel_ablation_dir, tunnel_pipeline_dir
+
 def load_denoised_data(tunnel_id: str) -> pd.DataFrame:
     """Load denoised point cloud data from Denoising"""
-    base_dir = f"data/{tunnel_id}"
+    base_dir = tunnel_pipeline_dir(tunnel_id)
     
     # Try to load from different possible sources
     denoised_files = [
@@ -49,7 +51,7 @@ def load_denoised_data(tunnel_id: str) -> pd.DataFrame:
 
 def read_ring_count(tunnel_id: str) -> int:
     """Read ring count from ring_count.txt file"""
-    ring_count_path = f"data/{tunnel_id}/ring_count.txt"
+    ring_count_path = os.path.join(tunnel_pipeline_dir(tunnel_id), "ring_count.txt")
     ring_count = None
     
     if os.path.exists(ring_count_path):
@@ -258,8 +260,10 @@ def characterize_denoising_results(tunnel_id: str) -> Dict:
     print(f"\n=== Denoising Characterizer ===")
     print(f"Processing Tunnel ID: {tunnel_id}")
     
-    base_dir = f"data/{tunnel_id}"
-    print(f"Working directory: {base_dir}")
+    pipeline_dir = tunnel_pipeline_dir(tunnel_id)
+    out_base = tunnel_ablation_dir(tunnel_id)
+    print(f"Pipeline data directory: {pipeline_dir}")
+    print(f"Characteristics output: {out_base}/characteristics/")
     
     # Load denoised data and ring count
     df = load_denoised_data(tunnel_id)
@@ -287,12 +291,12 @@ def characterize_denoising_results(tunnel_id: str) -> Dict:
             'geometry_characteristics': geometry_stats,
             'ring_count': ring_count
         },
-        'source_file': f"data/{tunnel_id}/denoised.csv",
+        'source_file': os.path.join(pipeline_dir, "denoised.csv"),
         'analysis_timestamp': pd.Timestamp.now().isoformat()
     }
     
-    # Save all outputs
-    save_characteristics(characteristics, base_dir)
+    # Save all outputs under data/ablation/{tunnel_id}/characteristics/
+    save_characteristics(characteristics, out_base)
     
     return characteristics
 
@@ -316,4 +320,4 @@ if __name__ == "__main__":
     print(f"Total input points: {analysis['denoising_summary']['total_input_points']:,}")
     print(f"Valid points remaining: {analysis['denoising_summary']['valid_points_remaining']:,}")
     print(f"Data retention rate: {analysis['denoising_summary']['data_retention_rate']:.1%}")
-    print(f"📁 Results saved in: data/{args.tunnel_id}/characteristics/") 
+    print(f"📁 Results saved in: data/ablation/{args.tunnel_id}/characteristics/") 

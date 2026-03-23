@@ -5,6 +5,8 @@ import argparse
 import os
 from scipy.spatial import cKDTree
 
+from sam4tun.plugins.paths import tunnel_characteristics_dir, tunnel_pipeline_dir
+
 def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
     """
     Analyze unwrapped point cloud data to characterize x, y, z coordinates
@@ -21,7 +23,7 @@ def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
     
     # Read ring count from ring_count.txt file
     ring_count = None
-    ring_count_path = f"data/{tunnel_id}/ring_count.txt"
+    ring_count_path = os.path.join(tunnel_pipeline_dir(tunnel_id), "ring_count.txt")
 
     if os.path.exists(ring_count_path):
         try:
@@ -173,9 +175,9 @@ if __name__ == "__main__":
     print(f"Target Tunnel ID: {args.tunnel_id}")
     
     # Construct paths based on tunnel_id with characteristics subdirectory
-    csv_path = f"data/{args.tunnel_id}/unwrapped.csv"
-    characteristics_dir = f"data/{args.tunnel_id}/characteristics"
-    json_path = f"{characteristics_dir}/unfolded_characteristics.json"
+    csv_path = os.path.join(tunnel_pipeline_dir(args.tunnel_id), "unwrapped.csv")
+    characteristics_dir = tunnel_characteristics_dir(args.tunnel_id)
+    json_path = os.path.join(characteristics_dir, "unfolded_characteristics.json")
     
     # Create characteristics directory if it doesn't exist
     os.makedirs(characteristics_dir, exist_ok=True)

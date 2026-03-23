@@ -291,7 +291,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable enhancing completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/enhanced.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/enhanced_characteristics.json")
+            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/enhanced_characteristics.json")
         return True
 
 def main():

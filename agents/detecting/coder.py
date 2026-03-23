@@ -15,7 +15,7 @@ class DetectingParameterExtractor:
         self.data_dir = Path(f"data/{tunnel_id}")
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
-        self.characteristics_dir = self.data_dir / "characteristics"  # For characteriser results
+        self.characteristics_dir = Path(f"data/ablation/{tunnel_id}/characteristics")
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
         self.base_url = "https://api.dify.ai/v1"
         
@@ -297,7 +297,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable detecting completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/detected.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/detected_characteristics.json")
+            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/detected_characteristics.json")
         return True
 
 def main():

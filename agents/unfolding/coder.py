@@ -283,7 +283,7 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"✅ Configurable unfolding completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/unwrapped.csv")
         if char_success:
-            print(f"📁 Characteristics saved to: data/{self.tunnel_id}/characteristics/unfolded_characteristics.json")
+            print(f"📁 Characteristics saved to: data/ablation/{self.tunnel_id}/characteristics/unfolded_characteristics.json")
         return True
 
 def main():
