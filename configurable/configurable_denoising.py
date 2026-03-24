@@ -13,6 +13,11 @@ import os
 import sys
 import json
 
+_cfg = os.path.dirname(os.path.abspath(__file__))
+if _cfg not in sys.path:
+    sys.path.insert(0, _cfg)
+from pipeline_data import resolve_output_base_dir
+
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
     print("Usage: python 2_denoising.py <tunnel_id>")
@@ -71,11 +76,7 @@ smoothing_offset = params["smoothing_offset"]
 default_cutoff_z = params["default_cutoff_z"]
 
 print(f"Using parameters: mask_r_low={mask_r_low}, mask_r_high={mask_r_high}, y_step={y_step}, z_step={z_step}, default_cutoff_z={default_cutoff_z}")
-# Determine if we're running from project root or configurable/
-if os.path.exists(f"data/{tunnel_id}/unwrapped.csv"):
-    base_dir = f"data/{tunnel_id}/"  # Running from project root
-else:
-    base_dir = f"../data/{tunnel_id}/"  # Running from configurable/
+base_dir = resolve_output_base_dir(tunnel_id, "unwrapped.csv")
 unwrapped_file = os.path.join(base_dir, "unwrapped.csv")
 df_point_cloud = pd.read_csv(unwrapped_file)
 ring_count_file = os.path.join(base_dir, "ring_count.txt")

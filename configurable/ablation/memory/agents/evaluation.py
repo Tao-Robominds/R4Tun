@@ -1,6 +1,13 @@
 import argparse
 import os
+import sys
+from pathlib import Path
 from typing import Optional
+
+_cfg = Path(__file__).resolve().parents[3]
+if str(_cfg) not in sys.path:
+    sys.path.insert(0, str(_cfg))
+from pipeline_data import tunnel_output_dir
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -47,9 +54,11 @@ def output_dir_for_schema(input_dir: str, segment_schema: int) -> str:
 
 
 def infer_segment_schema(gt_labels: np.ndarray, pred_labels: np.ndarray) -> int:
-    """If any label > 6, use 7-class naming and filter; else 6-class."""
-    mx = int(max(np.max(gt_labels), np.max(pred_labels)))
-    return 7 if mx > 6 else 6
+    """6- vs 7-class from **GT only** (pred may be 8/NaN; do not use max(pred))."""
+    del pred_labels
+    gt = np.asarray(gt_labels, dtype=np.float64)
+    mx_gt = float(np.nanmax(gt)) if np.any(np.isfinite(gt)) else 0.0
+    return 7 if mx_gt > 6 else 6
 
 
 def parse_args():
@@ -61,7 +70,7 @@ def parse_args():
         "--schema",
         choices=("auto", "6", "7", "both"),
         default="auto",
-        help="auto: max label >6 => 7-class; 6/7: force schema; both: write evaluation/ and evaluation_7/",
+        help="auto: GT max label >6 => 7-class; 6/7: force schema; both: write evaluation/ and evaluation_7/",
     )
     return p.parse_args()
 
@@ -456,7 +465,7 @@ def evaluate_instance_segmentation(tunnel_id: str, input_dir: str):
 def main():
     args = parse_args()
     tunnel_id = args.tunnel_id
-    input_dir = os.path.join("data", tunnel_id)
+    input_dir = tunnel_output_dir(tunnel_id).rstrip("/")
 
     print(f"Starting evaluation for tunnel: {tunnel_id}")
     print(f"=== Segmentation Evaluation Tool for Tunnel {tunnel_id} ===")

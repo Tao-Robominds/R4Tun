@@ -1,3 +1,172 @@
+# Memory-ablation LLM context — tunnel `1-4`
+
+This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
+
+Regenerate after updating raw characteristics or `configurable/sample/parameters_*.json`:
+
+```bash
+python3 configurable/ablation/memory/export_llm_parameter_context.py 1-4
+```
+
+---
+
+# ROLE
+You are a tuning expert for a tunnel centre line extraction pipeline. Your goal is to adapt the algorithm based on tunnel-specific characteristics provided.
+
+# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
+```json
+{
+  "tunnel_id": "sample",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/sample.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 1109768,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -4.72192383,
+          2.286865
+        ],
+        "y_range": [
+          -15.82104492,
+          -3.17114305
+        ],
+        "z_range": [
+          -1.40405297,
+          3.67260695
+        ],
+        "intensity_range": [
+          -1727.0,
+          1899.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 12.155931503734362,
+        "width_y_axis": 5.604292068996665,
+        "height_z_axis": 5.07665992,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.604292068996665,
+      "diameter_estimation": {
+        "inner_diameter": 5.604292068996665,
+        "outer_diameter": 5.604292068996665,
+        "average_diameter": 5.604292068996665,
+        "median_diameter": 5.604292068996665,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.008184481631340645,
+      "median_nearest_neighbor_distance": 0.006514481254712708,
+      "min_nearest_neighbor_distance": 0.0004879300000000253,
+      "max_nearest_neighbor_distance": 0.2442797068280462,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-4)
+```json
+{
+  "tunnel_id": "1-4",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-4.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 2005884,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -7.95727491,
+          10.46459961
+        ],
+        "y_range": [
+          -18.13891602,
+          14.94262695
+        ],
+        "z_range": [
+          -2.10131788,
+          3.68139601
+        ],
+        "intensity_range": [
+          -1727.0,
+          1963.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 33.96925873485917,
+        "width_y_axis": 5.99651330872443,
+        "height_z_axis": 5.78271389,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.99651330872443,
+      "diameter_estimation": {
+        "inner_diameter": 5.99651330872443,
+        "outer_diameter": 5.99651330872443,
+        "average_diameter": 5.99651330872443,
+        "median_diameter": 5.99651330872443,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.007575189385448667,
+      "median_nearest_neighbor_distance": 0.005415398201360711,
+      "min_nearest_neighbor_distance": 0.00048779999999970514,
+      "max_nearest_neighbor_distance": 0.5189269580942679,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# REFERENCE UNFOLDING PARAMETERS
+Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-4/parameters_unfolding.json`).
+
+```json
+{
+  "delta": 0.005,
+  "slice_spacing_factor": 1.2,
+  "vertical_filter_window": 4.5,
+  "ransac_threshold": 1.0,
+  "ransac_probability": 0.9,
+  "ransac_inlier_ratio": 0.75,
+  "ransac_sample_size": 5,
+  "ransac_initial_iterations": 999,
+  "ransac_inlier_threshold_multiplier": 0.8,
+  "polynomial_degree": 3,
+  "num_samples_factor": 1210,
+  "t_extrapolation_start": -20,
+  "t_extrapolation_end": 20,
+  "diameter": 5.5,
+  "batch_size": 1000000,
+  "n_jobs": 12
+}
+```
+
+# PIPELINE CODE (reference)
+```python
 # Algorithm 1 - Tunnel Centre Line Extraction extracted from notebook
 
 import numpy as np
@@ -5,17 +174,17 @@ import pandas as pd
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
 import cv2
+import random
 import time
 from sklearn.linear_model import RANSACRegressor
 from sklearn.preprocessing import PolynomialFeatures
 from numba import njit, prange
 import faiss
 from joblib import Parallel, delayed
-from tqdm.auto import tqdm  # notebook tqdm hangs / no progress in plain terminals (Cursor, bash)
+from tqdm.notebook import tqdm
 import os
 import math
 import sys
-import json
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
@@ -24,84 +193,8 @@ if len(sys.argv) != 2:
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
-
-_cfg = os.path.dirname(os.path.abspath(__file__))
-if _cfg not in sys.path:
-    sys.path.insert(0, _cfg)
-from pipeline_data import pipeline_out_prefix, resolve_tunnel_pointcloud_txt, tunnel_output_dir
-
-# Load parameters
-def load_parameters(tunnel_id):
-    """Load parameters from configurable directory where analyst saves parameters"""
-    
-    # Determine script directory to handle both project root and configurable execution
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    param_file = os.path.join(script_dir, tunnel_id, 'parameters_unfolding.json')
-    
-    if os.path.exists(param_file):
-        try:
-            with open(param_file, 'r') as f:
-                params = json.load(f)
-            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_unfolding.json")
-            return params, param_file
-        except Exception as e:
-            print(f"❌ Error loading parameters: {e}")
-            sys.exit(1)
-    else:
-        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_unfolding.json")
-        print("Please run the analyst to generate parameters first.")
-        sys.exit(1)
-
-# Load configuration
-params, param_file = load_parameters(tunnel_id)
-expected_keys = [
-    "delta",
-    "slice_spacing_factor",
-    "vertical_filter_window",
-    "ransac_threshold",
-    "ransac_probability",
-    "ransac_inlier_ratio",
-    "ransac_sample_size",
-    "ransac_initial_iterations",
-    "ransac_inlier_threshold_multiplier",
-    "polynomial_degree",
-    "num_samples_factor",
-    "t_extrapolation_start",
-    "t_extrapolation_end",
-    "diameter",
-    "batch_size",
-    "n_jobs",
-]
-
-for key in expected_keys:
-    if key not in params:
-        print(f"❌ Error: Missing required parameter '{key}' in {param_file}")
-        sys.exit(1)
-
-delta = params["delta"]
-slice_spacing_factor = params["slice_spacing_factor"]
-vertical_filter_window = params["vertical_filter_window"]
-ransac_threshold = params["ransac_threshold"]
-ransac_probability = params["ransac_probability"]
-ransac_inlier_ratio = params["ransac_inlier_ratio"]
-ransac_sample_size = params["ransac_sample_size"]
-ransac_initial_iterations = params["ransac_initial_iterations"]
-ransac_inlier_threshold_multiplier = params["ransac_inlier_threshold_multiplier"]
-polynomial_degree = params["polynomial_degree"]
-num_samples_factor = params["num_samples_factor"]
-t_extrapolation_start = params["t_extrapolation_start"]
-t_extrapolation_end = params["t_extrapolation_end"]
-diameter = params["diameter"]
-batch_size = params["batch_size"]
-n_jobs = params["n_jobs"]
-
-print(f"Using parameters: delta={delta}, slice_spacing_factor={slice_spacing_factor}, vertical_filter_window={vertical_filter_window}, diameter={diameter}")
-_out_dir = tunnel_output_dir(tunnel_id)
-if pipeline_out_prefix() != "data":
-    print(f"Pipeline artefacts: {_out_dir} (R4TUN_PIPELINE_OUT_PREFIX={pipeline_out_prefix()!r})")
-_pc_path = resolve_tunnel_pointcloud_txt(tunnel_id)
-print(f"Input point cloud: {_pc_path}")
-point_cloud_data = np.loadtxt(_pc_path)
+base_dir = f"data/"
+point_cloud_data = np.loadtxt(os.path.join(base_dir, f"{tunnel_id}.txt")) # file name
 
 print(f"Processing tunnel: {tunnel_id}")
 
@@ -164,14 +257,14 @@ def generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta):
     # Calculate the distance between center1 and center2 in the XY plane
     l = np.linalg.norm(center2[:2] - center1[:2])
     
-    # Find the optimal integer n such that slice_spacing_factor * n is closest to l
-    n = round(l / slice_spacing_factor)
-    min_diff = abs(l - slice_spacing_factor * n)
+    # Find the optimal integer n such that 1.2 * n is closest to l
+    n = round(l / 1.2)
+    min_diff = abs(l - 1.2 * n)
     optimal_n = n
 
     # Check nearby integer values for better match
     for candidate_n in [n - 1, n + 1]:
-        diff = abs(l - slice_spacing_factor * candidate_n)
+        diff = abs(l - 1.2 * candidate_n)
         if diff < min_diff:
             optimal_n = candidate_n
             min_diff = diff
@@ -220,6 +313,8 @@ def generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta):
         slicing_cloud.append(points_xyz[mask])
 
     return origin, planes, slicing_cloud
+
+delta = 0.005  # Thickness of slices / 2
 origin, planes, slicing_cloud = generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta)
 ring_count = len(slicing_cloud)
 
@@ -270,46 +365,30 @@ for i in range(len(origin)):
     point2ds_temp = project_to_plane(slicing_cloud[i], origin[i], normal)
     point2ds.append(point2ds_temp)
 
-# Process each set of 2D points (vectorized; Python loops on ~2M rows/slice were very slow)
+# Process each set of 2D points
 filtered_point2ds = []
-vw = float(vertical_filter_window)
-for pts in point2ds:
-    if pts.size == 0:
-        filtered_point2ds.append(pts)
-        continue
-    y = pts[:, 1]
-    y_max = float(y.max())
-    m = np.abs(y - y_max) <= vw
-    filtered_point2ds.append(pts[m])
+for points in point2ds:
+    # Find the maximum y-coordinate
+    y_max = max(point[1] for point in points)
+    # Filter points where y-coordinate is within 4.5 units of y_max
+    filtered_points = [point for point in points if abs(point[1] - y_max) <= 4.5]
+    filtered_point2ds.append(filtered_points)
 
 class RANSAC:
-    # Hard cap: old loop used `while math.ceil(self.items)` without decrementing when
-    # no improvement → infinite hang; dynamic k can also explode when w**N ≈ 0.
-    _MAX_ITERATIONS = 5000
-
-    def __init__(self, data, threshold, P, S, N, initial_iterations=999, inlier_threshold_multiplier=0.8):
-        self.point_data = np.asarray(data, dtype=np.float64)  # Ellipse contour points
+    def __init__(self, data, threshold, P, S, N):
+        self.point_data = data  # Ellipse contour points
         self.error_threshold = threshold  # Error tolerance threshold
         self.N = N  # Number of points to sample
         self.S = S  # Inlier ratio
         self.P = P  # Probability of finding a correct model
         self.max_inliers = len(data) * S  # Maximum number of inliers
-        self.items = initial_iterations  # Number of iterations
-        self.inlier_threshold_multiplier = inlier_threshold_multiplier
+        self.items = 999  # Number of iterations
         self.count = 0  # Number of inliers
         self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
-        self._rng = np.random.default_rng()
 
     def random_sampling(self, n):
-        """Randomly select n data points (no O(N) list() of rows)."""
-        n_pts = len(self.point_data)
-        if n_pts == 0:
-            raise ValueError("RANSAC: empty point_data")
-        if n_pts < n:
-            idx = self._rng.choice(n_pts, size=n, replace=True)
-        else:
-            idx = self._rng.choice(n_pts, size=n, replace=False)
-        return self.point_data[idx]
+        """Randomly select n data points."""
+        return np.asarray(random.sample(list(self.point_data), n))
 
     def Geometric2Conic(self, ellipse):
         """Convert ellipse parameters to conic coefficients."""
@@ -361,58 +440,36 @@ class RANSAC:
         # Identify inliers
         Z = np.abs(2 * LAxis - all_distance)
         delta = np.sqrt(np.mean((Z - np.mean(Z))**2))
-        inliers = np.where(Z < self.inlier_threshold_multiplier * delta)[0]
+        inliers = np.where(Z < 0.8 * delta)[0]
         inlier_points = self.point_data[inliers]
 
         return len(inlier_points), inlier_points
 
     def execute_ransac(self):
         """Run RANSAC algorithm to fit an ellipse."""
-        n_pts = len(self.point_data)
-        inliers_set = np.ascontiguousarray(np.zeros((0, 2), dtype=np.float32))
-        if n_pts < self.N:
-            return self.best_model, inliers_set
-
-        budget = min(max(int(math.ceil(self.items)), 1), self._MAX_ITERATIONS)
-        executed = 0
-        while budget > 0 and executed < self._MAX_ITERATIONS:
-            budget -= 1
-            executed += 1
-
+        while math.ceil(self.items):
+            # Randomly sample N points
             select_points = self.random_sampling(self.N)
-            pts_f = np.ascontiguousarray(select_points, dtype=np.float32)
-            try:
-                ellipse = cv2.fitEllipse(pts_f)
-            except cv2.error:
-                continue
+            select_points_list = [(point[0], point[1]) for point in select_points]
 
+            # Fit an ellipse to the selected points
+            ellipse = cv2.fitEllipse(np.array(select_points_list, dtype=np.float32))
+
+            # Evaluate the model and find inliers
             inliers_count, inliers_set = self.eval_model(ellipse)
-            if inliers_count == 0:
-                continue
-            inliers_set = np.ascontiguousarray(inliers_set, dtype=np.float32)
+            inliers_set = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
 
+            # Update the best model if current inliers are better
             if inliers_count > self.count:
                 self.count = inliers_count
-                try:
-                    self.best_model = cv2.fitEllipse(inliers_set)
-                except cv2.error:
-                    continue
+                self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
 
+                # Check if we have reached the expected number of inliers
                 if self.count > self.max_inliers:
                     break
 
-                w = inliers_count / n_pts
-                if 0 < w < 1:
-                    try:
-                        denom = math.log(1 - w**self.N)
-                        if denom < -1e-12:
-                            extra = int(
-                                math.ceil(math.log(1 - self.P) / denom)
-                            )
-                            extra = max(0, min(extra, 2000))
-                            budget = min(budget + extra, self._MAX_ITERATIONS - executed)
-                    except (ValueError, ZeroDivisionError, OverflowError):
-                        pass
+                # Update number of iterations
+                self.items = math.log(1 - self.P) / math.log(1 - (inliers_count / len(self.point_data))**self.N)
 
         return self.best_model, inliers_set
 
@@ -424,18 +481,17 @@ SAxis_sets = []
 Angle_sets = []
 in_sets = []
 
-for i in tqdm(range(len(slicing_cloud)), desc="Ellipse fitting (RANSAC)"):
+for i in range(len(slicing_cloud)):
     # Prepare point data for RANSAC
-    fp = filtered_point2ds[i]
-    points_data = np.reshape(fp, (-1, 2))  # Ellipse edge points
+    points_data = np.reshape(filtered_point2ds[i], (-1, 2))  # Ellipse edge points
 
     # First RANSAC fit to find initial inliers
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    ransac = RANSAC(data=points_data, threshold=1.0, P=0.9, S=0.75, N=5)
     _, inliers_set = ransac.execute_ransac()
 
     # Refine fit using inliers from the first RANSAC
     points_data = np.reshape(inliers_set, (-1, 2))
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    ransac = RANSAC(data=points_data, threshold=1.0, P=0.9, S=0.75, N=5)
     ellipse_params, _ = ransac.execute_ransac()
 
     # Extract center coordinates
@@ -503,8 +559,8 @@ cps_arr= np.array(cps)
 # Generate parameter t for each point (using indices as parameter t)
 t = np.arange(ring_count)
 
-# Polynomial feature expansion
-degree = polynomial_degree
+# Polynomial feature expansion, degree 2
+degree = 3
 poly = PolynomialFeatures(degree)
 
 # Polynomial feature transformation for x(t), y(t), z(t)
@@ -619,8 +675,8 @@ def compute_C_points_and_arc_length(B_points, T_vectors, arc_lengths):
     return C_points, arc_lengths
 
 # Precompute the curve points, derivatives, C_points, and arc lengths based on B_points
-num_samples = ring_count * num_samples_factor # around 1mm accuracy
-t_samples = np.linspace(t_extrapolation_start, ring_count + t_extrapolation_end, num_samples)
+num_samples = ring_count * 1210 # around 1mm accuracy
+t_samples = np.linspace(-20, ring_count + 20, num_samples)
 B_points = curve_func(t_samples, x_params, y_params, z_params)
 T_vectors = curve_deriv(t_samples, x_params, y_params, z_params)
 arc_lengths = np.zeros(num_samples, dtype=np.float32)
@@ -632,7 +688,7 @@ index = faiss.IndexFlatL2(3)
 index.add(B_points)
 
 # Define batch size for Faiss search to improve performance
-# batch_size is loaded from parameters
+batch_size = 1000000  # Adjust batch size based on memory constraints
 
 def process_batch(points_batch):
     ''' Process a batch of points to find nearest neighbors, angles, and distances '''
@@ -655,7 +711,7 @@ num_batches = (len(points_xyz) + batch_size - 1) // batch_size
 points_batches = np.array_split(points_xyz, num_batches)
 
 # Using Joblib for parallel batch processing
-cylindrical_coords_batches = Parallel(n_jobs=n_jobs)(
+cylindrical_coords_batches = Parallel(n_jobs=12)(
     delayed(process_batch)(batch) for batch in tqdm(points_batches, desc="Calculating cylindrical coordinates", total=len(points_batches))
 )
 
@@ -664,13 +720,53 @@ for batch_result in cylindrical_coords_batches:
     cylindrical_coords.extend(batch_result)
 
 # recording data
+diameter = 5.5
 df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
 df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
 df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
 
-# save unwrapped + ring_count under tunnel output dir (data/<id>/ or data/ablation/memory/<id>/)
-os.makedirs(_out_dir.rstrip("/"), exist_ok=True)
-df_point_cloud.to_csv(os.path.join(_out_dir.rstrip("/"), "unwrapped.csv"), index=False)
-with open(os.path.join(_out_dir.rstrip("/"), "ring_count.txt"), "w") as f:
+# save to data tunnel 5-1
+os.makedirs(f'data/{tunnel_id}', exist_ok=True)
+df_point_cloud.to_csv(f'data/{tunnel_id}/unwrapped.csv',index=False)
+# save ring count
+with open(f'data/{tunnel_id}/ring_count.txt', 'w') as f:
     f.write(str(ring_count))
 
+
+```
+
+## Input scope
+Use **only** the two raw characteristic JSON blobs, the **REFERENCE … PARAMETERS** JSON block above, and the pipeline code. Do not assume unfolded / denoised / enhanced / detected summaries.
+
+## Required final output (must match `parameters_unfolding.json`)
+Your reply must end with **exactly one** markdown code fence labelled `json`, containing **one** JSON object and nothing else inside the fence.
+
+That object must:
+1. Parse with `json.loads` with **no** trailing commas or comments.
+2. Have the **same tree of keys** as the **REFERENCE … PARAMETERS** JSON block above at every level — **no added keys, no removed keys, no renamed keys**.
+3. Match **types** at every leaf path listed below (object vs array vs number vs integer vs boolean vs string). Preserve **array lengths** exactly.
+4. Change **only** values where raw evidence justifies it; otherwise keep the reference numerics / booleans / strings unchanged.
+5. For **string** leaves (e.g. segment codes in `segment_order`), keep the same literals unless a change is explicitly justified; **never** invent new keys under `processing`, `prompt_points`, or `template_mask`.
+
+### Leaf paths and types (from reference JSON above)
+| JSON path (must exist with this type) | Type |
+| --- | --- |
+| `batch_size` | integer |
+| `delta` | number |
+| `diameter` | number |
+| `n_jobs` | integer |
+| `num_samples_factor` | integer |
+| `polynomial_degree` | integer |
+| `ransac_initial_iterations` | integer |
+| `ransac_inlier_ratio` | number |
+| `ransac_inlier_threshold_multiplier` | number |
+| `ransac_probability` | number |
+| `ransac_sample_size` | integer |
+| `ransac_threshold` | number |
+| `slice_spacing_factor` | number |
+| `t_extrapolation_end` | integer |
+| `t_extrapolation_start` | integer |
+| `vertical_filter_window` | number |
+
+### Before the code fence
+At most a **short** prose note (optional); **no** CoT section headers. The fence must contain the full parameters object so it can be copied into `parameters_unfolding.json`.

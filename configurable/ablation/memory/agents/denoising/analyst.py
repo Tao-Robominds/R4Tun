@@ -2,159 +2,123 @@
 # -*- encoding: utf-8 -*-
 
 import json
-import requests
 import os
+import sys
+import requests
 from pathlib import Path
 
-from sam4tun.plugins.paths import tunnel_characteristics_dir
+_agents_dir = Path(__file__).resolve().parent.parent
+if str(_agents_dir) not in sys.path:
+    sys.path.insert(0, str(_agents_dir))
+
+from memory_ablation_context import (
+    load_raw_characteristics_pair,
+    load_stage_parameters_pretty,
+    pipeline_tunnel_data_dir,
+    read_required_text,
+    strict_output_instructions,
+)
 
 
 class DenoisingAnalyser:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
-        self.data_dir = Path(f"data/{tunnel_id}")
+        self.data_dir = pipeline_tunnel_data_dir(tunnel_id)
+        self._agent_dir = Path(__file__).resolve().parent
         self.api_key = "app-2YyQbd7yv14XBQCf2DL3bifh"
         self.base_url = "https://api.dify.ai/v1"
-        
-    def _read_required_text(self, path: Path, description: str) -> str:
-        if not path.exists():
-            raise FileNotFoundError(f"{description} not found at {path}")
-        content = path.read_text()
-        if not content.strip():
-            raise ValueError(f"{description} at {path} is empty")
-        return content
-    
-    def _read_required_json(self, path: Path, description: str) -> str:
-        if not path.exists():
-            raise FileNotFoundError(f"{description} not found at {path}")
-        with open(path, 'r') as f:
-            try:
-                data = json.load(f)
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{description} at {path} contains invalid JSON: {exc}") from exc
-        return json.dumps(data, indent=2)
-    
+
     def load_analysis_data(self):
-        # Load role definition
-        role_path = Path("agents/denoising/role.md")
-        role_content = self._read_required_text(role_path, "Role definition")
-        
-        # Load instructions
-        instructions_path = Path("agents/denoising/cot.md")
-        instructions_content = self._read_required_text(instructions_path, "Chain-of-thought instructions")
-        
-        # Load original sample unfolded characteristics (reference)
-        sample_characteristics_path = Path("data/sample/characteristics/unfolded_characteristics.json")
-        sample_characteristics = self._read_required_json(sample_characteristics_path, "Sample unfolded characteristics")
-        
-        # Load new tunnel unfolded characteristics
-        new_characteristics_path = Path(tunnel_characteristics_dir(self.tunnel_id)) / "unfolded_characteristics.json"
-        new_characteristics = self._read_required_json(new_characteristics_path, "New tunnel unfolded characteristics")
-        
-        # Load original code with parameters
+        role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
+        sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/2_denoising.py")
-        code_content = self._read_required_text(code_path, "Sample denoising code")
-        
-        # Load current denoising parameters
-        denoising_params_path = Path("configurable/sample/parameters_denoising.json")
-        denoising_parameters = self._read_required_json(denoising_params_path, "Sample denoising parameters")
-        
+        code_content = read_required_text(code_path, "Sample denoising code")
+        archive_name = "parameters_denoising.json"
+        params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name)
         return {
             "role": role_content,
-            "instructions": instructions_content,
-            "sample_characteristics": sample_characteristics,
-            "new_characteristics": new_characteristics,
+            "sample_raw": sample_raw,
+            "tunnel_raw": tunnel_raw,
             "sample_code": code_content,
-            "denoising_parameters": denoising_parameters
+            "parameters": params_json,
+            "parameters_source": params_source,
+            "archive_filename": archive_name,
         }
-    
-    def get_denoising_recommendations(self):
-        # Load all context data
-        context_data = self.load_analysis_data()
-        
-        # Construct comprehensive query with structured analysis process
-        comprehensive_query = f"""
+
+    def build_llm_prompt_markdown(self) -> str:
+        """Exact LLM user message; exported to parameters_denoising.md for copy-paste."""
+        ctx = self.load_analysis_data()
+        return f"""
 # ROLE
-{context_data['role']}
+{ctx["role"]}
 
-# ORIGINAL SAMPLE TUNNEL UNFOLDED CHARACTERISTICS (Reference Baseline)
-The following are the unfolded characteristics of the original sample tunnel that the current denoising parameters were optimized for:
-
+# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
 ```json
-{context_data['sample_characteristics']}
+{ctx["sample_raw"]}
 ```
 
-# NEW TUNNEL UNFOLDED CHARACTERISTICS (Target for Analysis)
-The following are the unfolded characteristics of the new tunnel (ID: {self.tunnel_id}) that needs parameter evaluation:
-
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id={self.tunnel_id})
 ```json
-{context_data['new_characteristics']}
+{ctx["tunnel_raw"]}
 ```
 
-# CURRENT DENOISING PARAMETERS
-The current parameters that work for the sample tunnel:
+# REFERENCE DENOISING PARAMETERS
+{ctx["parameters_source"]}
 
 ```json
-{context_data['denoising_parameters']}
+{ctx["parameters"]}
 ```
 
-# SAMPLE CODE WITH PARAMETERS
+# PIPELINE CODE (reference)
 ```python
-{context_data['sample_code']}
+{ctx["sample_code"]}
 ```
 
-# STRUCTURED ANALYSIS INSTRUCTIONS
-{context_data['instructions']}
+{strict_output_instructions(ctx["archive_filename"], ctx["parameters"])}
+""".strip()
 
-**ANALYSIS GUIDANCE**: Follow the structured reasoning process defined in the Chain of Thought instructions to systematically evaluate the tunnel characteristics and determine appropriate parameter adaptations.
-
-**OUTPUT REQUIREMENTS**: 
-- Use flowing analysis text with natural section headers (Anchoring:, Classification:, etc.)
-- Always provide exact numerical values (never ranges)
-- For similar tunnels: explicitly recommend keeping original parameters
-- Conclude with clean JSON parameter block at the end
-"""
+    def get_denoising_recommendations(self):
+        comprehensive_query = self.build_llm_prompt_markdown()
 
         response = requests.post(
             f"{self.base_url}/chat-messages",
-            headers={'Authorization': f'Bearer {self.api_key}', 'Content-Type': 'application/json'},
+            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             json={
-                "inputs": {
-                    "temperature": 0
-                }, 
+                "inputs": {"temperature": 0},
                 "query": comprehensive_query,
-                "response_mode": "streaming", 
-                "conversation_id": "",  # Empty for fresh conversation
-                "user": f"denoising_analyser_{self.tunnel_id}", 
-                "files": []
-            }
+                "response_mode": "streaming",
+                "conversation_id": "",
+                "user": f"denoising_analyser_{self.tunnel_id}",
+                "files": [],
+            },
         )
-        
+
         result = ""
         for line in response.iter_lines():
-            if line and line.decode('utf-8').startswith('data: '):
+            if line and line.decode("utf-8").startswith("data: "):
                 try:
-                    chunk = json.loads(line.decode('utf-8')[6:])
-                    if chunk.get('event') == 'agent_message':
-                        result += chunk.get('answer', '')
-                except: continue
-        
-        # Create analysis directory
+                    chunk = json.loads(line.decode("utf-8")[6:])
+                    if chunk.get("event") == "agent_message":
+                        result += chunk.get("answer", "")
+                except Exception:
+                    continue
+
         os.makedirs(self.data_dir / "analysis", exist_ok=True)
-        
-        # Save as markdown file
         output_file = self.data_dir / "analysis" / "denoising_analysis.md"
-        with open(output_file, 'w') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(f"# Denoising Analysis Recommendations - {self.tunnel_id}\n\n---\n\n{result}")
-        
+
         print(f"Results saved to: {output_file}")
         return result
 
+
 def main():
     import sys
+
     tunnel_id = sys.argv[1] if len(sys.argv) > 1 else "1-1"
     analyser = DenoisingAnalyser(tunnel_id)
     print(analyser.get_denoising_recommendations())
 
+
 if __name__ == "__main__":
-    main() 
+    main()

@@ -6,13 +6,18 @@ import pandas as pd
 import torch
 import cv2
 import math
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import pickle
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.transforms import ResizeLongestSide
 from matplotlib.path import Path
 import sys
 import json
+
+_cfg = os.path.dirname(os.path.abspath(__file__))
+if _cfg not in sys.path:
+    sys.path.insert(0, _cfg)
+from pipeline_data import resolve_output_base_dir
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
@@ -101,11 +106,11 @@ print(f"Processing tunnel: {tunnel_id}")
 print(f"Using parameters: segment_per_ring={segment_per_ring}, segment_width={segment_width}, resolution={resolution}")
 print(f"Processing config: padding={padding}, crop_margin={crop_margin}, y_bounds={y_bounds}")
 
-base_dir = f"data/{tunnel_id}/"
+base_dir = resolve_output_base_dir(tunnel_id, "detected.csv")
 initial_prompt_points = pd.read_csv(os.path.join(base_dir, "detected.csv"))
 pixel_to_point = pickle.load(open(os.path.join(base_dir, "pixel_to_point.pkl"), "rb"))
 df_point_cloud = pd.read_csv(os.path.join(base_dir, "enhanced.csv"))
-ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
+ring_count = int(open(os.path.join(base_dir, "ring_count.txt"), "r").read())
 
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
 sam.to(device=device)
@@ -480,12 +485,24 @@ def convert_to_pixel_coords(real_dist):
 
 def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block):
     img_height, img_width, _ = image.shape
-    x1 = max(cx - crop_width // 2, 0)
-    y1 = max(cy - crop_height // 2, 0)
-    x2 = min(cx + crop_width // 2, img_width)
-    y2 = min(cy + crop_height // 2, img_height)
+    crop_width = max(int(round(crop_width)), 1)
+    crop_height = max(int(round(crop_height)), 1)
+    cx = float(np.clip(cx, 0, max(img_width - 1, 0)))
+    cy = float(np.clip(cy, 0, max(img_height - 1, 0)))
 
-    cropped_image = image[int(y1):int(y2), int(x1):int(x2)]
+    x1 = max(int(cx - crop_width // 2), 0)
+    y1 = max(int(cy - crop_height // 2), 0)
+    x2 = min(int(cx + crop_width // 2), img_width)
+    y2 = min(int(cy + crop_height // 2), img_height)
+
+    if x2 <= x1:
+        x1 = max(0, min(int(cx), img_width - 1))
+        x2 = min(img_width, x1 + 1)
+    if y2 <= y1:
+        y1 = max(0, min(int(cy), img_height - 1))
+        y2 = min(img_height, y1 + 1)
+
+    cropped_image = image[y1:y2, x1:x2]
     prompt_centre_x = cx - x1
     prompt_centre_y = cy - y1
     prompt_centre = (prompt_centre_x,prompt_centre_y)
@@ -675,23 +692,38 @@ for ring_index, ring in enumerate(results, start=0):
         mask = item['mask'][0]
         logits = item['logit']
         block = item['block']
-        start_x, start_y = map(int, item['left_top'])
+        ox, oy = map(int, item['left_top'])
+        mh, mw = mask.shape[0], mask.shape[1]
 
-        end_y, end_x = start_y + mask.shape[0], start_x + mask.shape[1]
-        start_y, start_x = max(0, start_y), max(0, start_x)
+        end_y, end_x = oy + mh, ox + mw
+        start_y, start_x = max(0, oy), max(0, ox)
         end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
-        
+
+        if start_y >= end_y or start_x >= end_x:
+            continue
+
+        # Crop mask + logits to the region that actually overlaps the image (handles edge rows/cols).
+        crop_y0 = start_y - oy
+        crop_x0 = start_x - ox
+        crop_y1 = crop_y0 + (end_y - start_y)
+        crop_x1 = crop_x0 + (end_x - start_x)
+        mask = mask[crop_y0:crop_y1, crop_x0:crop_x1]
+
+        new_logits = restore_sam_logits(logits, (mh, mw))
+        new_logits = new_logits[crop_y0:crop_y1, crop_x0:crop_x1]
+
         valid_slice_y = slice(start_y, end_y)
         valid_slice_x = slice(start_x, end_x)
-
-        new_logits = restore_sam_logits(logits, mask.shape)
         current_logits = logits_map[valid_slice_y, valid_slice_x]
 
         if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
-            raise ValueError(f"Shape mismatch after resizing: mask {mask.shape}, new_logits {new_logits.shape}, current_logits {current_logits.shape}")
+            raise ValueError(
+                f"Shape mismatch after crop: mask {mask.shape}, new_logits {new_logits.shape}, "
+                f"current_logits {current_logits.shape}"
+            )
 
         update_mask = (new_logits > current_logits) & mask
-        
+
         logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
         label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
         ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index

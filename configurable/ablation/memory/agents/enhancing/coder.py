@@ -8,13 +8,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sam4tun.plugins.paths import tunnel_characteristics_dir
+_agents_dir = Path(__file__).resolve().parent.parent
+if str(_agents_dir) not in sys.path:
+    sys.path.insert(0, str(_agents_dir))
+from memory_ablation_context import pipeline_tunnel_data_dir
 
 
 class EnhancingParameterExtractor:
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
-        self.data_dir = Path(f"data/{tunnel_id}")
+        self.data_dir = pipeline_tunnel_data_dir(tunnel_id)
         self.analysis_dir = self.data_dir / "analysis"
         self.params_dir = Path(f"configurable/{tunnel_id}")  # Save under configurable/{tunnel_id}/
         self.api_key = "app-AwnQSxSdDfTN7Tez202ZcmxR"
@@ -218,39 +221,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
                 print(f"Partial Output: {e.stdout}")
             return False, e.stderr
     
-    def run_characteriser_plugin(self):
-        """Run the enhanced characteriser plugin to generate characteristics for next stage"""
-        plugin_path = Path("sam4tun/plugins/3-enhanced_characteriser.py")
-        
-        if not plugin_path.exists():
-            print(f"⚠️  Characteriser plugin not found at {plugin_path}")
-            return False, "Plugin not found"
-        
-        # Check if enhanced.csv exists
-        enhanced_file = self.data_dir / "enhanced.csv"
-        if not enhanced_file.exists():
-            print(f"⚠️  Enhanced data not found at {enhanced_file}")
-            return False, "Enhanced data not found"
-        
-        try:
-            result = subprocess.run([
-                sys.executable, str(plugin_path), 
-                self.tunnel_id
-            ], capture_output=True, text=True, check=True, cwd=str(Path.cwd()))
-            
-            print(f"✅ Enhanced characteriser completed successfully")
-            if result.stdout: 
-                print(f"Output: {result.stdout}")
-            return True, result.stdout
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Enhanced characteriser failed")
-            if e.stderr: 
-                print(f"Error: {e.stderr}")
-            if e.stdout:
-                print(f"Partial Output: {e.stdout}")
-            return False, e.stderr
-    
     def process(self):
         """Main processing function"""
         print(f"🔄 Processing parameterized enhancing for tunnel {self.tunnel_id}")
@@ -278,14 +248,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
             print("❌ Configurable script failed")
             return False
         
-        # Step 4: Run characteriser plugin to generate characteristics for next stage
-        print("📊 Step 4: Running enhanced characteriser plugin...")
-        char_success, char_output = self.run_characteriser_plugin()
-        
-        if not char_success:
-            print("⚠️  Characteriser plugin failed (non-critical)")
-            print("   Next stage analysis may not have required characteristics")
-        
         print("\n" + "="*60)
         print("🎉 COMPLETE PIPELINE EXECUTED SUCCESSFULLY!")
         print("="*60)
@@ -293,11 +255,6 @@ Return ONLY the JSON object, no explanations or markdown formatting.
         print(f"📁 Parameters saved to: configurable/{self.tunnel_id}/")
         print(f"✅ Configurable enhancing completed for tunnel {self.tunnel_id}")
         print(f"📁 Results saved to: data/{self.tunnel_id}/enhanced.csv")
-        if char_success:
-            print(
-                f"📁 Characteristics saved to: "
-                f"{tunnel_characteristics_dir(self.tunnel_id)}/enhanced_characteristics.json"
-            )
         return True
 
 def main():

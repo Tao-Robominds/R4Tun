@@ -1,3 +1,181 @@
+# Memory-ablation LLM context — tunnel `1-4`
+
+This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
+
+Regenerate after updating raw characteristics or `configurable/sample/parameters_*.json`:
+
+```bash
+python3 configurable/ablation/memory/export_llm_parameter_context.py 1-4
+```
+
+---
+
+# ROLE
+You are a tuning expert for a Hough line transform-based feature detection pipeline. Your goal is to adapt the algorithm based on tunnel-specific characteristics provided.
+
+
+# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
+```json
+{
+  "tunnel_id": "sample",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/sample.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 1109768,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -4.72192383,
+          2.286865
+        ],
+        "y_range": [
+          -15.82104492,
+          -3.17114305
+        ],
+        "z_range": [
+          -1.40405297,
+          3.67260695
+        ],
+        "intensity_range": [
+          -1727.0,
+          1899.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 12.155931503734362,
+        "width_y_axis": 5.604292068996665,
+        "height_z_axis": 5.07665992,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.604292068996665,
+      "diameter_estimation": {
+        "inner_diameter": 5.604292068996665,
+        "outer_diameter": 5.604292068996665,
+        "average_diameter": 5.604292068996665,
+        "median_diameter": 5.604292068996665,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.008184481631340645,
+      "median_nearest_neighbor_distance": 0.006514481254712708,
+      "min_nearest_neighbor_distance": 0.0004879300000000253,
+      "max_nearest_neighbor_distance": 0.2442797068280462,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-4)
+```json
+{
+  "tunnel_id": "1-4",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-4.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 2005884,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -7.95727491,
+          10.46459961
+        ],
+        "y_range": [
+          -18.13891602,
+          14.94262695
+        ],
+        "z_range": [
+          -2.10131788,
+          3.68139601
+        ],
+        "intensity_range": [
+          -1727.0,
+          1963.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 33.96925873485917,
+        "width_y_axis": 5.99651330872443,
+        "height_z_axis": 5.78271389,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.99651330872443,
+      "diameter_estimation": {
+        "inner_diameter": 5.99651330872443,
+        "outer_diameter": 5.99651330872443,
+        "average_diameter": 5.99651330872443,
+        "median_diameter": 5.99651330872443,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.007575189385448667,
+      "median_nearest_neighbor_distance": 0.005415398201360711,
+      "min_nearest_neighbor_distance": 0.00048779999999970514,
+      "max_nearest_neighbor_distance": 0.5189269580942679,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# REFERENCE DETECTING PARAMETERS
+Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-4/parameters_detecting.json`).
+
+```json
+{
+  "binary_threshold": 127,
+  "morphological_kernel_size": [
+    3,
+    3
+  ],
+  "dilation_iterations": 1,
+  "hough_threshold_oblique": 50,
+  "minLineLength_oblique": 100,
+  "maxLineGap_oblique": 40,
+  "hough_threshold_horizontal": 50,
+  "minLineLength_horizontal": 100,
+  "maxLineGap_horizontal": 10,
+  "hough_threshold_vertical": 500,
+  "angle_range_oblique_positive": [
+    6,
+    9
+  ],
+  "angle_range_oblique_negative": [
+    -9,
+    -6
+  ],
+  "merge_distance": 3,
+  "ring_spacing_constant": 1.2,
+  "resolution": 0.005
+}
+```
+
+# PIPELINE CODE (reference)
+```python
 # Algorithm 4 - Prompt Point Generation extracted from notebook
 
 # # Algorithm 4: Prompt point generation 
@@ -9,67 +187,18 @@ import cv2
 import numpy as np
 import pandas as pd
 import sys
-import json
-
-_cfg = os.path.dirname(os.path.abspath(__file__))
-if _cfg not in sys.path:
-    sys.path.insert(0, _cfg)
-from pipeline_data import resolve_output_base_dir
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
-    print("Usage: python configurable_detecting.py <tunnel_id>")
-    print("Example: python configurable_detecting.py 1-4")
+    print("Usage: python 4-1_detection.py <tunnel_id>")
+    print("Example: python 4-1_detection.py 1-4")
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
-
-# Load parameters
-def load_parameters(tunnel_id):
-    """Load parameters from configurable directory where analyst saves parameters"""
-    
-    # Determine script directory to handle both project root and configurable execution
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    param_file = os.path.join(script_dir, tunnel_id, 'parameters_detecting.json')
-    
-    if os.path.exists(param_file):
-        try:
-            with open(param_file, 'r') as f:
-                params = json.load(f)
-            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_detecting.json")
-            return params
-        except Exception as e:
-            print(f"❌ Error loading parameters: {e}")
-            sys.exit(1)
-    else:
-        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_detecting.json")
-        print("Please run the analyst to generate parameters first.")
-        sys.exit(1)
-
-# Load configuration
-params = load_parameters(tunnel_id)
-binary_threshold = params["binary_threshold"]
-morphological_kernel_size = params["morphological_kernel_size"]
-dilation_iterations = params["dilation_iterations"]
-hough_threshold_oblique = params["hough_threshold_oblique"]
-minLineLength_oblique = params["minLineLength_oblique"]
-maxLineGap_oblique = params["maxLineGap_oblique"]
-hough_threshold_horizontal = params["hough_threshold_horizontal"]
-minLineLength_horizontal = params["minLineLength_horizontal"]
-maxLineGap_horizontal = params["maxLineGap_horizontal"]
-hough_threshold_vertical = params["hough_threshold_vertical"]
-angle_range_oblique_positive = params["angle_range_oblique_positive"]
-angle_range_oblique_negative = params["angle_range_oblique_negative"]
-merge_distance = params["merge_distance"]
-ring_spacing_constant = params["ring_spacing_constant"]
-resolution = params["resolution"]
-
-print(f"Using parameters: binary_threshold={binary_threshold}, hough_threshold_oblique={hough_threshold_oblique}, resolution={resolution}")
-_base = resolve_output_base_dir(tunnel_id, "depth_map_outlier.npy")
-base_dir = _base.rstrip("/")
+base_dir = f"data/{tunnel_id}"
 depth_map_outlier = np.load(os.path.join(base_dir, "depth_map_outlier.npy"))
-ring_count_file = os.path.join(base_dir, "ring_count.txt")
-ring_count = int(open(ring_count_file, 'r').read())
+resolution = 0.005
+ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
 print(f"Processing tunnel: {tunnel_id}")
 
@@ -78,11 +207,11 @@ print(f"Processing tunnel: {tunnel_id}")
 
 binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
 
-ret, binary_image = cv2.threshold(binary_map, binary_threshold, 255, cv2.THRESH_BINARY)
+ret, binary_image = cv2.threshold(binary_map, 127, 255, cv2.THRESH_BINARY)  #100
 
-kernel = np.ones(morphological_kernel_size, np.uint8)
+kernel = np.ones((3, 3), np.uint8)
 
-dilated_edges = cv2.dilate(binary_image, kernel, iterations=dilation_iterations)
+dilated_edges = cv2.dilate(binary_image, kernel, iterations=1)  #1
 
 # Cell 5
 # detection
@@ -95,13 +224,14 @@ import matplotlib.pyplot as plt
 L, W = binary_map.shape
 
 # Oblique line segment detection parameters
-lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, hough_threshold_oblique, minLineLength=minLineLength_oblique, maxLineGap=maxLineGap_oblique)
+lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=40)  # Width 240/cos(7.5°)=242
 
 # Horizontal line detection parameters (0 degrees)
-lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, hough_threshold_horizontal, minLineLength=minLineLength_horizontal, maxLineGap=maxLineGap_horizontal)
+lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=10)  # Width 240
 
-# Vertical line detection
-lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, hough_threshold_vertical)
+# Vertical line detection (using cv2.HoughLines, for the whole station, 
+# the detection range needs to be adjusted, sample here is around half of a station)
+lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, 500)
 if lines_vertical is not None:
     lines_vertical = lines_vertical[lines_vertical[:, 0, 0] <= (5 * 1200 / (resolution*1000))]
 
@@ -126,11 +256,11 @@ if lines_oblique is not None:
         x1, x2, y1, y2 = (x2, x1, y2, y1) if x1 > x2 else (x1, x2, y1, y2)
         angle = np.degrees(np.arctan2(-(y2 - y1), x2 - x1))  # Invert y-coordinates to match standard angle direction (with y-axis up)
 
-        if angle_range_oblique_positive[0] <= angle <= angle_range_oblique_positive[1]:
+        if 6 <= angle <= 9:
             joint_oblique_positive.append(line)
             cv2.line(output_image, (x1, y1), (x2, y2), color_angle1, line_thickness)
 
-        elif angle_range_oblique_negative[0] <= angle <= angle_range_oblique_negative[1]:
+        elif -9 <= angle <= -6:
             joint_oblique_negtive.append(line)
             cv2.line(output_image, (x1, y1), (x2, y2), color_angle2, line_thickness)
 
@@ -149,7 +279,7 @@ if lines_horizontal is not None:
 # Merge close vertical lines
 merged_lines = []
 all_mid_lines = []
-threshold_distance = merge_distance  # pixels
+threshold_distance = 3  # 3 pixels
 
 if lines_vertical is not None:
     lines_vertical = lines_vertical[:, 0]  # Convert to 2D array
@@ -225,7 +355,7 @@ if lines_vertical is not None:
     
     avg_distance_designed = W/ring_count
     
-    if np.abs(avg_distance_detected - (ring_spacing_constant / resolution)) <= np.abs(avg_distance_designed - (ring_spacing_constant / resolution)):
+    if np.abs(avg_distance_detected - (1.2 / resolution)) <= np.abs(avg_distance_designed - (1.2 / resolution)):
         avg_distance = avg_distance_detected
     else:
         avg_distance = avg_distance_designed
@@ -487,3 +617,39 @@ plt.show()
 
 # Cell 8
 df_loc.to_csv(f'{base_dir}/detected.csv',index=False)
+```
+
+## Input scope
+Use **only** the two raw characteristic JSON blobs, the **REFERENCE … PARAMETERS** JSON block above, and the pipeline code. Do not assume unfolded / denoised / enhanced / detected summaries.
+
+## Required final output (must match `parameters_detecting.json`)
+Your reply must end with **exactly one** markdown code fence labelled `json`, containing **one** JSON object and nothing else inside the fence.
+
+That object must:
+1. Parse with `json.loads` with **no** trailing commas or comments.
+2. Have the **same tree of keys** as the **REFERENCE … PARAMETERS** JSON block above at every level — **no added keys, no removed keys, no renamed keys**.
+3. Match **types** at every leaf path listed below (object vs array vs number vs integer vs boolean vs string). Preserve **array lengths** exactly.
+4. Change **only** values where raw evidence justifies it; otherwise keep the reference numerics / booleans / strings unchanged.
+5. For **string** leaves (e.g. segment codes in `segment_order`), keep the same literals unless a change is explicitly justified; **never** invent new keys under `processing`, `prompt_points`, or `template_mask`.
+
+### Leaf paths and types (from reference JSON above)
+| JSON path (must exist with this type) | Type |
+| --- | --- |
+| `angle_range_oblique_negative` | array[2] of integer |
+| `angle_range_oblique_positive` | array[2] of integer |
+| `binary_threshold` | integer |
+| `dilation_iterations` | integer |
+| `hough_threshold_horizontal` | integer |
+| `hough_threshold_oblique` | integer |
+| `hough_threshold_vertical` | integer |
+| `maxLineGap_horizontal` | integer |
+| `maxLineGap_oblique` | integer |
+| `merge_distance` | integer |
+| `minLineLength_horizontal` | integer |
+| `minLineLength_oblique` | integer |
+| `morphological_kernel_size` | array[2] of integer |
+| `resolution` | number |
+| `ring_spacing_constant` | number |
+
+### Before the code fence
+At most a **short** prose note (optional); **no** CoT section headers. The fence must contain the full parameters object so it can be copied into `parameters_detecting.json`.

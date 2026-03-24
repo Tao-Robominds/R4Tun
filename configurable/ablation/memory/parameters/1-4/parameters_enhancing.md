@@ -1,3 +1,171 @@
+# Memory-ablation LLM context — tunnel `1-4`
+
+This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
+
+Regenerate after updating raw characteristics or `configurable/sample/parameters_*.json`:
+
+```bash
+python3 configurable/ablation/memory/export_llm_parameter_context.py 1-4
+```
+
+---
+
+# ROLE
+You are a tuning expert for a geometry-guided point cloud enhancement pipeline. Your goal is to adapt the algorithm based on tunnel-specific characteristics provided.
+
+
+# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
+```json
+{
+  "tunnel_id": "sample",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/sample.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 1109768,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -4.72192383,
+          2.286865
+        ],
+        "y_range": [
+          -15.82104492,
+          -3.17114305
+        ],
+        "z_range": [
+          -1.40405297,
+          3.67260695
+        ],
+        "intensity_range": [
+          -1727.0,
+          1899.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 12.155931503734362,
+        "width_y_axis": 5.604292068996665,
+        "height_z_axis": 5.07665992,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.604292068996665,
+      "diameter_estimation": {
+        "inner_diameter": 5.604292068996665,
+        "outer_diameter": 5.604292068996665,
+        "average_diameter": 5.604292068996665,
+        "median_diameter": 5.604292068996665,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.008184481631340645,
+      "median_nearest_neighbor_distance": 0.006514481254712708,
+      "min_nearest_neighbor_distance": 0.0004879300000000253,
+      "max_nearest_neighbor_distance": 0.2442797068280462,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-4)
+```json
+{
+  "tunnel_id": "1-4",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-4.txt",
+  "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
+  "point_cloud_analysis": {
+    "basic_statistics": {
+      "total_points": 2005884,
+      "data_structure": {
+        "columns": 4,
+        "description": "x, y, z, intensity"
+      },
+      "coordinate_ranges": {
+        "x_range": [
+          -7.95727491,
+          10.46459961
+        ],
+        "y_range": [
+          -18.13891602,
+          14.94262695
+        ],
+        "z_range": [
+          -2.10131788,
+          3.68139601
+        ],
+        "intensity_range": [
+          -1727.0,
+          1963.0
+        ]
+      }
+    },
+    "tunnel_geometry": {
+      "dimensions": {
+        "length_x_axis": 33.96925873485917,
+        "width_y_axis": 5.99651330872443,
+        "height_z_axis": 5.78271389,
+        "units": "meters"
+      },
+      "estimated_diameter": 5.99651330872443,
+      "diameter_estimation": {
+        "inner_diameter": 5.99651330872443,
+        "outer_diameter": 5.99651330872443,
+        "average_diameter": 5.99651330872443,
+        "median_diameter": 5.99651330872443,
+        "ring_thickness": 0.0,
+        "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
+        "method": "minimum_bounding_rectangle",
+        "note": "This is a 2D projection-based estimate. For more accurate diameter estimation, use cylindrical coordinate analysis (r values) from unfolded point cloud."
+      },
+      "actual_tunnel_diameter": 5.5,
+      "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
+    },
+    "point_density": {
+      "mean_nearest_neighbor_distance": 0.007575189385448667,
+      "median_nearest_neighbor_distance": 0.005415398201360711,
+      "min_nearest_neighbor_distance": 0.00048779999999970514,
+      "max_nearest_neighbor_distance": 0.5189269580942679,
+      "units": "meters"
+    }
+  }
+}
+```
+
+# REFERENCE ENHANCING PARAMETERS
+Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-4/parameters_enhancing.json`).
+
+```json
+{
+  "upsampling_stage1_target_distance": 0.08,
+  "upsampling_stage2_target_distance": 0.04,
+  "upsampling_stage3_target_distance": 0.02,
+  "curvature_threshold": 0.0005,
+  "depth_threshold_low": 0.003,
+  "depth_threshold_high": 0.008,
+  "inter_radius": 0.06,
+  "duplicate_threshold": 0.02,
+  "n_segment_start": 0,
+  "n_segment_end": 5,
+  "num_neighbors": 20,
+  "num_interpolations": 2,
+  "resolution": 0.005,
+  "window_size": 9
+}
+```
+
+# PIPELINE CODE (reference)
+```python
 # Algorithm 3 - Geometry Guided Enhancing extracted from notebook
 
 # # Algorithm 3: geometry guided enhancing
@@ -9,16 +177,10 @@ from scipy.spatial import KDTree, cKDTree
 import numba as nb
 from numba import njit, prange
 from scipy.interpolate import griddata
-from tqdm.auto import tqdm
+from tqdm.notebook import tqdm
 from collections import defaultdict
 import pickle
 import sys
-import json
-
-_cfg = os.path.dirname(os.path.abspath(__file__))
-if _cfg not in sys.path:
-    sys.path.insert(0, _cfg)
-from pipeline_data import resolve_output_base_dir
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
@@ -27,49 +189,7 @@ if len(sys.argv) != 2:
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
-
-# Load parameters
-def load_parameters(tunnel_id):
-    """Load parameters from configurable directory where analyst saves parameters"""
-    
-    # Determine script directory to handle both project root and configurable execution
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    param_file = os.path.join(script_dir, tunnel_id, 'parameters_enhancing.json')
-    
-    if os.path.exists(param_file):
-        try:
-            with open(param_file, 'r') as f:
-                params = json.load(f)
-            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_enhancing.json")
-            return params
-        except Exception as e:
-            print(f"❌ Error loading parameters: {e}")
-            sys.exit(1)
-    else:
-        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_enhancing.json")
-        print("Please run the analyst to generate parameters first.")
-        sys.exit(1)
-
-# Load configuration
-params = load_parameters(tunnel_id)
-upsampling_stage1_target_distance = params["upsampling_stage1_target_distance"]
-upsampling_stage2_target_distance = params["upsampling_stage2_target_distance"]
-upsampling_stage3_target_distance = params["upsampling_stage3_target_distance"]
-curvature_threshold = params["curvature_threshold"]
-depth_threshold_low = params["depth_threshold_low"]
-depth_threshold_high = params["depth_threshold_high"]
-inter_radius = params["inter_radius"]
-duplicate_threshold = params["duplicate_threshold"]
-n_segment_start = params["n_segment_start"]
-n_segment_end = params["n_segment_end"]
-num_neighbors = params["num_neighbors"]
-num_interpolations = params["num_interpolations"]
-resolution = params["resolution"]
-window_size = params["window_size"]
-
-print(f"Using parameters: stage1_distance={upsampling_stage1_target_distance}, stage2_distance={upsampling_stage2_target_distance}, stage3_distance={upsampling_stage3_target_distance}")
-# Determine if we're running from project root or configurable/
-base_dir = resolve_output_base_dir(tunnel_id, "denoised.csv")
+base_dir = f"data/{tunnel_id}/"
 denoised_file = os.path.join(base_dir, "denoised.csv")
 df_point_cloud = pd.read_csv(denoised_file)
 
@@ -119,7 +239,7 @@ import time
 from scipy.spatial import cKDTree
 import numpy as np
 import pandas as pd
-from tqdm.auto import tqdm
+from tqdm.notebook import tqdm
 import numba as nb
 from numba import njit, prange
 
@@ -187,7 +307,7 @@ def optimized_radius_filter(df, target_distance):
     return filtered_df
 
 # -----main function-----
-def enhance_segment_surface(df, target_distance=0.08, curvature_threshold_param=0.0005, num_neighbors_param=20):
+def enhance_segment_surface(df, target_distance=0.08, curvature_threshold=0.0005, num_neighbors=20):
     start_time = time.time()
     
     print('reading points ...')
@@ -197,10 +317,10 @@ def enhance_segment_surface(df, target_distance=0.08, curvature_threshold_param=
     print('KDTree generation ...')
     original_tree = cKDTree(original_points)
     
-    distances, indices = original_tree.query(original_points, k=min(num_neighbors_param + 1, len(points)))
+    distances, indices = original_tree.query(original_points, k=min(num_neighbors + 1, len(points)))
 
     print('midpoint calculation ...')
-    all_new_points = compute_midpoints_and_filter(points, indices, distances, target_distance, curvature_threshold_param)
+    all_new_points = compute_midpoints_and_filter(points, indices, distances, target_distance, curvature_threshold)
 
     print('filter out excess points ...')
     distances, _ = original_tree.query(all_new_points[:, :2], k=1)
@@ -228,9 +348,9 @@ def enhance_segment_surface(df, target_distance=0.08, curvature_threshold_param=
 # Cell 6
 # Define the parameters for each upsampling step
 upsampling_params = [
-    {'target_distance': upsampling_stage1_target_distance},  # First upsampling
-    {'target_distance': upsampling_stage2_target_distance},  # Second upsampling
-    {'target_distance': upsampling_stage3_target_distance}   # Third upsampling
+    {'target_distance': 0.08},  # First upsampling
+    {'target_distance': 0.04},  # Second upsampling
+    {'target_distance': 0.02}   # Third upsampling
 ]
 
 # Initialize the DataFrame for upsampling
@@ -239,9 +359,7 @@ df_upsampling_all = df_support_filtered_curva
 # Loop through the parameters and perform upsampling
 for params in upsampling_params:
     df_upsampling = enhance_segment_surface(df_upsampling_all, 
-                                            target_distance=params.get('target_distance'),
-                                            curvature_threshold_param=curvature_threshold,
-                                            num_neighbors_param=num_neighbors)
+                                            target_distance=params.get('target_distance'))
     df_upsampling_all = pd.concat([df_upsampling_all, df_upsampling], ignore_index=False)
 
 df_enhance_segment = df_upsampling_all
@@ -252,7 +370,7 @@ df_enhance_segment = df_upsampling_all
 import pandas as pd
 import numpy as np
 from scipy.spatial import cKDTree
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from numba import njit, prange
 import time
 
@@ -379,20 +497,17 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
             filtered_high_density_indices.append(idx)
     
     filtered_indices = np.array(filtered_high_density_indices, dtype=np.int64)
-
-    # interpolate_points preallocates num_indices² × num_interpolations rows → OOM for ~10⁵ outliers.
-    _max_pairs = 2800
-    _nfi = len(filtered_indices)
-    if _nfi > _max_pairs:
-        _rng = np.random.default_rng(42)
-        _pick = _rng.choice(_nfi, size=_max_pairs, replace=False)
-        filtered_indices = filtered_indices[_pick]
-        print(
-            f"Note: subsampled outliers for pairwise interpolation {_nfi} → {_max_pairs} (memory / O(n²) cap)."
-        )
-
-    print("Generating interpolated points ...")
-
+    
+    # Limit the number of indices to process to avoid memory issues
+    MAX_INDICES = 5000  # Process at most 5000 outlier points at once
+    if len(filtered_indices) > MAX_INDICES:
+        print(f"Warning: {len(filtered_indices)} outlier points found, limiting to {MAX_INDICES} to avoid memory issues")
+        # Randomly sample to get a representative subset
+        np.random.seed(42)
+        filtered_indices = np.random.choice(filtered_indices, size=MAX_INDICES, replace=False)
+    
+    print(f"Generating interpolated points for {len(filtered_indices)} outlier points...")
+    
     new_points_array = interpolate_points(filtered_indices, points, inter_radius, num_interpolations, duplicate_threshold, resolution)
     
     # Add new points to DataFrame
@@ -410,14 +525,7 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
 # Cell 10
 # =================n_segment need to change!!!!===============
 # The sample data is a half of one station, so n_segment should change when using entire station point cloud. 
-meaningful_df, new_df = enhance_outlier_points(df_support_filtered_curva, 
-                                               depth_threshold_low=depth_threshold_low,
-                                               depth_threshold_high=depth_threshold_high,
-                                               inter_radius=inter_radius,
-                                               num_interpolations=num_interpolations,
-                                               duplicate_threshold=duplicate_threshold,
-                                               n_segment=[n_segment_start, n_segment_end],
-                                               resolution=resolution)
+meaningful_df, new_df = enhance_outlier_points(df_support_filtered_curva, n_segment=[0,5])
 
 df_enhance_joint = pd.concat([meaningful_df, new_df], ignore_index=False)
 
@@ -434,7 +542,7 @@ df_point_cloud.tail()
 import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
-from tqdm.auto import tqdm
+from tqdm.notebook import tqdm
 from collections import defaultdict
 
 def project_to_depth_map_inter(data1, data2, resolution=0.005, window_size=5, outlier_mode=False):
@@ -565,8 +673,10 @@ data_joint = {
     'pred': df_enhance_joint['pred']
 }
 
+resolution = 0.005
+
 # depth map generation, and record pixel to point
-depth_map, pixel_to_point = project_to_depth_map_inter(data_segment, data_joint, resolution=resolution, window_size=window_size)
+depth_map, pixel_to_point = project_to_depth_map_inter(data_segment, data_joint, resolution=resolution, window_size=9)
 # save pixel to point
 os.makedirs(base_dir, exist_ok=True)
 pixel_to_point_file = os.path.join(base_dir, "pixel_to_point.pkl")
@@ -604,7 +714,7 @@ def save_depth_map_exact(depth_map, resolution, filename="depth_map.png"):
 
 # Cell 19
 # save to base_dir
-save_depth_map_exact(depth_map, resolution=resolution, filename=f"{base_dir}/depth_map.png")
+save_depth_map_exact(depth_map, resolution=0.005, filename=f"{base_dir}/depth_map.png")
 
 
 # for algorithm 4-1
@@ -669,3 +779,38 @@ if len(new_upsampled_points) > 0 or len(new_joint_points) > 0:
 
 # save df_point_cloud
 df_point_cloud.to_csv(f"{base_dir}/enhanced.csv", index=False)
+```
+
+## Input scope
+Use **only** the two raw characteristic JSON blobs, the **REFERENCE … PARAMETERS** JSON block above, and the pipeline code. Do not assume unfolded / denoised / enhanced / detected summaries.
+
+## Required final output (must match `parameters_enhancing.json`)
+Your reply must end with **exactly one** markdown code fence labelled `json`, containing **one** JSON object and nothing else inside the fence.
+
+That object must:
+1. Parse with `json.loads` with **no** trailing commas or comments.
+2. Have the **same tree of keys** as the **REFERENCE … PARAMETERS** JSON block above at every level — **no added keys, no removed keys, no renamed keys**.
+3. Match **types** at every leaf path listed below (object vs array vs number vs integer vs boolean vs string). Preserve **array lengths** exactly.
+4. Change **only** values where raw evidence justifies it; otherwise keep the reference numerics / booleans / strings unchanged.
+5. For **string** leaves (e.g. segment codes in `segment_order`), keep the same literals unless a change is explicitly justified; **never** invent new keys under `processing`, `prompt_points`, or `template_mask`.
+
+### Leaf paths and types (from reference JSON above)
+| JSON path (must exist with this type) | Type |
+| --- | --- |
+| `curvature_threshold` | number |
+| `depth_threshold_high` | number |
+| `depth_threshold_low` | number |
+| `duplicate_threshold` | number |
+| `inter_radius` | number |
+| `n_segment_end` | integer |
+| `n_segment_start` | integer |
+| `num_interpolations` | integer |
+| `num_neighbors` | integer |
+| `resolution` | number |
+| `upsampling_stage1_target_distance` | number |
+| `upsampling_stage2_target_distance` | number |
+| `upsampling_stage3_target_distance` | number |
+| `window_size` | integer |
+
+### Before the code fence
+At most a **short** prose note (optional); **no** CoT section headers. The fence must contain the full parameters object so it can be copied into `parameters_enhancing.json`.

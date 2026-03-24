@@ -1,213 +1,218 @@
 #!/bin/bash
 
-# Script to run all agents step by step for a given tunnel_id
-# Usage: ./run_agents.sh <tunnel_id>
-# Example: ./run_agents.sh 1-4
+# End-to-end configurable pipeline (sam4tun stages driven by JSON under configurable/<tunnel_id>/).
+# Each step loads its own parameters from:
+#   configurable/<tunnel_id>/parameters_unfolding.json
+#   configurable/<tunnel_id>/parameters_denoising.json
+#   configurable/<tunnel_id>/parameters_enhancing.json
+#   configurable/<tunnel_id>/parameters_detecting.json
+#   configurable/<tunnel_id>/parameters_sam.json
+#
+# Usage: ./run_agents.sh <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation] [--save-ablation-memory] ...
+# Examples:
+#   ./run_agents.sh 1-4
+#   ./run_agents.sh 1-4 --schema 6
+#   ./run_agents.sh 1-4 --memory-ablation   # writes artefacts to data/ablation/memory/<id>/ (not data/<id>/)
+#   ./run_agents.sh 1-4 --save-ablation-memory   # rsync data/<id>/ → data/ablation/memory/<id>/ (after default run)
+# Extra words on the line are ignored unless they are a valid schema token or --schema <value>.
 
-# Don't use set -e, we'll handle errors manually
-
-# Check if tunnel_id is provided
 if [ $# -eq 0 ]; then
     echo "❌ Error: tunnel_id is required"
-    echo "Usage: $0 <tunnel_id>"
+    echo "Usage: $0 <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation] [--save-ablation-memory]"
     echo "Example: $0 1-4"
+    echo "Example: $0 1-4 --schema 6"
+    echo "Example: $0 1-4 --memory-ablation"
+    echo "Example: $0 1-4 --save-ablation-memory"
     exit 1
 fi
 
-TUNNEL_ID=$1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Activate virtual environment if it exists
+PIPELINE_T0=$(date +%s)
+PIPELINE_T0_ISO=$(date -Iseconds)
+
+pipeline_print_runtime() {
+    local t1 sec m s
+    t1=$(date +%s)
+    sec=$((t1 - PIPELINE_T0))
+    m=$((sec / 60))
+    s=$((sec % 60))
+    echo ""
+    echo "=========================================="
+    echo "⏱ Pipeline wall clock: ${sec}s (${m}m ${s}s)"
+    echo "   Started: ${PIPELINE_T0_ISO}"
+    echo "   Finished: $(date -Iseconds)"
+    echo "=========================================="
+}
+trap pipeline_print_runtime EXIT
+
+TUNNEL_ID=$1
+shift || exit 1
+
+EVAL_SCHEMA=6
+SAVE_ABLATION_MEMORY=0
+MEMORY_ABLATION=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --schema)
+            shift
+            if [ -n "${1:-}" ]; then
+                EVAL_SCHEMA="$1"
+            fi
+            shift || true
+            ;;
+        --memory-ablation)
+            MEMORY_ABLATION=1
+            export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/memory
+            shift
+            ;;
+        --save-ablation-memory)
+            SAVE_ABLATION_MEMORY=1
+            shift
+            ;;
+        6|7|auto|both)
+            EVAL_SCHEMA="$1"
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+PIPE_OUT="${R4TUN_PIPELINE_OUT_PREFIX:-data}"
+TUNNEL_OUT="${PIPE_OUT}/${TUNNEL_ID}"
+
+# Prefer the project venv interpreter so we never accidentally use system python3 without packages.
+if [ -n "${PYTHON:-}" ] && [ -x "${PYTHON}" ]; then
+    PY="${PYTHON}"
+elif [ -x "${SCRIPT_DIR}/venv/bin/python3" ]; then
+    PY="${SCRIPT_DIR}/venv/bin/python3"
+elif [ -x "${SCRIPT_DIR}/venv/bin/python" ]; then
+    PY="${SCRIPT_DIR}/venv/bin/python"
+else
+    PY="python3"
+fi
+
 if [ -d "venv" ]; then
+    # shellcheck source=/dev/null
     source venv/bin/activate
 fi
+CONFIG_DIR="configurable/${TUNNEL_ID}"
 
 echo "=========================================="
-echo "🚀 Running Agents Pipeline for Tunnel: $TUNNEL_ID"
+echo "⏱ Pipeline started: ${PIPELINE_T0_ISO}"
+echo "🚀 Configurable pipeline — tunnel: ${TUNNEL_ID}"
+echo "📂 Parameters: ${CONFIG_DIR}/parameters_*.json"
+echo "🐍 Python: ${PY} ($("${PY}" --version 2>&1))"
+echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
+if [ "${MEMORY_ABLATION}" = 1 ]; then
+    echo "🧠 Memory ablation: artefacts → ${TUNNEL_OUT}/"
+fi
+if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
+    echo "📦 After success: rsync data/${TUNNEL_ID}/ → data/ablation/memory/${TUNNEL_ID}/"
+fi
 echo "=========================================="
 echo ""
 
-# Step 0: Create raw characteristics first (required for unfolding analyst)
-echo "📊 Step 0: Generating raw characteristics..."
-if [ ! -f "data/${TUNNEL_ID}.txt" ]; then
-    echo "❌ Error: Input file data/${TUNNEL_ID}.txt not found"
+if ! "${PY}" -c "import numpy" 2>/dev/null; then
+    echo "❌ Error: numpy (and likely other deps) missing in this environment."
+    echo "   Fix: ${PY} -m pip install -r requirements.txt"
+    echo "   (Use the venv’s python: ./venv/bin/python3 -m pip install -r requirements.txt)"
     exit 1
 fi
 
-python3 sam4tun/plugins/raw_characteristics.py --tunnel_id "$TUNNEL_ID" || {
-    echo "❌ Failed to generate raw characteristics"
-    exit 1
-}
-
-if [ "$TUNNEL_ID" = "sample" ]; then
-    CHAR_RAW="data/sample/characteristics/raw_characteristics.json"
-else
-    CHAR_RAW="data/ablation/memory/${TUNNEL_ID}/characteristics/raw_characteristics.json"
-fi
-if [ ! -f "$CHAR_RAW" ]; then
-    echo "❌ Error: raw_characteristics.json was not created at $CHAR_RAW"
+# --- Preconditions (raw cloud: subsets first; optional data/<id>.txt e.g. sample) ---
+if [ ! -f "data/subsets/${TUNNEL_ID}.txt" ] && [ ! -f "data/${TUNNEL_ID}.txt" ]; then
+    echo "❌ Error: no point cloud for ${TUNNEL_ID}"
+    echo "   Use data/subsets/${TUNNEL_ID}.txt (preferred) or data/${TUNNEL_ID}.txt"
     exit 1
 fi
-echo "✅ Raw characteristics created"
-echo ""
 
-# Step 1: Unfolding
-echo "=========================================="
-echo "🔄 Step 1: Unfolding Agent"
-echo "=========================================="
-echo "📊 Running unfolding analyst..."
-python3 agents/unfolding/analyst.py "$TUNNEL_ID" > "data/${TUNNEL_ID}/analysis/unfolding_analysis.md" || {
-    echo "❌ Unfolding analyst failed"
+if [ ! -d "$CONFIG_DIR" ]; then
+    echo "❌ Error: ${CONFIG_DIR}/ not found"
     exit 1
-}
-echo "✅ Unfolding analysis complete"
-
-echo "💻 Running unfolding coder..."
-python3 agents/unfolding/coder.py "$TUNNEL_ID" || {
-    echo "❌ Unfolding coder failed"
-    exit 1
-}
-echo "✅ Unfolding complete"
-echo ""
-
-# Step 2: Denoising
-echo "=========================================="
-echo "🔄 Step 2: Denoising Agent"
-echo "=========================================="
-echo "📊 Running denoising analyst..."
-python3 agents/denoising/analyst.py "$TUNNEL_ID" > "data/${TUNNEL_ID}/analysis/denoising_analysis.md" || {
-    echo "❌ Denoising analyst failed"
-    exit 1
-}
-echo "✅ Denoising analysis complete"
-
-echo "💻 Running denoising coder..."
-python3 agents/denoising/coder.py "$TUNNEL_ID" || {
-    echo "❌ Denoising coder failed"
-    exit 1
-}
-echo "✅ Denoising complete"
-echo ""
-
-# Step 3: Enhancing
-echo "=========================================="
-echo "🔄 Step 3: Enhancing Agent"
-echo "=========================================="
-echo "📊 Running enhancing analyst..."
-python3 agents/enhancing/analyst.py "$TUNNEL_ID" > "data/${TUNNEL_ID}/analysis/enhancing_analysis.md" || {
-    echo "❌ Enhancing analyst failed"
-    exit 1
-}
-echo "✅ Enhancing analysis complete"
-
-echo "💻 Running enhancing coder..."
-if python3 agents/enhancing/coder.py "$TUNNEL_ID"; then
-    echo "✅ Enhancing complete"
-else
-    echo "❌ Enhancing coder failed"
-    echo "⚠️  Warning: Continuing pipeline, but subsequent steps may fail"
-    ENHANCING_FAILED=1
 fi
-echo ""
 
-# Step 4: Detecting
-echo "=========================================="
-echo "🔄 Step 4: Detecting Agent"
-echo "=========================================="
-if [ "$ENHANCING_FAILED" = "1" ]; then
-    echo "⚠️  Skipping detecting: Enhancing step failed (required input missing)"
-    DETECTING_FAILED=1
-else
-    echo "📊 Running detecting analyst..."
-    if python3 agents/detecting/analyst.py "$TUNNEL_ID" > "data/${TUNNEL_ID}/analysis/detecting_analysis.md"; then
-        echo "✅ Detecting analysis complete"
-    else
-        echo "❌ Detecting analyst failed"
-        DETECTING_FAILED=1
+for f in parameters_unfolding.json parameters_denoising.json parameters_enhancing.json parameters_detecting.json parameters_sam.json; do
+    if [ ! -f "${CONFIG_DIR}/${f}" ]; then
+        echo "❌ Error: missing ${CONFIG_DIR}/${f}"
+        exit 1
     fi
+done
 
-    if [ "$DETECTING_FAILED" != "1" ]; then
-        echo "💻 Running detecting coder..."
-        if python3 agents/detecting/coder.py "$TUNNEL_ID"; then
-            echo "✅ Detecting complete"
-        else
-            echo "❌ Detecting coder failed"
-            DETECTING_FAILED=1
-        fi
-    fi
-fi
-echo ""
+mkdir -p "${TUNNEL_OUT}/analysis"
 
-# Step 5: Segmenting
-echo "=========================================="
-echo "🔄 Step 5: Segmenting Agent"
-echo "=========================================="
-if [ "$DETECTING_FAILED" = "1" ]; then
-    echo "⚠️  Skipping segmenting: Detecting step failed (required input missing)"
-    SEGMENTING_FAILED=1
-else
-    echo "📊 Running segmenting analyst..."
-    if python3 agents/segmenting/analyst.py "$TUNNEL_ID" > "data/${TUNNEL_ID}/analysis/segmenting_analysis.md"; then
-        echo "✅ Segmenting analysis complete"
-    else
-        echo "❌ Segmenting analyst failed"
-        SEGMENTING_FAILED=1
-    fi
-
-    if [ "$SEGMENTING_FAILED" != "1" ]; then
-        echo "💻 Running segmenting coder..."
-        if python3 agents/segmenting/coder.py "$TUNNEL_ID"; then
-            echo "✅ Segmenting complete"
-        else
-            echo "❌ Segmenting coder failed"
-            SEGMENTING_FAILED=1
-        fi
-    fi
-fi
-echo ""
-
-# Step 6: Evaluation (optional)
-echo "=========================================="
-echo "📊 Step 6: Evaluation"
-echo "=========================================="
-if [ -f "data/${TUNNEL_ID}/only_label.csv" ]; then
-    echo "📊 Running evaluation..."
-    python3 agents/evaluation.py "$TUNNEL_ID" || {
-        echo "⚠️  Evaluation failed (non-critical)"
-    }
-    echo "✅ Evaluation complete"
-else
-    echo "⚠️  Skipping evaluation: only_label.csv not found"
-fi
-echo ""
-
-echo "=========================================="
-if [ "$ENHANCING_FAILED" = "1" ] || [ "$DETECTING_FAILED" = "1" ] || [ "$SEGMENTING_FAILED" = "1" ]; then
-    echo "⚠️  Pipeline Completed with Warnings for Tunnel: $TUNNEL_ID"
+run_step() {
+    local name=$1
+    shift
     echo "=========================================="
-    echo ""
-    echo "Failed steps:"
-    [ "$ENHANCING_FAILED" = "1" ] && echo "  ❌ Enhancing"
-    [ "$DETECTING_FAILED" = "1" ] && echo "  ❌ Detecting"
-    [ "$SEGMENTING_FAILED" = "1" ] && echo "  ❌ Segmenting"
-    echo ""
-else
-    echo "🎉 All Agents Pipeline Complete for Tunnel: $TUNNEL_ID"
+    echo "🔄 ${name}"
     echo "=========================================="
+    if "$@"; then
+        echo "✅ ${name} complete"
+    else
+        echo "❌ ${name} failed"
+        exit 1
+    fi
+    echo ""
+}
+
+# --- Stages 1–5: configurable/*.py ---
+run_step "Step 1/6: Unfolding" "$PY" configurable/configurable_unfolding.py "$TUNNEL_ID"
+run_step "Step 2/6: Denoising" "$PY" configurable/configurable_denoising.py "$TUNNEL_ID"
+run_step "Step 3/6: Enhancing" "$PY" configurable/configurable_enhancing.py "$TUNNEL_ID"
+run_step "Step 4/6: Detecting" "$PY" configurable/configurable_detecting.py "$TUNNEL_ID"
+
+# Optional: free GPU before SAM (same idea as run_pipeline.sh)
+echo "=========================================="
+echo "🖥️  GPU cleanup before SAM (best effort)"
+echo "=========================================="
+GPU_PIDS=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null | grep -v "^$" || true)
+if [ -n "$GPU_PIDS" ]; then
+    for pid in $GPU_PIDS; do
+        if ps -p "$pid" -o comm= 2>/dev/null | grep -qi python; then
+            echo "Killing Python GPU pid $pid ..."
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    sleep 2
 fi
-echo ""
-echo "📁 Output files:"
-echo "  - Parameters: configurable/${TUNNEL_ID}/parameters_*.json"
-echo "  - Analysis: data/${TUNNEL_ID}/analysis/*.md"
-if [ "$TUNNEL_ID" = "sample" ]; then
-    echo "  - Characteristics: data/sample/characteristics/*.json"
-else
-    echo "  - Characteristics: data/ablation/memory/${TUNNEL_ID}/characteristics/*.json"
-fi
-echo "  - Results: data/${TUNNEL_ID}/*.csv"
-if [ -d "data/${TUNNEL_ID}/evaluation" ]; then
-    echo "  - Evaluation: data/${TUNNEL_ID}/evaluation/"
-fi
+"$PY" -c "import torch; torch.cuda.empty_cache()" 2>/dev/null || true
 echo ""
 
+run_step "Step 5/6: SAM (configurable_sam)" "$PY" configurable/configurable_sam.py "$TUNNEL_ID"
+
+# --- Stage 6: evaluation ---
+if [ -f "${TUNNEL_OUT}/only_label.csv" ]; then
+    run_step "Step 6/6: Evaluation (${EVAL_SCHEMA})" \
+        "$PY" configurable/evaluation.py "$TUNNEL_ID" --schema "$EVAL_SCHEMA"
+else
+    echo "⚠️  Skipping evaluation: ${TUNNEL_OUT}/only_label.csv not found"
+    echo ""
+fi
+
+echo "=========================================="
+echo "🎉 Configurable pipeline finished for tunnel: ${TUNNEL_ID}"
+echo "=========================================="
+echo ""
+
+if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
+    echo "📦 Copying data/${TUNNEL_ID}/ → data/ablation/memory/${TUNNEL_ID}/"
+    mkdir -p "data/ablation/memory/${TUNNEL_ID}"
+    rsync -a "data/${TUNNEL_ID}/" "data/ablation/memory/${TUNNEL_ID}/"
+    echo "✅ Ablation memory copy complete"
+    echo ""
+fi
+
+echo "📁 Outputs:"
+echo "  - Parameters (read): ${CONFIG_DIR}/parameters_*.json"
+echo "  - Artefacts: ${TUNNEL_OUT}/"
+if [ -d "${TUNNEL_OUT}/evaluation" ]; then
+    echo "  - 6-class metrics: ${TUNNEL_OUT}/evaluation/"
+fi
+if [ -d "${TUNNEL_OUT}/evaluation_7" ]; then
+    echo "  - 7-class metrics: ${TUNNEL_OUT}/evaluation_7/"
+fi
+echo ""
