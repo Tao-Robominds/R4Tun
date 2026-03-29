@@ -5,7 +5,7 @@ This document is the **same user message** the memory-ablation stage analyst bui
 Regenerate after updating raw characteristics or `configurable/sample/parameters_*.json`:
 
 ```bash
-python3 configurable/ablation/memory/export_llm_parameter_context.py 1-4
+./venv/bin/python skills/scripts/export_llm_parameter_context.py 1-4
 ```
 
 ---

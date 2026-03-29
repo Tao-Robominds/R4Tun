@@ -1,0 +1,16 @@
+{
+  "upsampling_stage1_target_distance": 0.07956,
+  "upsampling_stage2_target_distance": 0.03978,
+  "upsampling_stage3_target_distance": 0.01989,
+  "curvature_threshold": 0.000497,
+  "depth_threshold_low": 0.002983,
+  "depth_threshold_high": 0.007956,
+  "inter_radius": 0.05967,
+  "duplicate_threshold": 0.01989,
+  "n_segment_start": 0,
+  "n_segment_end": 5,
+  "num_neighbors": 20,
+  "num_interpolations": 2,
+  "resolution": 0.005,
+  "window_size": 9
+}

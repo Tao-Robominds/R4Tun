@@ -105,31 +105,49 @@ def analyze_prompt_distribution_for_sam(detection_points_df: pd.DataFrame) -> Di
         tree = cKDTree(coords)
         
         # Nearest neighbor distances between prompts
-        distances, _ = tree.query(coords, k=min(3, valid_count))
-        nn_distances = distances[:, 1] if distances.shape[1] > 1 else np.array([0.1])
-        
-        # Template overlap analysis
-        # Standard SAM template size is roughly 1250x3240 pixels (from generate_template_mask)
-        template_spacing_adequacy = np.mean(nn_distances) / 1250  # Ratio to template width
-        
-        spacing_stats = {
-            'mean_prompt_spacing': float(np.mean(nn_distances)),
-            'median_prompt_spacing': float(np.median(nn_distances)),
-            'min_prompt_spacing': float(np.min(nn_distances)),
-            'max_prompt_spacing': float(np.max(nn_distances)),
-            'spacing_std': float(np.std(nn_distances)),
-            'template_spacing_ratio': float(template_spacing_adequacy),
-            'potential_template_overlap': float(np.sum(nn_distances < 1250) / len(nn_distances))
-        }
+        k_nn = min(3, valid_count)
+        distances, _ = tree.query(coords, k=k_nn)
+        if distances.ndim == 2 and distances.shape[1] > 1:
+            nn_distances = distances[:, 1]
+        else:
+            nn_distances = np.array([], dtype=float)
+
+        # Reference width (pixels) for ratio; from SAM template layout, not measured from lidar.
+        sam_template_width_px = 1250
+
+        if len(nn_distances) == 0:
+            spacing_stats = {
+                'prompt_spacing_undefined': True,
+                'mean_prompt_spacing': None,
+                'median_prompt_spacing': None,
+                'min_prompt_spacing': None,
+                'max_prompt_spacing': None,
+                'spacing_std': None,
+                'template_spacing_ratio': None,
+                'potential_template_overlap': None,
+            }
+        else:
+            template_spacing_adequacy = float(np.mean(nn_distances) / sam_template_width_px)
+            spacing_stats = {
+                'mean_prompt_spacing': float(np.mean(nn_distances)),
+                'median_prompt_spacing': float(np.median(nn_distances)),
+                'min_prompt_spacing': float(np.min(nn_distances)),
+                'max_prompt_spacing': float(np.max(nn_distances)),
+                'spacing_std': float(np.std(nn_distances)),
+                'template_spacing_ratio': template_spacing_adequacy,
+                'potential_template_overlap': float(np.sum(nn_distances < sam_template_width_px) / len(nn_distances)),
+                'sam_template_width_px_reference': sam_template_width_px,
+            }
     else:
         spacing_stats = {
-            'mean_prompt_spacing': 0.0,
-            'median_prompt_spacing': 0.0,
-            'min_prompt_spacing': 0.0,
-            'max_prompt_spacing': 0.0,
-            'spacing_std': 0.0,
-            'template_spacing_ratio': 0.0,
-            'potential_template_overlap': 0.0
+            'insufficient_detection_points_for_spacing': True,
+            'mean_prompt_spacing': None,
+            'median_prompt_spacing': None,
+            'min_prompt_spacing': None,
+            'max_prompt_spacing': None,
+            'spacing_std': None,
+            'template_spacing_ratio': None,
+            'potential_template_overlap': None,
         }
     
     # Coverage grid analysis for SAM template distribution

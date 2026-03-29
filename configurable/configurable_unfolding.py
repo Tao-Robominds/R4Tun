@@ -97,8 +97,7 @@ n_jobs = params["n_jobs"]
 
 print(f"Using parameters: delta={delta}, slice_spacing_factor={slice_spacing_factor}, vertical_filter_window={vertical_filter_window}, diameter={diameter}")
 _out_dir = tunnel_output_dir(tunnel_id)
-if pipeline_out_prefix() != "data":
-    print(f"Pipeline artefacts: {_out_dir} (R4TUN_PIPELINE_OUT_PREFIX={pipeline_out_prefix()!r})")
+print(f"Pipeline artefacts: {_out_dir} (R4TUN_PIPELINE_OUT_PREFIX={pipeline_out_prefix()!r})")
 _pc_path = resolve_tunnel_pointcloud_txt(tunnel_id)
 print(f"Input point cloud: {_pc_path}")
 point_cloud_data = np.loadtxt(_pc_path)

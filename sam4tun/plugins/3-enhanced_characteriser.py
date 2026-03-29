@@ -223,8 +223,9 @@ def analyze_segmentation_readiness(enhanced_df: pd.DataFrame, density_stats: Dic
         return {
             'overall_readiness_score': 0.0,
             'template_spacing_suitability': 0.0,
-            'optimal_template_spacing': 0.05,
-            'current_median_spacing': 1.0,
+            'reference_template_spacing_m': 0.05,
+            'reference_template_spacing_note': 'Pipeline default for SAM-style grid spacing; not measured from this tunnel.',
+            'current_median_spacing': None,
             'region_difficulty_assessment': {},
             'segmentation_complexity': {
                 'easy_regions': 0,
@@ -236,9 +237,11 @@ def analyze_segmentation_readiness(enhanced_df: pd.DataFrame, density_stats: Dic
     # Point distribution analysis for template matching
     median_spacing = density_stats['final_nn_distances']['median']
     
-    # Template matching suitability
-    optimal_template_spacing = 0.05  # Typical SAM template spacing
-    spacing_suitability = min(1.0, optimal_template_spacing / median_spacing) if median_spacing > 0 else 0.0
+    # Reference spacing for scoring only (pipeline default, not inferred from point cloud).
+    reference_template_spacing_m = 0.05
+    spacing_suitability = (
+        min(1.0, reference_template_spacing_m / median_spacing) if median_spacing > 0 else 0.0
+    )
     
     # Spatial uniformity analysis
     h_range = [valid_enhanced['h'].min(), valid_enhanced['h'].max()]
@@ -309,8 +312,9 @@ def analyze_segmentation_readiness(enhanced_df: pd.DataFrame, density_stats: Dic
     segmentation_stats = {
         'overall_readiness_score': float(readiness_score),
         'template_spacing_suitability': float(spacing_suitability),
-        'optimal_template_spacing': optimal_template_spacing,
-        'current_median_spacing': median_spacing,
+        'reference_template_spacing_m': float(reference_template_spacing_m),
+        'reference_template_spacing_note': 'Pipeline default for SAM-style grid spacing; not measured from this tunnel.',
+        'current_median_spacing': float(median_spacing),
         'region_difficulty_assessment': region_difficulty,
         'segmentation_complexity': {
             'easy_regions': len([r for r in region_difficulty.values() if r['difficulty_level'] == 'easy']),

@@ -1,4 +1,10 @@
-"""Memory ablation analysts: only ``raw_characteristics.json``; no CoT/knowledge files."""
+"""
+Helpers for **memory ablation analyst** prompts (not for ``run_agents.sh`` / configurable stages).
+
+Loads sample vs tunnel ``raw_characteristics.json``, loads per-stage **reference** ``parameters_*.json``
+from ``configurable/ablation/memory/parameters/<id>/`` or default ``configurable/sample/``, and builds
+strict JSON-output instructions (leaf path → type) so LLM inference matches on-disk parameter shape.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +20,7 @@ RAW_FILENAME = "raw_characteristics.json"
 
 def pipeline_tunnel_data_dir(tunnel_id: str) -> Path:
     """Same layout as configurable ``pipeline_data`` (memory ablation → data/ablation/memory/<id>)."""
-    pfx = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "data").strip().rstrip("/") or "data"
+    pfx = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "data/ablation/memory").strip().rstrip("/") or "data/ablation/memory"
     return Path(f"{pfx}/{tunnel_id}")
 
 

@@ -47,10 +47,9 @@ SEGMENT_SCHEMAS = {
 }
 
 
-def output_dir_for_schema(input_dir: str, segment_schema: int) -> str:
-    if segment_schema == 6:
-        return os.path.join(input_dir, "evaluation")
-    return os.path.join(input_dir, "evaluation_7")
+def evaluation_output_dir(input_dir: str) -> str:
+    """All semantic metrics live under ``evaluation/``; schema (6 vs 7) is in ``performance*.md``."""
+    return os.path.join(input_dir, "evaluation")
 
 
 def infer_segment_schema(gt_labels: np.ndarray, pred_labels: np.ndarray) -> int:
@@ -70,7 +69,7 @@ def parse_args():
         "--schema",
         choices=("auto", "6", "7", "both"),
         default="auto",
-        help="auto: GT max label >6 => 7-class; 6/7: force schema; both: write evaluation/ and evaluation_7/",
+        help="auto: GT max label >6 => 7-class; 6/7: force schema; both: write evaluation/ with performance_6.md and performance_7.md",
     )
     return p.parse_args()
 
@@ -324,11 +323,17 @@ def generate_example_data(class_names):
     return gt_labels, pred_labels
 
 
-def evaluate_csv_data(tunnel_id: str, input_dir: str, segment_schema: Optional[int]):
+def evaluate_csv_data(
+    tunnel_id: str,
+    input_dir: str,
+    segment_schema: Optional[int],
+    artifact_suffix: str = "",
+):
     """
     Evaluate using data/{tunnel_id}/only_label.csv.
 
-    segment_schema: 6, 7, or None (infer from max(gt_labels, pred_labels)).
+    segment_schema: 6, 7, or None (infer from GT).
+    artifact_suffix: e.g. \"_6\" / \"_7\" when --schema both (same evaluation/ dir).
     """
     data_path = os.path.join(input_dir, "only_label.csv")
     try:
@@ -397,7 +402,7 @@ def evaluate_csv_data(tunnel_id: str, input_dir: str, segment_schema: Optional[i
         if count > 0:
             print(f"  {name}: {count} ({percentage:.2f}%)")
 
-    output_dir = output_dir_for_schema(input_dir, segment_schema)
+    output_dir = evaluation_output_dir(input_dir)
     os.makedirs(output_dir, exist_ok=True)
 
     print("\nGenerating visualizations...")
@@ -405,16 +410,16 @@ def evaluate_csv_data(tunnel_id: str, input_dir: str, segment_schema: Optional[i
         results["IoU_per_class"],
         results["classes"],
         class_names,
-        os.path.join(output_dir, "iou_by_class.png"),
+        os.path.join(output_dir, f"iou_by_class{artifact_suffix}.png"),
     )
     class_distribution_plot(
         gt_labels,
         pred_labels,
         class_names,
-        os.path.join(output_dir, "class_distribution.png"),
+        os.path.join(output_dir, f"class_distribution{artifact_suffix}.png"),
     )
 
-    markdown_path = os.path.join(output_dir, "performance.md")
+    markdown_path = os.path.join(output_dir, f"performance{artifact_suffix}.md")
     with open(markdown_path, "w") as f:
         f.write(f"# Performance Metrics for Tunnel {tunnel_id}\n\n")
         f.write(f"- Segment schema: **{segment_schema}-class** ({cfg['label']})\n\n")
@@ -472,8 +477,8 @@ def main():
 
     if args.schema == "both":
         print("\nEvaluating semantic segmentation (6-class and 7-class)...")
-        evaluate_csv_data(tunnel_id, input_dir, 6)
-        evaluate_csv_data(tunnel_id, input_dir, 7)
+        evaluate_csv_data(tunnel_id, input_dir, 6, "_6")
+        evaluate_csv_data(tunnel_id, input_dir, 7, "_7")
     elif args.schema == "auto":
         print("\nEvaluating semantic segmentation (schema auto)...")
         evaluate_csv_data(tunnel_id, input_dir, None)

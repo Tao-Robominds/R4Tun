@@ -8,21 +8,21 @@
 #   configurable/<tunnel_id>/parameters_detecting.json
 #   configurable/<tunnel_id>/parameters_sam.json
 #
-# Usage: ./run_agents.sh <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation] [--save-ablation-memory] ...
+# Usage: ./run_agents.sh <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation|--sam4tun-ablation] [--save-ablation-memory] ...
+#   You must pass --memory-ablation or --sam4tun-ablation, or set R4TUN_PIPELINE_OUT_PREFIX in the environment.
 # Examples:
-#   ./run_agents.sh 1-4
-#   ./run_agents.sh 1-4 --schema 6
-#   ./run_agents.sh 1-4 --memory-ablation   # writes artefacts to data/ablation/memory/<id>/ (not data/<id>/)
-#   ./run_agents.sh 1-4 --save-ablation-memory   # rsync data/<id>/ → data/ablation/memory/<id>/ (after default run)
+#   ./run_agents.sh 1-4 --memory-ablation --schema auto
+#   ./run_agents.sh 1-4 --sam4tun-ablation --schema 6
+#   R4TUN_PIPELINE_OUT_PREFIX=data/ablation/custom ./run_agents.sh 1-4 --schema 6
+#   ./run_agents.sh 1-4 --sam4tun-ablation --save-ablation-memory   # rsync run tree → data/ablation/memory/<id>/
 # Extra words on the line are ignored unless they are a valid schema token or --schema <value>.
 
 if [ $# -eq 0 ]; then
     echo "❌ Error: tunnel_id is required"
-    echo "Usage: $0 <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation] [--save-ablation-memory]"
-    echo "Example: $0 1-4"
-    echo "Example: $0 1-4 --schema 6"
-    echo "Example: $0 1-4 --memory-ablation"
-    echo "Example: $0 1-4 --save-ablation-memory"
+    echo "Usage: $0 <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation|--sam4tun-ablation] [--save-ablation-memory]"
+    echo "Example: $0 1-4 --memory-ablation --schema auto"
+    echo "Example: $0 1-4 --sam4tun-ablation --schema 6"
+    echo "Example: R4TUN_PIPELINE_OUT_PREFIX=data/ablation/custom $0 1-4"
     exit 1
 fi
 
@@ -53,6 +53,7 @@ shift || exit 1
 EVAL_SCHEMA=6
 SAVE_ABLATION_MEMORY=0
 MEMORY_ABLATION=0
+SAM4TUN_ABLATION=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --schema)
@@ -65,6 +66,11 @@ while [ $# -gt 0 ]; do
         --memory-ablation)
             MEMORY_ABLATION=1
             export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/memory
+            shift
+            ;;
+        --sam4tun-ablation)
+            SAM4TUN_ABLATION=1
+            export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/sam4tun
             shift
             ;;
         --save-ablation-memory)
@@ -81,7 +87,17 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-PIPE_OUT="${R4TUN_PIPELINE_OUT_PREFIX:-data}"
+if [ "${MEMORY_ABLATION}" = 1 ] && [ "${SAM4TUN_ABLATION}" = 1 ]; then
+    echo "❌ Error: use only one of --memory-ablation or --sam4tun-ablation"
+    exit 1
+fi
+if [ "${MEMORY_ABLATION}" != 1 ] && [ "${SAM4TUN_ABLATION}" != 1 ] && [ -z "${R4TUN_PIPELINE_OUT_PREFIX:-}" ]; then
+    echo "❌ Error: specify output mode — pass --memory-ablation or --sam4tun-ablation,"
+    echo "   or export R4TUN_PIPELINE_OUT_PREFIX before running."
+    exit 1
+fi
+
+PIPE_OUT="${R4TUN_PIPELINE_OUT_PREFIX}"
 TUNNEL_OUT="${PIPE_OUT}/${TUNNEL_ID}"
 
 # Prefer the project venv interpreter so we never accidentally use system python3 without packages.
@@ -110,8 +126,14 @@ echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
 if [ "${MEMORY_ABLATION}" = 1 ]; then
     echo "🧠 Memory ablation: artefacts → ${TUNNEL_OUT}/"
 fi
+if [ "${SAM4TUN_ABLATION}" = 1 ]; then
+    echo "🔧 Sam4tun ablation: artefacts → ${TUNNEL_OUT}/"
+fi
+if [ "${MEMORY_ABLATION}" != 1 ] && [ "${SAM4TUN_ABLATION}" != 1 ] && [ -n "${R4TUN_PIPELINE_OUT_PREFIX:-}" ]; then
+    echo "📂 Custom R4TUN_PIPELINE_OUT_PREFIX: artefacts → ${TUNNEL_OUT}/"
+fi
 if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
-    echo "📦 After success: rsync data/${TUNNEL_ID}/ → data/ablation/memory/${TUNNEL_ID}/"
+    echo "📦 After success: rsync ${TUNNEL_OUT}/ → data/ablation/memory/${TUNNEL_ID}/"
 fi
 echo "=========================================="
 echo ""
@@ -199,9 +221,9 @@ echo "=========================================="
 echo ""
 
 if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
-    echo "📦 Copying data/${TUNNEL_ID}/ → data/ablation/memory/${TUNNEL_ID}/"
+    echo "📦 Copying ${TUNNEL_OUT}/ → data/ablation/memory/${TUNNEL_ID}/"
     mkdir -p "data/ablation/memory/${TUNNEL_ID}"
-    rsync -a "data/${TUNNEL_ID}/" "data/ablation/memory/${TUNNEL_ID}/"
+    rsync -a "${TUNNEL_OUT}/" "data/ablation/memory/${TUNNEL_ID}/"
     echo "✅ Ablation memory copy complete"
     echo ""
 fi
@@ -210,9 +232,6 @@ echo "📁 Outputs:"
 echo "  - Parameters (read): ${CONFIG_DIR}/parameters_*.json"
 echo "  - Artefacts: ${TUNNEL_OUT}/"
 if [ -d "${TUNNEL_OUT}/evaluation" ]; then
-    echo "  - 6-class metrics: ${TUNNEL_OUT}/evaluation/"
-fi
-if [ -d "${TUNNEL_OUT}/evaluation_7" ]; then
-    echo "  - 7-class metrics: ${TUNNEL_OUT}/evaluation_7/"
+    echo "  - Segmentation metrics: ${TUNNEL_OUT}/evaluation/ (performance.md; with --schema both also performance_6.md and performance_7.md)"
 fi
 echo ""

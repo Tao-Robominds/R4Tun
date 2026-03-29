@@ -5,9 +5,9 @@ Raw point cloud: prefer ``data/subsets/<tunnel_id>.txt`` (no copy/symlink under
 ``data/<tunnel_id>.txt`` required). If missing, falls back to ``data/<tunnel_id>.txt``
 (e.g. ``data/sample.txt`` for tunnel_id ``sample``).
 
-Default outputs: data/<tunnel_id>/
-Memory ablation: export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/memory
-  → data/ablation/memory/<tunnel_id>/ (see run_agents.sh --memory-ablation)
+Outputs live under ``{R4TUN_PIPELINE_OUT_PREFIX}/{tunnel_id}/``. The variable must be set explicitly
+(e.g. ``./run_agents.sh <id> --memory-ablation`` or ``--sam4tun-ablation``); there is no silent
+fallback to ``data/<tunnel_id>/``.
 """
 
 from __future__ import annotations
@@ -40,8 +40,15 @@ def resolve_tunnel_pointcloud_txt(tunnel_id: str) -> str:
 
 
 def pipeline_out_prefix() -> str:
-    p = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "data").strip().rstrip("/")
-    return p or "data"
+    p = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "").strip().rstrip("/")
+    if not p:
+        raise RuntimeError(
+            "R4TUN_PIPELINE_OUT_PREFIX is not set. "
+            "Use ./run_agents.sh <tunnel_id> --memory-ablation or --sam4tun-ablation, "
+            "or export R4TUN_PIPELINE_OUT_PREFIX (e.g. data/ablation/memory) before running "
+            "configurable stages or characteriser plugins."
+        )
+    return p
 
 
 def tunnel_output_relpath(tunnel_id: str) -> str:

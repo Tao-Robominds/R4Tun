@@ -71,16 +71,22 @@ def analyze_point_density(df: pd.DataFrame) -> Dict:
     """A. Point Density Analysis"""
     
     valid_points = df[df['pred'] == 7] if 'pred' in df.columns else df
-    
-    if len(valid_points) < 100:
+
+    def _empty_nn_stats(reason: str):
         return {
-            'mean_nn_distance': 0.1,
-            'median_nn_distance': 0.1,
-            'std_nn_distance': 0.05,
-            'percentiles': {'25th': 0.08, '75th': 0.12, '95th': 0.15}
+            "insufficient_points_for_nn_stats": True,
+            "insufficient_points_reason": reason,
+            "n_valid_points": int(len(valid_points)),
+            "mean_nn_distance": None,
+            "median_nn_distance": None,
+            "std_nn_distance": None,
+            "percentiles": {"25th": None, "75th": None, "95th": None},
         }
-    
-    # Sample for efficiency if dataset is large
+
+    if len(valid_points) < 2:
+        return _empty_nn_stats("need_at_least_2_points_for_nearest_neighbor")
+
+    # Sample for efficiency if dataset is large (always real KDTree stats, never placeholder floats)
     sample_size = min(10000, len(valid_points))
     if len(valid_points) > sample_size:
         sample_indices = np.random.choice(len(valid_points), sample_size, replace=False)

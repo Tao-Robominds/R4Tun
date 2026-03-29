@@ -37,7 +37,17 @@ ABLATION_SUFFIX_TO_OUTPUT_ROOT = {
 
 
 def tunnel_pipeline_dir(tunnel_id: str) -> str:
-    return os.path.join("data", tunnel_id)
+    """
+    Same artefact root as ``configurable.pipeline_data.tunnel_output_relpath`` (must match
+    ``R4TUN_PIPELINE_OUT_PREFIX``). No default under ``data/<id>/`` without the env var.
+    """
+    p = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "").strip().rstrip("/")
+    if not p:
+        raise RuntimeError(
+            "R4TUN_PIPELINE_OUT_PREFIX is not set. "
+            "Export it to match your E2E run (e.g. data/ablation/memory for memory ablation)."
+        )
+    return os.path.join(p, tunnel_id)
 
 
 def ablation_run_data_dir(tunnel_id: str, output_root_name: str) -> str:
