@@ -3,8 +3,9 @@ Layout convention — see ``methods/plans/steps/00_methodology_chain.md``.
 
 - Pipeline CSVs (default active run): ``data/{tunnel_id}/...``
 - Reference sample JSON: ``data/sample/characteristics/``
-- Raw / pre-pipeline subset JSON: ``data/ablation/{ABLATION_TUNNEL_SUBROOT}/{tunnel_id}/characteristics/``
-  (``ABLATION_TUNNEL_SUBROOT`` must stay ``memory`` to match **level 1** / ``-m`` output root.)
+- Raw / pre-pipeline subset JSON: ``data/ablation/{subroot}/{tunnel_id}/characteristics/``
+  Default subroot is ``ABLATION_TUNNEL_SUBROOT`` (``memory`` for level 1 / ``-m``). Override with env
+  ``R4TUN_ABLATION_TUNNEL_SUBROOT`` (e.g. ``memory+state``) when writing raw JSON for another ablation tree.
 
 **Ablation full-run roots** (each ``{tunnel_id}/`` tree mirrors ``data/sample/``):
 
@@ -55,13 +56,22 @@ def ablation_run_data_dir(tunnel_id: str, output_root_name: str) -> str:
     return os.path.join("data", "ablation", output_root_name, tunnel_id)
 
 
+def tunnel_characteristics_subroot() -> str:
+    """Folder under ``data/ablation/`` for per-tunnel ``characteristics/`` (default ``memory``)."""
+    override = (os.environ.get("R4TUN_ABLATION_TUNNEL_SUBROOT") or "").strip()
+    if override:
+        return override
+    return ABLATION_TUNNEL_SUBROOT
+
+
 def tunnel_characteristics_parent_dir(tunnel_id: str) -> str:
     """Parent directory that contains the ``characteristics`` subfolder (plugin writers pass this as base_dir)."""
     if tunnel_id == "sample":
         return os.path.join("data", "sample")
     parts = ["data", "ablation"]
-    if ABLATION_TUNNEL_SUBROOT:
-        parts.append(ABLATION_TUNNEL_SUBROOT)
+    subroot = tunnel_characteristics_subroot()
+    if subroot:
+        parts.append(subroot)
     parts.append(tunnel_id)
     return os.path.join(*parts)
 

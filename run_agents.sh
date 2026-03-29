@@ -226,14 +226,34 @@ fi
 echo "✅ All parameter files verified."
 echo ""
 
+# Count tunnels for [current/total] progress (works for any whitespace-separated list)
+TUNNEL_TOTAL=0
+for _ in $TUNNEL_IDS; do
+    TUNNEL_TOTAL=$((TUNNEL_TOTAL + 1))
+done
+TUNNEL_CURRENT=0
+
+extract_miou_from_perf_md() {
+    local f=$1
+    if [ -f "$f" ]; then
+        grep -m1 'Mean IoU (mIoU):' "$f" 2>/dev/null | sed -E 's/.*: *//' | tr -d '\r' || true
+    fi
+}
+
 # --- Run pipeline for each tunnel ---
 for TID in $TUNNEL_IDS; do
+    TUNNEL_CURRENT=$((TUNNEL_CURRENT + 1))
+    TUNNEL_T0=$(date +%s)
     TUNNEL_OUT="${R4TUN_PIPELINE_OUT_PREFIX}/${TID}"
 
     echo ""
     echo "=========================================="
-    echo "🚀 Pipeline — tunnel: ${TID}, ablation: ${ABLATION}, model: ${MODEL}"
-    echo "📂 Parameters: configurable/ablation/.../${TID}/"
+    echo "🚀 [${TUNNEL_CURRENT}/${TUNNEL_TOTAL}] Pipeline — tunnel: ${TID}, ablation: ${ABLATION}, model: ${MODEL}"
+    if [ "$ABLATION" = "sam4tun" ]; then
+        echo "📂 Parameters: configurable/ablation/sam4tun/parameters_*.json (shared, all tunnels)"
+    else
+        echo "📂 Parameters: configurable/ablation/.../${TID}/"
+    fi
     echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
     echo "📁 Output: ${TUNNEL_OUT}/"
     echo "=========================================="
@@ -279,8 +299,19 @@ for TID in $TUNNEL_IDS; do
         echo ""
     fi
 
+    TUNNEL_T1=$(date +%s)
+    TUNNEL_SEC=$((TUNNEL_T1 - TUNNEL_T0))
+    MIOU_VAL=""
+    MIOU_VAL=$(extract_miou_from_perf_md "${TUNNEL_OUT}/evaluation/performance.md")
+    if [ -z "$MIOU_VAL" ]; then
+        MIOU_VAL=$(extract_miou_from_perf_md "${TUNNEL_OUT}/evaluation_7/performance.md")
+    fi
+    if [ -z "$MIOU_VAL" ]; then
+        MIOU_VAL="n/a"
+    fi
+
     echo "=========================================="
-    echo "🎉 Pipeline finished for tunnel: ${TID} (ablation: ${ABLATION})"
+    echo "🎉 [${TUNNEL_CURRENT}/${TUNNEL_TOTAL}] Pipeline finished — tunnel: ${TID} (ablation: ${ABLATION}) — wall ${TUNNEL_SEC}s — mIoU: ${MIOU_VAL}"
     echo "=========================================="
     echo ""
 done
