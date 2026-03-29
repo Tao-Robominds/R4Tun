@@ -8,7 +8,7 @@
   "inter_radius": 0.057411,
   "duplicate_threshold": 0.019137,
   "n_segment_start": 0,
-  "n_segment_end": 5,
+  "n_segment_end": 6,
   "num_neighbors": 20,
   "num_interpolations": 2,
   "resolution": 0.005,
