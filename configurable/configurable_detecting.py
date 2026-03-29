@@ -14,40 +14,10 @@ import json
 _cfg = os.path.dirname(os.path.abspath(__file__))
 if _cfg not in sys.path:
     sys.path.insert(0, _cfg)
-from pipeline_data import resolve_output_base_dir
+from pipeline_data import parse_pipeline_args, load_stage_parameters, resolve_output_base_dir
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python configurable_detecting.py <tunnel_id>")
-    print("Example: python configurable_detecting.py 1-4")
-    sys.exit(1)
-
-tunnel_id = sys.argv[1]
-
-# Load parameters
-def load_parameters(tunnel_id):
-    """Load parameters from configurable directory where analyst saves parameters"""
-    
-    # Determine script directory to handle both project root and configurable execution
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    param_file = os.path.join(script_dir, tunnel_id, 'parameters_detecting.json')
-    
-    if os.path.exists(param_file):
-        try:
-            with open(param_file, 'r') as f:
-                params = json.load(f)
-            print(f"✅ Loaded parameters from configurable/{tunnel_id}/parameters_detecting.json")
-            return params
-        except Exception as e:
-            print(f"❌ Error loading parameters: {e}")
-            sys.exit(1)
-    else:
-        print(f"❌ Error: Parameter file not found at configurable/{tunnel_id}/parameters_detecting.json")
-        print("Please run the analyst to generate parameters first.")
-        sys.exit(1)
-
-# Load configuration
-params = load_parameters(tunnel_id)
+tunnel_id, ablation, model = parse_pipeline_args("detecting")
+params = load_stage_parameters(tunnel_id, "detecting", ablation, model)
 binary_threshold = params["binary_threshold"]
 morphological_kernel_size = params["morphological_kernel_size"]
 dilation_iterations = params["dilation_iterations"]

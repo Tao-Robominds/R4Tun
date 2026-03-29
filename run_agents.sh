@@ -1,28 +1,26 @@
 #!/bin/bash
 
-# End-to-end configurable pipeline (sam4tun stages driven by JSON under configurable/<tunnel_id>/).
-# Each step loads its own parameters from:
-#   configurable/<tunnel_id>/parameters_unfolding.json
-#   configurable/<tunnel_id>/parameters_denoising.json
-#   configurable/<tunnel_id>/parameters_enhancing.json
-#   configurable/<tunnel_id>/parameters_detecting.json
-#   configurable/<tunnel_id>/parameters_sam.json
+# End-to-end configurable pipeline with ablation support.
+# Parameters are loaded directly from configurable/ablation/{condition}/ — no sync step.
 #
-# Usage: ./run_agents.sh <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation|--sam4tun-ablation] [--save-ablation-memory] ...
-#   You must pass --memory-ablation or --sam4tun-ablation, or set R4TUN_PIPELINE_OUT_PREFIX in the environment.
+# Usage:
+#   ./run_agents.sh <tunnel_id> --ablation <code> [--model <tag>] [--schema 6|7|auto|both]
+#   ./run_agents.sh --all --ablation <code> [--model <tag>] [--schema 6|7|auto|both]
+#
+# Ablation codes: sam4tun, m, m_s, m_s_k, r
+# Model tag: LLM model suffix for parameter filenames (default: opus4.6)
+#
 # Examples:
-#   ./run_agents.sh 1-4 --memory-ablation --schema auto
-#   ./run_agents.sh 1-4 --sam4tun-ablation --schema 6
-#   R4TUN_PIPELINE_OUT_PREFIX=data/ablation/custom ./run_agents.sh 1-4 --schema 6
-#   ./run_agents.sh 1-4 --sam4tun-ablation --save-ablation-memory   # rsync run tree → data/ablation/memory/<id>/
-# Extra words on the line are ignored unless they are a valid schema token or --schema <value>.
+#   ./run_agents.sh 1-1 --ablation m --schema auto
+#   ./run_agents.sh 1-1 --ablation m --model gemini2.5 --schema auto
+#   ./run_agents.sh --all --ablation m --schema auto
+
+set -euo pipefail
 
 if [ $# -eq 0 ]; then
-    echo "❌ Error: tunnel_id is required"
-    echo "Usage: $0 <tunnel_id> [--schema 6|7|auto|both] [--memory-ablation|--sam4tun-ablation] [--save-ablation-memory]"
-    echo "Example: $0 1-4 --memory-ablation --schema auto"
-    echo "Example: $0 1-4 --sam4tun-ablation --schema 6"
-    echo "Example: R4TUN_PIPELINE_OUT_PREFIX=data/ablation/custom $0 1-4"
+    echo "❌ Error: arguments required"
+    echo "Usage: $0 <tunnel_id|--all> --ablation <code> [--schema 6|7|auto|both]"
+    echo "Ablation codes: sam4tun, m, m_s, m_s_k, r"
     exit 1
 fi
 
@@ -47,60 +45,108 @@ pipeline_print_runtime() {
 }
 trap pipeline_print_runtime EXIT
 
-TUNNEL_ID=$1
-shift || exit 1
+# --- Parse arguments ---
+TUNNEL_ID=""
+ABLATION=""
+MODEL="opus4.6"
+EVAL_SCHEMA="auto"
+RUN_ALL=0
 
-EVAL_SCHEMA=6
-SAVE_ABLATION_MEMORY=0
-MEMORY_ABLATION=0
-SAM4TUN_ABLATION=0
 while [ $# -gt 0 ]; do
     case "$1" in
-        --schema)
+        --all)
+            RUN_ALL=1
             shift
-            if [ -n "${1:-}" ]; then
-                EVAL_SCHEMA="$1"
-            fi
+            ;;
+        --ablation|-a)
+            shift
+            ABLATION="${1:-}"
             shift || true
             ;;
-        --memory-ablation)
-            MEMORY_ABLATION=1
-            export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/memory
+        --model)
             shift
+            MODEL="${1:-opus4.6}"
+            shift || true
             ;;
-        --sam4tun-ablation)
-            SAM4TUN_ABLATION=1
-            export R4TUN_PIPELINE_OUT_PREFIX=data/ablation/sam4tun
+        --schema)
             shift
-            ;;
-        --save-ablation-memory)
-            SAVE_ABLATION_MEMORY=1
-            shift
+            EVAL_SCHEMA="${1:-auto}"
+            shift || true
             ;;
         6|7|auto|both)
             EVAL_SCHEMA="$1"
             shift
             ;;
+        -*)
+            echo "❌ Unknown flag: $1"
+            exit 1
+            ;;
         *)
+            if [ -z "$TUNNEL_ID" ]; then
+                TUNNEL_ID="$1"
+            fi
             shift
             ;;
     esac
 done
 
-if [ "${MEMORY_ABLATION}" = 1 ] && [ "${SAM4TUN_ABLATION}" = 1 ]; then
-    echo "❌ Error: use only one of --memory-ablation or --sam4tun-ablation"
-    exit 1
-fi
-if [ "${MEMORY_ABLATION}" != 1 ] && [ "${SAM4TUN_ABLATION}" != 1 ] && [ -z "${R4TUN_PIPELINE_OUT_PREFIX:-}" ]; then
-    echo "❌ Error: specify output mode — pass --memory-ablation or --sam4tun-ablation,"
-    echo "   or export R4TUN_PIPELINE_OUT_PREFIX before running."
+if [ -z "$ABLATION" ]; then
+    echo "❌ Error: --ablation <code> is required"
+    echo "Ablation codes: sam4tun, m, m_s, m_s_k, r"
     exit 1
 fi
 
-PIPE_OUT="${R4TUN_PIPELINE_OUT_PREFIX}"
-TUNNEL_OUT="${PIPE_OUT}/${TUNNEL_ID}"
+# Validate ablation code
+case "$ABLATION" in
+    sam4tun|m|m_s|m_s_k|r) ;;
+    *)
+        echo "❌ Unknown ablation code: $ABLATION"
+        echo "Valid codes: sam4tun, m, m_s, m_s_k, r"
+        exit 1
+        ;;
+esac
 
-# Prefer the project venv interpreter so we never accidentally use system python3 without packages.
+# Map ablation code → output prefix
+declare -A ABLATION_PREFIX=(
+    [sam4tun]="data/ablation/sam4tun"
+    [m]="data/ablation/memory"
+    [m_s]="data/ablation/memory+state"
+    [m_s_k]="data/ablation/memory+state+knowledge"
+    [r]="data/ablation/reflection"
+)
+export R4TUN_PIPELINE_OUT_PREFIX="${ABLATION_PREFIX[$ABLATION]}"
+
+# --- Resolve tunnel list ---
+if [ "$RUN_ALL" = 1 ]; then
+    if [ "$ABLATION" = "sam4tun" ]; then
+        TUNNEL_IDS=$(ls data/subsets/*.txt 2>/dev/null | xargs -I{} basename {} .txt | sort)
+    else
+        declare -A ABLATION_FOLDER=(
+            [m]="memory"
+            [m_s]="memory+state"
+            [m_s_k]="memory+state+knowledge"
+            [r]="reflection"
+        )
+        PARAM_DIR="configurable/ablation/${ABLATION_FOLDER[$ABLATION]}/parameters"
+        if [ ! -d "$PARAM_DIR" ]; then
+            echo "❌ No parameters directory: $PARAM_DIR"
+            exit 1
+        fi
+        TUNNEL_IDS=$(ls "$PARAM_DIR" 2>/dev/null | sort)
+    fi
+    if [ -z "$TUNNEL_IDS" ]; then
+        echo "❌ No tunnels found for --all with ablation=$ABLATION"
+        exit 1
+    fi
+    echo "🔍 Discovered tunnels: $(echo $TUNNEL_IDS | tr '\n' ' ')"
+elif [ -n "$TUNNEL_ID" ]; then
+    TUNNEL_IDS="$TUNNEL_ID"
+else
+    echo "❌ Error: provide <tunnel_id> or --all"
+    exit 1
+fi
+
+# --- Python interpreter ---
 if [ -n "${PYTHON:-}" ] && [ -x "${PYTHON}" ]; then
     PY="${PYTHON}"
 elif [ -x "${SCRIPT_DIR}/venv/bin/python3" ]; then
@@ -115,56 +161,12 @@ if [ -d "venv" ]; then
     # shellcheck source=/dev/null
     source venv/bin/activate
 fi
-CONFIG_DIR="configurable/${TUNNEL_ID}"
-
-echo "=========================================="
-echo "⏱ Pipeline started: ${PIPELINE_T0_ISO}"
-echo "🚀 Configurable pipeline — tunnel: ${TUNNEL_ID}"
-echo "📂 Parameters: ${CONFIG_DIR}/parameters_*.json"
-echo "🐍 Python: ${PY} ($("${PY}" --version 2>&1))"
-echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
-if [ "${MEMORY_ABLATION}" = 1 ]; then
-    echo "🧠 Memory ablation: artefacts → ${TUNNEL_OUT}/"
-fi
-if [ "${SAM4TUN_ABLATION}" = 1 ]; then
-    echo "🔧 Sam4tun ablation: artefacts → ${TUNNEL_OUT}/"
-fi
-if [ "${MEMORY_ABLATION}" != 1 ] && [ "${SAM4TUN_ABLATION}" != 1 ] && [ -n "${R4TUN_PIPELINE_OUT_PREFIX:-}" ]; then
-    echo "📂 Custom R4TUN_PIPELINE_OUT_PREFIX: artefacts → ${TUNNEL_OUT}/"
-fi
-if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
-    echo "📦 After success: rsync ${TUNNEL_OUT}/ → data/ablation/memory/${TUNNEL_ID}/"
-fi
-echo "=========================================="
-echo ""
 
 if ! "${PY}" -c "import numpy" 2>/dev/null; then
-    echo "❌ Error: numpy (and likely other deps) missing in this environment."
+    echo "❌ Error: numpy (and likely other deps) missing."
     echo "   Fix: ${PY} -m pip install -r requirements.txt"
-    echo "   (Use the venv’s python: ./venv/bin/python3 -m pip install -r requirements.txt)"
     exit 1
 fi
-
-# --- Preconditions (raw cloud: subsets first; optional data/<id>.txt e.g. sample) ---
-if [ ! -f "data/subsets/${TUNNEL_ID}.txt" ] && [ ! -f "data/${TUNNEL_ID}.txt" ]; then
-    echo "❌ Error: no point cloud for ${TUNNEL_ID}"
-    echo "   Use data/subsets/${TUNNEL_ID}.txt (preferred) or data/${TUNNEL_ID}.txt"
-    exit 1
-fi
-
-if [ ! -d "$CONFIG_DIR" ]; then
-    echo "❌ Error: ${CONFIG_DIR}/ not found"
-    exit 1
-fi
-
-for f in parameters_unfolding.json parameters_denoising.json parameters_enhancing.json parameters_detecting.json parameters_sam.json; do
-    if [ ! -f "${CONFIG_DIR}/${f}" ]; then
-        echo "❌ Error: missing ${CONFIG_DIR}/${f}"
-        exit 1
-    fi
-done
-
-mkdir -p "${TUNNEL_OUT}/analysis"
 
 run_step() {
     local name=$1
@@ -181,57 +183,104 @@ run_step() {
     echo ""
 }
 
-# --- Stages 1–5: configurable/*.py ---
-run_step "Step 1/6: Unfolding" "$PY" configurable/configurable_unfolding.py "$TUNNEL_ID"
-run_step "Step 2/6: Denoising" "$PY" configurable/configurable_denoising.py "$TUNNEL_ID"
-run_step "Step 3/6: Enhancing" "$PY" configurable/configurable_enhancing.py "$TUNNEL_ID"
-run_step "Step 4/6: Detecting" "$PY" configurable/configurable_detecting.py "$TUNNEL_ID"
+# --- Preflight: verify all parameter JSONs exist for every tunnel ---
+preflight_check() {
+    local tid=$1
+    local code=$2
+    local mdl=$3
+    "$PY" -c "
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath('.')), 'configurable'))
+sys.path.insert(0, 'configurable')
+from pipeline_data import resolve_ablation_param_file
+stages = ['unfolding', 'denoising', 'enhancing', 'detecting', 'sam']
+missing = []
+for s in stages:
+    p = resolve_ablation_param_file('${tid}', s, '${code}', '${mdl}')
+    if not os.path.isfile(p):
+        missing.append(p)
+if missing:
+    for m in missing:
+        print(m)
+    sys.exit(1)
+" 2>&1
+}
 
-# Optional: free GPU before SAM (same idea as run_pipeline.sh)
-echo "=========================================="
-echo "🖥️  GPU cleanup before SAM (best effort)"
-echo "=========================================="
-GPU_PIDS=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null | grep -v "^$" || true)
-if [ -n "$GPU_PIDS" ]; then
-    for pid in $GPU_PIDS; do
-        if ps -p "$pid" -o comm= 2>/dev/null | grep -qi python; then
-            echo "Killing Python GPU pid $pid ..."
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-    done
-    sleep 2
-fi
-"$PY" -c "import torch; torch.cuda.empty_cache()" 2>/dev/null || true
 echo ""
-
-run_step "Step 5/6: SAM (configurable_sam)" "$PY" configurable/configurable_sam.py "$TUNNEL_ID"
-
-# --- Stage 6: evaluation ---
-if [ -f "${TUNNEL_OUT}/only_label.csv" ]; then
-    run_step "Step 6/6: Evaluation (${EVAL_SCHEMA})" \
-        "$PY" configurable/evaluation.py "$TUNNEL_ID" --schema "$EVAL_SCHEMA"
-else
-    echo "⚠️  Skipping evaluation: ${TUNNEL_OUT}/only_label.csv not found"
+echo "=========================================="
+echo "🔎 Preflight: checking parameter files..."
+echo "=========================================="
+PREFLIGHT_OK=1
+for TID in $TUNNEL_IDS; do
+    MISSING=$(preflight_check "$TID" "$ABLATION" "$MODEL" 2>&1) || {
+        echo "❌ Missing parameter files for tunnel ${TID}:"
+        echo "$MISSING" | while read -r line; do echo "   $line"; done
+        PREFLIGHT_OK=0
+    }
+done
+if [ "$PREFLIGHT_OK" = 0 ]; then
     echo ""
+    echo "❌ Preflight failed — fix missing parameter files before running."
+    exit 1
 fi
-
-echo "=========================================="
-echo "🎉 Configurable pipeline finished for tunnel: ${TUNNEL_ID}"
-echo "=========================================="
+echo "✅ All parameter files verified."
 echo ""
 
-if [ "${SAVE_ABLATION_MEMORY}" = 1 ] && [ "${MEMORY_ABLATION}" != 1 ]; then
-    echo "📦 Copying ${TUNNEL_OUT}/ → data/ablation/memory/${TUNNEL_ID}/"
-    mkdir -p "data/ablation/memory/${TUNNEL_ID}"
-    rsync -a "${TUNNEL_OUT}/" "data/ablation/memory/${TUNNEL_ID}/"
-    echo "✅ Ablation memory copy complete"
+# --- Run pipeline for each tunnel ---
+for TID in $TUNNEL_IDS; do
+    TUNNEL_OUT="${R4TUN_PIPELINE_OUT_PREFIX}/${TID}"
+
     echo ""
-fi
+    echo "=========================================="
+    echo "🚀 Pipeline — tunnel: ${TID}, ablation: ${ABLATION}, model: ${MODEL}"
+    echo "📂 Parameters: configurable/ablation/.../${TID}/"
+    echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
+    echo "📁 Output: ${TUNNEL_OUT}/"
+    echo "=========================================="
+    echo ""
 
-echo "📁 Outputs:"
-echo "  - Parameters (read): ${CONFIG_DIR}/parameters_*.json"
-echo "  - Artefacts: ${TUNNEL_OUT}/"
-if [ -d "${TUNNEL_OUT}/evaluation" ]; then
-    echo "  - Segmentation metrics: ${TUNNEL_OUT}/evaluation/ (performance.md; with --schema both also performance_6.md and performance_7.md)"
-fi
-echo ""
+    # Precondition: raw point cloud exists
+    if [ ! -f "data/subsets/${TID}.txt" ] && [ ! -f "data/${TID}.txt" ]; then
+        echo "❌ Error: no point cloud for ${TID}"
+        exit 1
+    fi
+
+    mkdir -p "${TUNNEL_OUT}"
+
+    run_step "Step 1/6: Unfolding (${TID})"  "$PY" configurable/configurable_unfolding.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 2/6: Denoising (${TID})"  "$PY" configurable/configurable_denoising.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 3/6: Enhancing (${TID})"  "$PY" configurable/configurable_enhancing.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 4/6: Detecting (${TID})"  "$PY" configurable/configurable_detecting.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+
+    # GPU cleanup before SAM
+    echo "=========================================="
+    echo "🖥️  GPU cleanup before SAM (best effort)"
+    echo "=========================================="
+    GPU_PIDS=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null | grep -v "^$" || true)
+    if [ -n "$GPU_PIDS" ]; then
+        for pid in $GPU_PIDS; do
+            if ps -p "$pid" -o comm= 2>/dev/null | grep -qi python; then
+                echo "Killing Python GPU pid $pid ..."
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+        done
+        sleep 2
+    fi
+    "$PY" -c "import torch; torch.cuda.empty_cache()" 2>/dev/null || true
+    echo ""
+
+    run_step "Step 5/6: SAM (${TID})" "$PY" configurable/configurable_sam.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+
+    if [ -f "${TUNNEL_OUT}/only_label.csv" ]; then
+        run_step "Step 6/6: Evaluation (${TID})" \
+            "$PY" configurable/evaluation.py "$TID" --ablation "$ABLATION" --schema "$EVAL_SCHEMA"
+    else
+        echo "⚠️  Skipping evaluation: ${TUNNEL_OUT}/only_label.csv not found"
+        echo ""
+    fi
+
+    echo "=========================================="
+    echo "🎉 Pipeline finished for tunnel: ${TID} (ablation: ${ABLATION})"
+    echo "=========================================="
+    echo ""
+done

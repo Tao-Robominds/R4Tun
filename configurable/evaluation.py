@@ -6,7 +6,7 @@ from typing import Optional
 _cfg = os.path.dirname(os.path.abspath(__file__))
 if _cfg not in sys.path:
     sys.path.insert(0, _cfg)
-from pipeline_data import tunnel_output_dir
+from pipeline_data import tunnel_output_dir, ABLATION_CONDITIONS, ABLATION_CODES
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,6 +69,12 @@ def parse_args():
         description="Segmentation evaluation from only_label.csv (6- or 7-class schema)."
     )
     p.add_argument("tunnel_id", help="Tunnel id, e.g. 4-1")
+    p.add_argument(
+        "--ablation", "-a",
+        required=True,
+        choices=ABLATION_CODES,
+        help=f"Ablation condition code: {', '.join(ABLATION_CODES)}",
+    )
     p.add_argument(
         "--schema",
         choices=("auto", "6", "7", "both"),
@@ -479,6 +485,10 @@ def evaluate_instance_segmentation(tunnel_id: str, input_dir: str):
 def main():
     args = parse_args()
     tunnel_id = args.tunnel_id
+
+    cond = ABLATION_CONDITIONS[args.ablation]
+    os.environ["R4TUN_PIPELINE_OUT_PREFIX"] = cond["out_prefix"]
+
     input_dir = tunnel_output_dir(tunnel_id).rstrip("/")
 
     print(f"Starting evaluation for tunnel: {tunnel_id}")
