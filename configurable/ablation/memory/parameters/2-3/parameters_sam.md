@@ -1,11 +1,11 @@
-# Memory-ablation LLM context — tunnel `1-4`
+# Memory-ablation LLM context — tunnel `2-3`
 
 This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
 
 Regenerate after updating raw characteristics or the tunnel archive under `configurable/ablation/memory/parameters/<tunnel_id>/` (else falls back to `configurable/sample/`):
 
 ```bash
-./venv/bin/python skills/scripts/export_llm_parameter_context.py 1-4
+./venv/bin/python skills/scripts/export_llm_parameter_context.py 2-3
 ```
 
 ---
@@ -78,51 +78,51 @@ You are a tuning expert for a Segment Anything Model (SAM) based segmentation pi
 }
 ```
 
-# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-4)
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=2-3)
 ```json
 {
-  "tunnel_id": "1-4",
-  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-4.txt",
+  "tunnel_id": "2-3",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/2-3.txt",
   "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
   "point_cloud_analysis": {
     "basic_statistics": {
-      "total_points": 2005884,
+      "total_points": 2049003,
       "data_structure": {
         "columns": 4,
         "description": "x, y, z, intensity"
       },
       "coordinate_ranges": {
         "x_range": [
-          -7.95727491,
-          10.46459961
+          -14.46166992,
+          13.53979492
         ],
         "y_range": [
-          -18.13891602,
-          14.94262695
+          -7.10864305,
+          6.6340332
         ],
         "z_range": [
-          -2.10131788,
-          3.68139601
+          -2.53198195,
+          3.51098609
         ],
         "intensity_range": [
-          -1727.0,
-          1963.0
+          -1729.0,
+          1989.0
         ]
       }
     },
     "tunnel_geometry": {
       "dimensions": {
-        "length_x_axis": 33.96925873485917,
-        "width_y_axis": 5.99651330872443,
-        "height_z_axis": 5.78271389,
+        "length_x_axis": 27.741097592932118,
+        "width_y_axis": 5.64122858327027,
+        "height_z_axis": 6.04296804,
         "units": "meters"
       },
-      "estimated_diameter": 5.99651330872443,
+      "estimated_diameter": 5.64122858327027,
       "diameter_estimation": {
-        "inner_diameter": 5.99651330872443,
-        "outer_diameter": 5.99651330872443,
-        "average_diameter": 5.99651330872443,
-        "median_diameter": 5.99651330872443,
+        "inner_diameter": 5.64122858327027,
+        "outer_diameter": 5.64122858327027,
+        "average_diameter": 5.64122858327027,
+        "median_diameter": 5.64122858327027,
         "ring_thickness": 0.0,
         "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
         "method": "minimum_bounding_rectangle",
@@ -131,10 +131,10 @@ You are a tuning expert for a Segment Anything Model (SAM) based segmentation pi
       "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
     },
     "point_density": {
-      "mean_nearest_neighbor_distance": 0.007575189385448667,
-      "median_nearest_neighbor_distance": 0.005415398201360711,
+      "mean_nearest_neighbor_distance": 0.007421570466489929,
+      "median_nearest_neighbor_distance": 0.005415145612492822,
       "min_nearest_neighbor_distance": 0.00048779999999970514,
-      "max_nearest_neighbor_distance": 0.5189269580942679,
+      "max_nearest_neighbor_distance": 1.2163606099645212,
       "units": "meters"
     }
   }
@@ -142,7 +142,7 @@ You are a tuning expert for a Segment Anything Model (SAM) based segmentation pi
 ```
 
 # REFERENCE SAM PARAMETERS
-Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-4/parameters_sam.json`).
+Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/2-3/parameters_sam.json`).
 
 ```json
 {

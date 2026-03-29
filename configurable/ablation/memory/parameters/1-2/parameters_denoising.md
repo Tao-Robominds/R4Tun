@@ -1,11 +1,11 @@
-# Memory-ablation LLM context — tunnel `1-4`
+# Memory-ablation LLM context — tunnel `1-2`
 
 This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
 
 Regenerate after updating raw characteristics or the tunnel archive under `configurable/ablation/memory/parameters/<tunnel_id>/` (else falls back to `configurable/sample/`):
 
 ```bash
-./venv/bin/python skills/scripts/export_llm_parameter_context.py 1-4
+./venv/bin/python skills/scripts/export_llm_parameter_context.py 1-2
 ```
 
 ---
@@ -78,51 +78,51 @@ You are a tuning expert for a point cloud density-difference-based denoising pip
 }
 ```
 
-# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-4)
+# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id=1-2)
 ```json
 {
-  "tunnel_id": "1-4",
-  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-4.txt",
+  "tunnel_id": "1-2",
+  "input_file": "/home/boringtao/Projects/R4Tun/data/subsets/1-2.txt",
   "filtered_note": "Contains only characteristics for x, y, z, intensity columns. Ground truth data (segment_type, ring_number) excluded.",
   "point_cloud_analysis": {
     "basic_statistics": {
-      "total_points": 2005884,
+      "total_points": 2045089,
       "data_structure": {
         "columns": 4,
         "description": "x, y, z, intensity"
       },
       "coordinate_ranges": {
         "x_range": [
-          -7.95727491,
-          10.46459961
+          -4.71850586,
+          4.62768602
         ],
         "y_range": [
-          -18.13891602,
-          14.94262695
+          -15.81958008,
+          14.72290039
         ],
         "z_range": [
-          -2.10131788,
-          3.68139601
+          -1.81079102,
+          3.66088891
         ],
         "intensity_range": [
           -1727.0,
-          1963.0
+          1952.0
         ]
       }
     },
     "tunnel_geometry": {
       "dimensions": {
-        "length_x_axis": 33.96925873485917,
-        "width_y_axis": 5.99651330872443,
-        "height_z_axis": 5.78271389,
+        "length_x_axis": 30.19496683257707,
+        "width_y_axis": 5.660873371062998,
+        "height_z_axis": 5.4716799300000005,
         "units": "meters"
       },
-      "estimated_diameter": 5.99651330872443,
+      "estimated_diameter": 5.660873371062998,
       "diameter_estimation": {
-        "inner_diameter": 5.99651330872443,
-        "outer_diameter": 5.99651330872443,
-        "average_diameter": 5.99651330872443,
-        "median_diameter": 5.99651330872443,
+        "inner_diameter": 5.660873371062998,
+        "outer_diameter": 5.660873371062998,
+        "average_diameter": 5.660873371062998,
+        "median_diameter": 5.660873371062998,
         "ring_thickness": 0.0,
         "description": "Estimated tunnel diameter based on minimum bounding rectangle width (2D XOY projection). May include surrounding infrastructure.",
         "method": "minimum_bounding_rectangle",
@@ -131,10 +131,10 @@ You are a tuning expert for a point cloud density-difference-based denoising pip
       "diameter_discrepancy_note": "Estimated diameter may include surrounding infrastructure"
     },
     "point_density": {
-      "mean_nearest_neighbor_distance": 0.007575189385448667,
-      "median_nearest_neighbor_distance": 0.005415398201360711,
+      "mean_nearest_neighbor_distance": 0.007550527327325211,
+      "median_nearest_neighbor_distance": 0.00545834033172171,
       "min_nearest_neighbor_distance": 0.00048779999999970514,
-      "max_nearest_neighbor_distance": 0.5189269580942679,
+      "max_nearest_neighbor_distance": 0.3277085197572706,
       "units": "meters"
     }
   }
@@ -142,7 +142,7 @@ You are a tuning expert for a point cloud density-difference-based denoising pip
 ```
 
 # REFERENCE DENOISING PARAMETERS
-Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-4/parameters_denoising.json`).
+Archived tunnel parameters (same file you will save as `configurable/ablation/memory/parameters/1-2/parameters_denoising.json`).
 
 ```json
 {
