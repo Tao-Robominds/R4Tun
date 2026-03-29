@@ -139,11 +139,6 @@ def analyze_upsampling_quality(enhanced_df: pd.DataFrame, pre_enhanced_df: pd.Da
             'improvement_effectiveness': 0.0,
             'remaining_sparse_percentage': 100.0,
             'diameter_estimation': diameter_estimation,
-            'coverage_matrices': {
-                'enhanced': [],
-                'pre_enhanced': [],
-                'improvement': []
-            },
             'spatial_quality_metrics': {
                 'coverage_entropy': 0.0,
                 'improvement_variance': 0.0,
@@ -198,11 +193,6 @@ def analyze_upsampling_quality(enhanced_df: pd.DataFrame, pre_enhanced_df: pd.Da
         'improvement_effectiveness': float(improvement_effectiveness),
         'remaining_sparse_percentage': float(remaining_sparse_percentage),
         'diameter_estimation': diameter_estimation,
-        'coverage_matrices': {
-            'enhanced': enhanced_coverage.tolist(),
-            'pre_enhanced': pre_enhanced_coverage.tolist(),
-            'improvement': coverage_improvement.tolist()
-        },
         'spatial_quality_metrics': {
             'coverage_entropy': float(entropy(enhanced_flat + 1)),  # +1 to avoid log(0)
             'improvement_variance': float(np.var(relative_improvement)),
@@ -226,7 +216,6 @@ def analyze_segmentation_readiness(enhanced_df: pd.DataFrame, density_stats: Dic
             'reference_template_spacing_m': 0.05,
             'reference_template_spacing_note': 'Pipeline default for SAM-style grid spacing; not measured from this tunnel.',
             'current_median_spacing': None,
-            'region_difficulty_assessment': {},
             'segmentation_complexity': {
                 'easy_regions': 0,
                 'moderate_regions': 0,
@@ -315,7 +304,6 @@ def analyze_segmentation_readiness(enhanced_df: pd.DataFrame, density_stats: Dic
         'reference_template_spacing_m': float(reference_template_spacing_m),
         'reference_template_spacing_note': 'Pipeline default for SAM-style grid spacing; not measured from this tunnel.',
         'current_median_spacing': float(median_spacing),
-        'region_difficulty_assessment': region_difficulty,
         'segmentation_complexity': {
             'easy_regions': len([r for r in region_difficulty.values() if r['difficulty_level'] == 'easy']),
             'moderate_regions': len([r for r in region_difficulty.values() if r['difficulty_level'] == 'moderate']),

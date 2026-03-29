@@ -187,7 +187,6 @@ def analyze_prompt_distribution_for_sam(detection_points_df: pd.DataFrame) -> Di
             'spatial_bounds': spatial_bounds,
             'coverage_area': float(coverage_area),
             'prompt_density': float(valid_count / coverage_area) if coverage_area > 0 else 0.0,
-            'coverage_matrix': coverage_matrix.tolist(),
             'coverage_percentage': float(coverage_percentage),
             'coverage_uniformity': float(coverage_uniformity),
             'uncovered_regions': int(total_cells - covered_cells)
@@ -219,7 +218,6 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
             'diameter_estimation': {},
             'sam_coverage_analysis': {},
             'segmentation_effectiveness': {},
-            'workflow_assessment': {}
         }
     
     # Basic ratio analysis
@@ -256,13 +254,6 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
     expected_types = ['midpoint', 'negative_slope', 'positive_slope', 'default', 'assume']
     type_coverage = len(set(prompt_types.keys()) & set(expected_types)) / len(expected_types)
     
-    # Enhanced point cloud characteristics
-    enhanced_spatial_range = {
-        'h_range': [target_points['h'].min(), target_points['h'].max()] if 'h' in target_points.columns else [0, 0],
-        'theta_range': [target_points['theta'].min(), target_points['theta'].max()] if 'theta' in target_points.columns else [0, 0],
-        'r_range': [target_points['r'].min(), target_points['r'].max()] if 'r' in target_points.columns else [0, 0]
-    }
-    
     # Diameter estimation from enhanced point cloud (target for SAM segmentation)
     diameter_estimation = {}
     if len(target_points) > 0 and 'r' in target_points.columns:
@@ -280,8 +271,6 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
         'prompt_to_target_ratio': float(prompt_to_target_ratio),
         'diameter_estimation': diameter_estimation,
         'sam_coverage_analysis': {
-            'detection_bounds': detection_bounds,
-            'enhanced_spatial_range': enhanced_spatial_range,
             'estimated_template_coverage': float(coverage_efficiency),
             'prompt_type_coverage': float(type_coverage),
             'total_template_area': float(total_detection_coverage),
@@ -294,11 +283,6 @@ def analyze_sam_prompt_effectiveness(detection_points_df: pd.DataFrame, enhanced
             'expected_segmentation_load': 'high' if len(target_points) / len(valid_detection) > 100000 else 
                                          'medium' if len(target_points) / len(valid_detection) > 50000 else 'low'
         },
-        'workflow_assessment': {
-            'coordinate_system_compatibility': '2D_prompts_to_3D_targets',
-            'projection_required': True,
-            'pixel_to_point_mapping_critical': True
-        }
     }
     
     return effectiveness_stats

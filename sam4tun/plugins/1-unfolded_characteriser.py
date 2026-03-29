@@ -35,7 +35,7 @@ def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
     else:
         print(f"Ring count file not found: {ring_count_path}")
     
-    # Expected columns: x, y, z, intensity, segment, ring, r, theta, h
+    # GT-free: do not use segment/ring label columns; analyze only:
     expected_columns = ['x', 'y', 'z', 'intensity', 'r', 'theta', 'h']
     
     # Check if all expected columns exist
@@ -50,18 +50,6 @@ def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
     
     # Basic statistics
     total_points = len(df)
-    
-    # Cartesian coordinate ranges
-    cartesian_stats = {}
-    if all(col in df.columns for col in ['x', 'y', 'z']):
-        cartesian_stats = {
-            'x_range': [float(df['x'].min()), float(df['x'].max())],
-            'y_range': [float(df['y'].min()), float(df['y'].max())],
-            'z_range': [float(df['z'].min()), float(df['z'].max())],
-            'x_span': float(df['x'].max() - df['x'].min()),
-            'y_span': float(df['y'].max() - df['y'].min()),
-            'z_span': float(df['z'].max() - df['z'].min())
-        }
     
     # Cylindrical coordinate analysis
     cylindrical_stats = {}
@@ -115,42 +103,23 @@ def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
         nn_distances = distances[:, 1]  # Second column is nearest neighbor distance
         
         density_stats = {
-            'mean_nn_distance': float(np.mean(nn_distances)),
             'median_nn_distance': float(np.median(nn_distances)),
-            'min_nn_distance': float(np.min(nn_distances)),
-            'max_nn_distance': float(np.max(nn_distances)),
-            'std_nn_distance': float(np.std(nn_distances))
+            'std_nn_distance': float(np.std(nn_distances)),
         }
     
-    # Processing notes
-    processing_notes = []
-    if density_stats:
-        processing_notes.append(f"Point density: Median NN distance = {density_stats['median_nn_distance']:.4f}")
-    if cartesian_stats:
-        processing_notes.append(f"Spatial extent: X={cartesian_stats['x_span']:.2f}, Y={cartesian_stats['y_span']:.2f}, Z={cartesian_stats['z_span']:.2f}")
-    if cylindrical_stats:
-        if 'diameter_estimation' in cylindrical_stats:
-            diameter_info = cylindrical_stats['diameter_estimation']
-            processing_notes.append(f"Estimated diameters: Inner={diameter_info['inner_diameter']:.2f}, Outer={diameter_info['outer_diameter']:.2f}, Thickness={diameter_info['ring_thickness']:.2f}")
-        processing_notes.append(f"Cylindrical extent: R={cylindrical_stats['r_span']:.2f}, θ={cylindrical_stats['theta_coverage_degrees']:.1f}°, H={cylindrical_stats['h_span']:.2f}")
-    if ring_count is not None:
-        processing_notes.append(f"Ring structure: {ring_count} rings detected")
-    
-    # Compile all characteristics
+    # Compile all characteristics (compact JSON for LLM sample vs target comparison)
     characteristics = {
         "tunnel_id": tunnel_id,
         "unfolding_results": {
             "basic_statistics": {
                 "total_points": int(total_points),
                 "ring_count": ring_count,
-                "coordinate_systems": ["cartesian (x, y, z)", "cylindrical (r, theta, h)"],
-                "available_attributes": list(df.columns)
+                "coordinate_systems": ["cylindrical (r, theta, h)"],
+                "available_attributes": list(df.columns),
             },
-            "cartesian_coordinates": cartesian_stats,
             "cylindrical_coordinates": cylindrical_stats,
             "intensity_analysis": intensity_stats,
             "point_density": density_stats,
-            "processing_notes": processing_notes
         },
         "source_file": csv_path,
         "analysis_timestamp": pd.Timestamp.now().isoformat()

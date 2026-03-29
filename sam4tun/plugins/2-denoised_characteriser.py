@@ -164,11 +164,7 @@ def analyze_spatial_distribution(df: pd.DataFrame) -> Dict:
         'coverage_analysis': {
             'total_coverage_percentage': float(coverage_percentage),
             'sparse_areas_percentage': float(sparse_percentage),
-            'coverage_matrix_shape': coverage_matrix.shape,
-            'sparse_threshold': float(sparse_threshold)
         },
-        'coverage_matrix': coverage_matrix.tolist(),  # For saving
-        'sparse_areas': sparse_areas.tolist()  # For saving
     }
     
     return spatial_stats
