@@ -25,7 +25,7 @@ Group the tunnel into enhancing regimes based on the anchoring comparison:
 - **DENSE**: Higher point density after denoising (>30% difference) → may need less aggressive upsampling
 - **LOW-QUALITY**: Poor denoising retention rate (>35% difference) → may need adjusted thresholds
 - **COMPLEX-GEOMETRY**: Extreme curvature patterns (>300% change AND validated as significant) → may need sensitivity adjustments
-- **LARGE-SCALE**: Significantly larger tunnel dimensions requiring scaled enhancement parameters → increase target distances and interpolation radii
+- **LARGE-SCALE**: Tunnel diameter >50% larger than sample (~8.25m+) requiring scaled enhancement parameters → increase target distances
 - **CRITICAL-SPARSE**: Extremely sparse post-denoising with complex requirements (>80% data loss + large scale + high curvature) → specialized parameter combinations
 
 **Classification logic:**
@@ -48,9 +48,9 @@ Examine enhancing-specific challenges based on the classification:
 - Assess if depth_threshold_low/high need adjustment for gap filling
 - Check if inter_radius needs modification for interpolation effectiveness
 
-**For LARGE-SCALE tunnels:**
-- Scale upsampling target distances proportionally (e.g., stage1: 0.10, stage2: 0.05, stage3: 0.025 for larger tunnels vs default 0.06/0.03/0.015)
-- Increase inter_radius for larger interpolation range (e.g., 0.08 vs default 0.03)
+**For LARGE-SCALE tunnels (>50% diameter increase only):**
+- Scale upsampling target distances only for genuinely large tunnels (e.g., stage1: 0.08, stage2: 0.04, stage3: 0.02 for >8m diameter). For modest diameter increases (<30%), keep defaults 0.06/0.03/0.015.
+- Increase inter_radius to 0.05 only for genuinely large tunnels with wide gaps. Default 0.03 is sufficient for most cases.
 - Adjust n_segment range to match tunnel ring structure (e.g., 10-21 for 20-ring tunnels vs 0-9 for 10-ring)
 
 **For CRITICAL-SPARSE tunnels:**
@@ -67,23 +67,35 @@ Examine enhancing-specific challenges based on the classification:
 ### 4. PARAMETER ADAPTATION
 Consult encoded knowledge of enhancing parameter ranges and interdependencies:
 
+**CRITICAL**: The REFERENCE PARAMETERS section in this prompt shows the baseline (sam4tun) starting-point defaults. These are NOT the proven optimal values. The PROVEN ROBUST DEFAULTS listed below supersede the reference parameters. For SIMILAR tunnels, always use the proven defaults, not the reference values. In particular:
+- Reference shows target distances 0.08/0.04/0.02 → proven defaults are **0.06/0.03/0.015** (denser, gap-free)
+- Reference shows inter_radius 0.06 → proven default is **0.03** (tighter, surface-preserving)
+- Reference shows depth_threshold_high 0.008 → proven default is **0.015** (detects more outliers for gap filling)
+
 **Adaptation principles:**
 - Apply adjustments ONLY when justified by clear evidence from steps 1-3
-- Preserve robustness of original settings when tunnels are classified as SIMILAR
-- For similar tunnels: explicitly recommend NO CHANGE to maintain proven robustness
+- For SIMILAR tunnels: use the proven robust defaults below (NOT the reference parameters)
 - Large curvature differences (>100%) often reflect processing variations rather than true geometry - verify significance
 - Moderate density differences (<25%) and curvature changes (<150%) should lean towards SIMILAR classification
 - Original curvature_threshold (0.005) is robust across diverse tunnel types - prefer keeping unless extreme validated differences
 - Document specific reasoning for each parameter decision with evidence
 
+**Proven robust defaults (use these unless strong evidence requires change):**
+- **upsampling_stage1/2/3_target_distance** = 0.06 / 0.03 / 0.015 (produces dense, gap-free depth maps; proven on diverse tunnels)
+- **curvature_threshold** = 0.005 (robust feature detection threshold)
+- **depth_threshold_low / depth_threshold_high** = 0.005 / 0.015 (detects sufficient outliers for interpolation)
+- **inter_radius** = 0.03 (tight interpolation radius preserves surface accuracy)
+- **duplicate_threshold** = 0.02
+- **num_neighbors** = 20, **num_interpolations** = 2, **resolution** = 0.005, **window_size** = 9
+
 **Parameter-specific adaptation logic:**
-- **upsampling_stage1/2/3_target_distance**: Adjust based on density and scale - decrease for SPARSE, increase for DENSE or LARGE-SCALE (ranges: 0.06-0.10, 0.03-0.05, 0.015-0.025)
-- **curvature_threshold**: Adjust based on geometry complexity - decrease for COMPLEX-GEOMETRY or CRITICAL-SPARSE (0.0003 for aggressive feature capture), increase for simpler surfaces (range: 0.0003-0.008)
-- **depth_threshold_low/high**: Adjust based on data quality - relax for LOW-QUALITY (typical ranges: 0.002-0.005, 0.006-0.012)
-- **inter_radius**: Generally stable, but increase for LARGE-SCALE tunnels or extreme density differences (typical range: 0.03-0.08)
-- **duplicate_threshold**: Adjust based on final density needs (typical range: 0.015-0.03)
-- **num_neighbors, num_interpolations**: Generally stable, proven robust across tunnel types
-- **resolution, window_size**: Generally stable unless extreme quality issues
+- **upsampling_stage1/2/3_target_distance**: Default 0.06/0.03/0.015. Only increase to 0.08/0.04/0.02 for CRITICAL-SPARSE tunnels. Only increase to 0.10/0.05/0.025 for extreme LARGE-SCALE (>50% diameter increase). For SIMILAR tunnels, always use the defaults.
+- **curvature_threshold**: Default 0.005. Decrease to 0.0003-0.001 only for CRITICAL-SPARSE with aggressive feature capture needs. Increase slightly (0.006-0.008) only for very simple tunnel geometry.
+- **depth_threshold_low/high**: Default 0.005/0.015. Relax for LOW-QUALITY. The high threshold controls how many outlier points get interpolated — higher values detect more outliers and fill more gaps.
+- **inter_radius**: Default 0.03. Only increase for CRITICAL-SPARSE (0.05-0.08). Larger inter_radius can blur surface detail — avoid increasing without evidence.
+- **duplicate_threshold**: Default 0.02. Adjust based on final density needs (range: 0.015-0.03).
+- **num_neighbors, num_interpolations**: Default 20, 2. Generally stable, proven robust across tunnel types.
+- **resolution, window_size**: Default 0.005, 9. Generally stable unless extreme quality issues.
 
 **Evidence requirements:**
 - Each parameter change must be supported by specific evidence from diagnostic inspection
@@ -117,8 +129,8 @@ Check that proposed changes resolve identified issues without undermining enhanc
 - **For SIMILAR tunnels: explicitly recommend keeping original parameters**
 
 Example of CORRECT recommendations:
-- "Keep upsampling_stage1_target_distance at 0.08 (no change needed - tunnel characteristics are similar to sample)"
-- "Set curvature_threshold to 0.0004" (not "0.0003-0.0005")
-- "Use inter_radius of 0.05" (not "0.04-0.06")
+- "Keep upsampling_stage1_target_distance at 0.06 (proven default — tunnel characteristics are similar to sample)"
+- "Set curvature_threshold to 0.005" (not "0.003-0.005")
+- "Use inter_radius of 0.03" (not "0.03-0.06")
 
 Remember: The system requires exact values for implementation - ranges cannot be processed.

@@ -55,15 +55,25 @@ def analyze_unwrapped_pointcloud(csv_path, output_json_path=None):
     cylindrical_stats = {}
     if all(col in df.columns for col in ['r', 'theta', 'h']):
         r_values = df['r']
+        r_pcts = np.percentile(r_values, [10, 25, 50, 75, 90, 95, 99])
         cylindrical_stats = {
             'r_range': [float(r_values.min()), float(r_values.max())],
+            'r_percentiles': {
+                'p10': round(float(r_pcts[0]), 4),
+                'p25': round(float(r_pcts[1]), 4),
+                'p50_median': round(float(r_pcts[2]), 4),
+                'p75': round(float(r_pcts[3]), 4),
+                'p90': round(float(r_pcts[4]), 4),
+                'p95': round(float(r_pcts[5]), 4),
+                'p99': round(float(r_pcts[6]), 4),
+                'note': 'Denoising mask_r_high should cover at least p99 to retain 99%+ of wall points; mask_r_low should be at or below p10',
+            },
             'theta_range': [float(df['theta'].min()), float(df['theta'].max())],
             'h_range': [float(df['h'].min()), float(df['h'].max())],
             'r_span': float(r_values.max() - r_values.min()),
             'theta_span': float(df['theta'].max() - df['theta'].min()),
             'h_span': float(df['h'].max() - df['h'].min()),
             'theta_coverage_degrees': float(np.degrees(df['theta'].max() - df['theta'].min())),
-            # Diameter estimation based on radial distances
             'diameter_estimation': {
                 'inner_diameter': float(2 * r_values.min()),
                 'outer_diameter': float(2 * r_values.max()),

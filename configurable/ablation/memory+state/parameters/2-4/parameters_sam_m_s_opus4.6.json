@@ -15,12 +15,12 @@
   "use_original_label_distributions": true,
   "processing": {
     "resolution": 0.005,
-    "padding": 300,
+    "padding": 150,
     "crop_margin": 50,
     "mask_eps": 0.001,
     "y_bounds": [
-      4200,
-      13100
+      3800,
+      13500
     ]
   },
   "prompt_points": {

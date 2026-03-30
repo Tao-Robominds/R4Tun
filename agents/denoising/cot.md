@@ -48,10 +48,10 @@ Examine denoising-specific challenges based on the classification:
 - Assess if mask_r_low/mask_r_high need adjustment for different radial spans
 - Check if z_step needs modification for radial density variations
 
-**For LARGE-DIAMETER tunnels:**
-- Scale mask_r_low/mask_r_high proportionally to tunnel diameter (e.g., for ~7.2m diameter: 3.5-3.8 vs default 2.8-3.0 for ~5.5m)
-- Consider if y_step needs increase for coarser angular sampling due to larger circumference
-- Evaluate if z_step needs decrease for finer radial resolution in larger tunnels
+**For LARGE-DIAMETER tunnels (>30% diameter increase, i.e. >7.2m):**
+- Scale mask_r_low/mask_r_high proportionally to tunnel median radius (e.g., for ~7.2m diameter: [3.5, 3.8] vs default [2.8, 3.0] for ~5.5m). For modest diameter increases (<30%, e.g. 5.5m→5.8m), keep default [2.8, 3.0].
+- Keep y_step at 0.4 (finer resolution is always better for surface detection). Do NOT increase y_step for larger tunnels.
+- Keep z_step at 0.005 unless extreme radial variations.
 
 **For EXTREME-RANGE tunnels:**
 - Expand radial mask dramatically to capture full range (e.g., 2.2-3.9 for very wide distribution vs standard 2.8-3.0)
@@ -66,22 +66,35 @@ Examine denoising-specific challenges based on the classification:
 ### 4. PARAMETER ADAPTATION
 Consult encoded knowledge of denoising parameter ranges and interdependencies:
 
+**CRITICAL**: The REFERENCE PARAMETERS section in this prompt shows the baseline (sam4tun) starting-point defaults. These are NOT the proven optimal values. The PROVEN ROBUST DEFAULTS listed below supersede the reference parameters. For SIMILAR tunnels, always use the proven defaults, not the reference values. In particular:
+- Reference shows y_step 0.5 → proven default is **0.4** (finer angular resolution)
+- Reference shows z_step 0.001 → proven default is **0.005** (robust radial resolution)
+- Reference shows grad_threshold 0.2 → proven default is **0.15** (better noise sensitivity)
+- Reference shows smoothing_window_size 3 → proven default is **5** (smoother cutoff surface)
+- Reference shows smoothing_offset -0.003 → proven default is **-0.002**
+
 **Adaptation principles:**
-- Apply adjustments ONLY when justified by clear evidence from steps 1-3
-- Preserve robustness of original settings when tunnels are classified as SIMILAR
-- For similar tunnels: explicitly recommend NO CHANGE to maintain proven robustness
+- For SIMILAR tunnels: use the proven robust defaults below (NOT the reference parameters)
 - Large radial span differences (>100%) are often measurement or preprocessing artifacts - require validation before adapting radial masks
 - Moderate density differences (<25%) should lean towards SIMILAR classification for robustness
-- Original mask parameters [2.8, 3.0] are robust across diverse tunnel geometries - prefer keeping unless extreme validated differences
+- Mask parameters must be derived from r_percentiles: mask_r_low at p10, mask_r_high at p99 for each tunnel
 - Document specific reasoning for each parameter decision with evidence
 
+**Proven robust defaults (use these unless strong evidence requires change):**
+- **y_step** = 0.4 (finer angular grid produces better surface detection; proven on diverse tunnels)
+- **z_step** = 0.005 (robust radial grid resolution)
+- **grad_threshold** = 0.15 (sensitive gradient detection catches more noise boundaries)
+- **smoothing_window_size** = 5 (larger window produces smoother, more accurate cutoff surfaces)
+- **smoothing_offset** = -0.002 (standard radial cutoff offset)
+- **mask_r_low/mask_r_high**: Set based on the **r_percentiles** from unfolded characteristics. mask_r_low should be at or below **p10** of r (to retain edge points where tunnel radius is locally smaller). mask_r_high MUST cover at least the **p99** of r to retain 99%+ of tunnel wall points. If p99 > 3.0, you MUST increase mask_r_high accordingly — otherwise large areas of the depth map will be white (missing data).
+
 **Parameter-specific adaptation logic:**
-- **mask_r_low/mask_r_high**: Adjust based on tunnel characteristics - proportional scaling for LARGE-DIAMETER ([3.5, 3.8] for ~7.2m), or extreme expansion for EXTREME-RANGE ([2.2, 3.9] for wide distribution)
-- **y_step**: Adjust based on angular density - decrease for DENSE, increase for SPARSE or LARGE-DIAMETER (typical range: 0.3-0.8)
-- **z_step**: Generally stable unless extreme radial density variations, LARGE-DIAMETER (0.002-0.004), or EXTREME-RANGE tunnels (0.002 for wide range sampling)
-- **grad_threshold**: Adjust based on noise sensitivity - decrease for DENSE, increase for SPARSE (typical range: 0.15-0.3)
-- **smoothing_window_size**: Generally stable, proven robust across tunnel types
-- **smoothing_offset**: Generally stable unless specific calibration issues
+- **mask_r_low/mask_r_high**: Use **r_percentiles** from unfolded characteristics: set mask_r_low at or below p10, mask_r_high to at least p99 of r. Example: if p10=2.77, p99=3.06, use [2.77, 3.06]. The mask MUST capture at least 99% of tunnel wall points — insufficient mask width is the #1 cause of large white areas in depth maps.
+- **y_step**: Default 0.4. Only increase to 0.5-0.6 for VERY-SPARSE tunnels where angular bins have too few points. NEVER increase beyond 0.6.
+- **z_step**: Default 0.005. For EXTREME-RANGE tunnels with wide radial spans: decrease to 0.002-0.003.
+- **grad_threshold**: Default 0.15. Only increase to 0.2-0.25 for genuinely SPARSE data with high noise levels. Lower values produce cleaner denoising.
+- **smoothing_window_size**: Default 5. Only reduce to 3 for very short tunnels with few angular bins.
+- **smoothing_offset**: Default -0.002. Only change for specific calibration needs.
 
 **Evidence requirements:**
 - Each parameter change must be supported by specific evidence from diagnostic inspection
@@ -115,8 +128,8 @@ Check that proposed changes resolve identified issues without undermining denois
 - **For SIMILAR tunnels: explicitly recommend keeping original parameters**
 
 Example of CORRECT recommendations:
-- "Keep mask_r_low at 2.7 (no change needed - tunnel characteristics are similar to sample)"
-- "Set grad_threshold to 0.27" (not "0.25-0.3")
-- "Use y_step of 0.35" (not "0.3-0.4")
+- "Set mask_r_low to 2.77 (at p10), mask_r_high to 3.06 (at p99) — captures 99%+ of wall points"
+- "Set grad_threshold to 0.15" (proven default; not "0.15-0.25")
+- "Use y_step of 0.4" (proven default for quality surface detection; not "0.3-0.5")
 
 Remember: The system requires exact values for implementation - ranges cannot be processed.
