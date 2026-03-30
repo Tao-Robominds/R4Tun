@@ -16,7 +16,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
+
+# Repo root: .../configurable/ablation/memory+state/agents/<this file> → 4 parents up
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 from sam4tun.plugins.paths import tunnel_characteristics_dir
 

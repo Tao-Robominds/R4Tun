@@ -1,17 +1,15 @@
 #!/usr/bin/env python
 # -*- encoding: utf-8 -*-
 
-import json
-import os
 import sys
-import requests
 from pathlib import Path
 
 _agents_dir = Path(__file__).resolve().parent.parent
 if str(_agents_dir) not in sys.path:
     sys.path.insert(0, str(_agents_dir))
 
-from memory_ablation_context import (
+from memory_state_ablation_context import (
+    build_state_comparison_block,
     load_raw_characteristics_pair,
     load_stage_parameters_pretty,
     pipeline_tunnel_data_dir,
@@ -21,15 +19,17 @@ from memory_ablation_context import (
 
 
 class SegmentingAnalyser:
+    STAGE_NAME = "sam"
+
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
         self.data_dir = pipeline_tunnel_data_dir(tunnel_id)
         self._agent_dir = Path(__file__).resolve().parent
-        self.api_key = "app-2YyQbd7yv14XBQCf2DL3bifh"
-        self.base_url = "https://api.dify.ai/v1"
 
     def load_analysis_data(self):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
+        cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
+        knowledge_content = read_required_text(self._agent_dir / "knowledge.md", "Domain knowledge")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/4-2_sam.py")
         code_content = read_required_text(code_path, "Sample SAM segmenting code")
@@ -37,6 +37,8 @@ class SegmentingAnalyser:
         params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name)
         return {
             "role": role_content,
+            "cot": cot_content,
+            "knowledge": knowledge_content,
             "sample_raw": sample_raw,
             "tunnel_raw": tunnel_raw,
             "sample_code": code_content,
@@ -45,79 +47,37 @@ class SegmentingAnalyser:
             "archive_filename": archive_name,
         }
 
-    def build_llm_prompt_markdown(self) -> str:
-        """Exact LLM user message; exported to parameters_sam.md for copy-paste."""
+    def build_llm_prompt_markdown(self, state_context: str = "") -> str:
         ctx = self.load_analysis_data()
-        return f"""
-# ROLE
-{ctx["role"]}
-
-# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
-```json
-{ctx["sample_raw"]}
-```
-
-# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id={self.tunnel_id})
-```json
-{ctx["tunnel_raw"]}
-```
-
-# REFERENCE SAM PARAMETERS
-{ctx["parameters_source"]}
-
-```json
-{ctx["parameters"]}
-```
-
-# PIPELINE CODE (reference)
-```python
-{ctx["sample_code"]}
-```
-
-{strict_output_instructions(ctx["archive_filename"], ctx["parameters"])}
-""".strip()
-
-    def get_segmenting_recommendations(self):
-        comprehensive_query = self.build_llm_prompt_markdown()
-
-        response = requests.post(
-            f"{self.base_url}/chat-messages",
-            headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-            json={
-                "inputs": {"temperature": 0},
-                "query": comprehensive_query,
-                "response_mode": "streaming",
-                "conversation_id": "",
-                "user": f"segmenting_analyser_{self.tunnel_id}",
-                "files": [],
-            },
-        )
-
-        result = ""
-        for line in response.iter_lines():
-            if line and line.decode("utf-8").startswith("data: "):
-                try:
-                    chunk = json.loads(line.decode("utf-8")[6:])
-                    if chunk.get("event") == "agent_message":
-                        result += chunk.get("answer", "")
-                except Exception:
-                    continue
-
-        os.makedirs(self.data_dir / "analysis", exist_ok=True)
-        output_file = self.data_dir / "analysis" / "segmenting_analysis.md"
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(f"# Segmenting Analysis Recommendations - {self.tunnel_id}\n\n---\n\n{result}")
-
-        print(f"Results saved to: {output_file}")
-        return result
+        if not state_context:
+            state_context = build_state_comparison_block(self.tunnel_id, self.STAGE_NAME)
+        has_state = bool(state_context.strip())
+        parts = [
+            f"# ROLE\n{ctx['role']}",
+            f"# ANALYSIS METHODOLOGY\n{ctx['cot']}",
+            f"# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)\n```json\n{ctx['sample_raw']}\n```",
+            f"# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id={self.tunnel_id})\n```json\n{ctx['tunnel_raw']}\n```",
+        ]
+        if has_state:
+            parts.append(state_context)
+        parts.append(f"# DOMAIN KNOWLEDGE\n{ctx['knowledge']}")
+        parts += [
+            f"# REFERENCE SAM PARAMETERS\n{ctx['parameters_source']}\n\n```json\n{ctx['parameters']}\n```",
+            f"# PIPELINE CODE (reference)\n```python\n{ctx['sample_code']}\n```",
+            strict_output_instructions(
+                ctx["archive_filename"],
+                ctx["parameters"],
+                has_state=has_state,
+                has_knowledge=True,
+            ),
+        ]
+        return "\n\n".join(parts)
 
 
 def main():
-    import sys
-
     tunnel_id = sys.argv[1] if len(sys.argv) > 1 else "1-1"
     analyser = SegmentingAnalyser(tunnel_id)
-    print(analyser.get_segmenting_recommendations())
+    print(analyser.build_llm_prompt_markdown())
 
 
 if __name__ == "__main__":

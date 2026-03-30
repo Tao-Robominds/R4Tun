@@ -216,6 +216,7 @@ class RANSAC:
         self.items = 999  # Number of iterations
         self.count = 0  # Number of inliers
         self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
+        self.best_inliers = np.zeros((0, 2), dtype=np.float32)
 
     def random_sampling(self, n):
         """Randomly select n data points."""
@@ -278,7 +279,10 @@ class RANSAC:
 
     def execute_ransac(self):
         """Run RANSAC algorithm to fit an ellipse."""
-        while math.ceil(self.items):
+        last_inliers = np.zeros((0, 2), dtype=np.float32)
+        for _ in range(10000):
+            if not math.ceil(self.items):
+                break
             # Randomly sample N points
             select_points = self.random_sampling(self.N)
             select_points_list = [(point[0], point[1]) for point in select_points]
@@ -288,21 +292,30 @@ class RANSAC:
 
             # Evaluate the model and find inliers
             inliers_count, inliers_set = self.eval_model(ellipse)
-            inliers_set = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
+            inliers_arr = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
+            last_inliers = inliers_arr
 
-            # Update the best model if current inliers are better
-            if inliers_count > self.count:
-                self.count = inliers_count
-                self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
+            # Update the best model if current inliers are better (OpenCV needs >= 5 points)
+            if inliers_count > self.count and len(inliers_arr) >= 5:
+                try:
+                    self.best_model = cv2.fitEllipse(inliers_arr)
+                    self.count = inliers_count
+                    self.best_inliers = inliers_arr
+                except cv2.error:
+                    pass
 
                 # Check if we have reached the expected number of inliers
                 if self.count > self.max_inliers:
                     break
 
                 # Update number of iterations
-                self.items = math.log(1 - self.P) / math.log(1 - (inliers_count / len(self.point_data))**self.N)
+                denom = 1 - (inliers_count / len(self.point_data)) ** self.N
+                if 0 < denom < 1:
+                    self.items = math.log(1 - self.P) / math.log(denom)
 
-        return self.best_model, inliers_set
+        if len(self.best_inliers) >= 5:
+            return self.best_model, self.best_inliers
+        return self.best_model, last_inliers if len(last_inliers) >= 5 else self.point_data.astype(np.float32)
 
 # Initialize lists to store ellipse centers
 X_center = []
@@ -315,6 +328,13 @@ in_sets = []
 for i in range(len(slicing_cloud)):
     # Prepare point data for RANSAC
     points_data = np.reshape(filtered_point2ds[i], (-1, 2))  # Ellipse edge points
+    if len(points_data) == 0:
+        points_data = np.zeros((5, 2), dtype=np.float64)
+    elif len(points_data) < 5:
+        rng = np.random.default_rng(42 + i)
+        pad = points_data[:1]
+        while len(points_data) < 5:
+            points_data = np.vstack([points_data, pad + rng.normal(0, 1e-4, (1, 2))])
 
     # First RANSAC fit to find initial inliers
     ransac = RANSAC(data=points_data, threshold=1.0, P=0.9, S=0.75, N=5)

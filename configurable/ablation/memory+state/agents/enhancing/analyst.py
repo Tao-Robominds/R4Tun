@@ -26,11 +26,9 @@ class EnhancingAnalyser:
         self.data_dir = pipeline_tunnel_data_dir(tunnel_id)
         self._agent_dir = Path(__file__).resolve().parent
 
-    COT_PATH = Path("agents/enhancing/cot.md")
-
     def load_analysis_data(self):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
-        cot_content = read_required_text(self.COT_PATH, "Chain-of-thought instructions")
+        cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/3_enhancing.py")
         code_content = read_required_text(code_path, "Sample enhancing code")

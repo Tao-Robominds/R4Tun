@@ -317,6 +317,111 @@ def check_distance_pattern(points, k, ab, tolerance=10):
                 return compute_midpoint(points[i], points[j])
     return None
 
+
+_GOOD_Y_DETECTION_TYPES = frozenset({"midpoint", "positive_slope", "negative_slope", "horizontal"})
+_FALLBACK_Y_TYPES = frozenset({"default", "assume"})
+
+
+def _tunnel_family_from_id(tunnel_id: str) -> str:
+    """Match ``skills/scripts/compare_ablation_conditions.py`` FAMILY_MAP prefix convention."""
+    prefix = tunnel_id.split("-", 1)[0]
+    if prefix in ("1", "2"):
+        return "regular"
+    if prefix == "3":
+        return "continuous"
+    return "complex"
+
+
+def correct_fallback_y_positions(adjusted_points, tunnel_id: str) -> list:
+    """
+    Correct Y only for default/assume rows. X and non-fallback types are unchanged.
+
+    - regular: two-level alternating Y from good detections (median split + parity vote).
+    - continuous: single median Y from all good detections.
+    - complex: linear interpolation from nearest good neighbors along ring index (default only).
+    """
+    n = len(adjusted_points)
+    if n == 0:
+        return adjusted_points
+
+    out = [(str(t), (float(xy[0]), float(xy[1]))) for t, xy in adjusted_points]
+    family = _tunnel_family_from_id(tunnel_id)
+
+    def y_of(i):
+        return out[i][1][1]
+
+    def set_y(i, new_y):
+        t, (x, _) = out[i]
+        out[i] = (t, (x, float(new_y)))
+
+    good_idx = [i for i in range(n) if out[i][0] in _GOOD_Y_DETECTION_TYPES]
+    if not good_idx:
+        return out
+
+    good_ys = np.array([y_of(i) for i in good_idx], dtype=float)
+
+    if family == "continuous":
+        med = float(np.median(good_ys))
+        for i in range(n):
+            if out[i][0] in _FALLBACK_Y_TYPES:
+                set_y(i, med)
+        return out
+
+    if family == "complex":
+        for i in range(n):
+            if out[i][0] != "default":
+                continue
+            prev_y = None
+            next_y = None
+            for j in range(i - 1, -1, -1):
+                if out[j][0] in _GOOD_Y_DETECTION_TYPES:
+                    prev_y = y_of(j)
+                    break
+            for k in range(i + 1, n):
+                if out[k][0] in _GOOD_Y_DETECTION_TYPES:
+                    next_y = y_of(k)
+                    break
+            if prev_y is not None and next_y is not None:
+                new_y = (prev_y + next_y) / 2.0
+            elif prev_y is not None:
+                new_y = prev_y
+            elif next_y is not None:
+                new_y = next_y
+            else:
+                continue
+            set_y(i, new_y)
+        return out
+
+    # regular — need at least two good Y samples for a two-level model
+    if len(good_idx) < 2:
+        return out
+
+    sorted_ys = np.sort(good_ys)
+    split = max(1, len(sorted_ys) // 2)
+    low_center = float(np.mean(sorted_ys[:split]))
+    high_center = float(np.mean(sorted_ys[split:]))
+    if low_center > high_center:
+        low_center, high_center = high_center, low_center
+
+    low_votes = {0: 0.0, 1: 0.0}
+    high_votes = {0: 0.0, 1: 0.0}
+    for gi in good_idx:
+        y = y_of(gi)
+        p = gi % 2
+        if abs(y - low_center) <= abs(y - high_center):
+            low_votes[p] += 1.0
+        else:
+            high_votes[p] += 1.0
+
+    def y_for_parity(parity: int) -> float:
+        return low_center if low_votes[parity] >= high_votes[parity] else high_center
+
+    for i in range(n):
+        if out[i][0] in _FALLBACK_Y_TYPES:
+            set_y(i, y_for_parity(i % 2))
+    return out
+
+
 # Input data (assuming these are defined elsewhere)
 vertical_lines = all_mid_lines
 horizontal_lines = joint_horizontal
@@ -409,6 +514,8 @@ for vertical_x, _ in vertical_lines:
                 default_y = L / 2  # Use middle of image height
                 adjusted_points.append(('default', (vertical_x, default_y)))
                 print(f"Warning: Using default y-coordinate ({default_y}) for vertical line at x = {vertical_x}")
+
+adjusted_points = correct_fallback_y_positions(adjusted_points, tunnel_id)
 
 # recording initial point coordinate
 df_loc = pd.DataFrame(adjusted_points, columns=['Type', 'Coordinates'])

@@ -27,6 +27,10 @@ K_height = config["K_height"]
 AB_height = config["AB_height"]
 angle = config["angle"]
 
+_tunnel_prefix = tunnel_id.split("-")[0]
+_is_complex_tunnel = _tunnel_prefix in ("4", "5")
+_use_geometric_fallback = _is_complex_tunnel and segment_per_ring == 7
+
 # Handle both new parameterized format and old format
 if "processing" in config:
     # New parameterized format
@@ -83,9 +87,13 @@ pixel_to_point = pickle.load(open(os.path.join(base_dir, "pixel_to_point.pkl"), 
 df_point_cloud = pd.read_csv(os.path.join(base_dir, "enhanced.csv"))
 ring_count = int(open(os.path.join(base_dir, "ring_count.txt"), "r").read())
 
-sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-sam.to(device=device)
-predictor = SamPredictor(sam)
+if not _use_geometric_fallback:
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to(device=device)
+    predictor = SamPredictor(sam)
+else:
+    sam = None
+    predictor = None
 
 image = cv2.imread(f'{base_dir}/depth_map.png')
 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -528,6 +536,58 @@ def compute_block_label(segment_per_ring):
     block_labels += ['B2']
     return block_labels
 
+
+def geometric_segment(detected_df, image_shape, ring_count, K_height, AB_height,
+                      segment_per_ring, segment_order, resolution):
+    """
+    Complex-tunnel (7-seg) fallback: assign segment labels from detected K Y and
+    circular tiling K + 6*AB along the depth-map height (no SAM).
+    """
+    H, W = image_shape[:2]
+    scale = resolution * 1000.0  # mm per pixel
+    K_px = int(round(K_height / scale))
+    AB_px = int(round(AB_height / scale))
+    ring_w = W / float(ring_count)
+
+    if segment_per_ring != 7 or len(segment_order) != 7:
+        raise ValueError(
+            "geometric_segment requires segment_per_ring==7 and len(segment_order)==7"
+        )
+    if segment_order[0] != "K":
+        raise ValueError("geometric_segment requires segment_order[0] == 'K'")
+
+    block_to_label = {name: i + 1 for i, name in enumerate(segment_order)}
+    downward_blocks = list(reversed(segment_order[1:]))
+
+    label_map = np.zeros((H, W), dtype=int)
+    ring_map = np.zeros((H, W), dtype=int)
+    y_coords = np.arange(H, dtype=np.float64)
+
+    if len(detected_df) != ring_count:
+        raise ValueError(
+            f"geometric_segment: detected.csv has {len(detected_df)} rows "
+            f"but ring_count={ring_count}"
+        )
+
+    for ring_idx, (_, row) in enumerate(detected_df.iterrows()):
+        x0 = int(math.floor(ring_idx * ring_w))
+        x1 = int(math.ceil(min((ring_idx + 1) * ring_w, W)))
+        ky = float(row["Y"])
+        pos = (y_coords - (ky + K_px / 2.0)) % H
+
+        for i, block in enumerate(downward_blocks):
+            mask = (pos >= i * AB_px) & (pos < (i + 1) * AB_px)
+            label_map[mask, x0:x1] = block_to_label[block]
+            ring_map[mask, x0:x1] = ring_idx
+
+        k_start = len(downward_blocks) * AB_px
+        k_mask = (pos >= k_start) & (pos < k_start + K_px)
+        label_map[k_mask, x0:x1] = block_to_label["K"]
+        ring_map[k_mask, x0:x1] = ring_idx
+
+    return label_map, ring_map
+
+
 def sam_prediction(cropped_image, points, labels, template_mask_logit):
     predictor.set_image(cropped_image)
     mask, score, logit = predictor.predict(
@@ -592,7 +652,12 @@ def process_row(df_row, image):
                 continue
 
             block_label_index = block_label_index + 1
-            
+
+            if segment_per_ring == 7 and block_label_index >= 4 and not reverse:
+                reverse = True
+                block_label_index = -1
+                continue
+
         if reverse:
             block = block_labels[block_label_index]
             if block_label_index == -1:
@@ -638,71 +703,94 @@ def sam_segment(df, image):
     return all_results
 
 # Use configurable parameters
-results = sam_segment(initial_prompt_points, image)
-
-# Generate block to label mapping from segment_order
-if "segment_order" in config and config["use_original_label_distributions"]:
-    block_to_label = {}
-    for i, block_name in enumerate(config["segment_order"], start=1):
-        block_to_label[block_name] = i
-    print(f"Using configured segment order: {config['segment_order']}")
-    print(f"Block to label mapping: {block_to_label}")
+if _use_geometric_fallback:
+    segment_order_geom = config.get("segment_order")
+    if not segment_order_geom:
+        segment_order_geom = compute_block_label(7)
+    print(f"Using geometric fallback for complex tunnel {tunnel_id}")
+    print(f"  segment_order={segment_order_geom}, K_px≈{int(round(K_height / (resolution * 1000)))}, "
+          f"AB_px≈{int(round(AB_height / (resolution * 1000)))}")
+    result_image, ring_image = geometric_segment(
+        initial_prompt_points,
+        image.shape,
+        ring_count,
+        K_height,
+        AB_height,
+        segment_per_ring,
+        segment_order_geom,
+        resolution,
+    )
+    fix_ring = np.where(
+        (ring_image >= 1) & (ring_image <= (ring_count - 1)),
+        ring_count - ring_image,
+        ring_image,
+    )
 else:
-    # Fallback to default mapping
-    block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
-    if segment_per_ring == 7:
-        block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
-    print(f"Using default block mapping: {block_to_label}")
+    results = sam_segment(initial_prompt_points, image)
 
-logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
-label_map = np.zeros(image.shape[:2], dtype=int)
-ring_map = np.zeros(image.shape[:2], dtype=int)
+    # Generate block to label mapping from segment_order
+    if "segment_order" in config and config["use_original_label_distributions"]:
+        block_to_label = {}
+        for i, block_name in enumerate(config["segment_order"], start=1):
+            block_to_label[block_name] = i
+        print(f"Using configured segment order: {config['segment_order']}")
+        print(f"Block to label mapping: {block_to_label}")
+    else:
+        # Fallback to default mapping
+        block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
+        if segment_per_ring == 7:
+            block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
+        print(f"Using default block mapping: {block_to_label}")
 
-for ring_index, ring in enumerate(results, start=0):
-    for item in ring:
-        mask = item['mask'][0]
-        logits = item['logit']
-        block = item['block']
-        ox, oy = map(int, item['left_top'])
-        mh, mw = mask.shape[0], mask.shape[1]
+    logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
+    label_map = np.zeros(image.shape[:2], dtype=int)
+    ring_map = np.zeros(image.shape[:2], dtype=int)
 
-        end_y, end_x = oy + mh, ox + mw
-        start_y, start_x = max(0, oy), max(0, ox)
-        end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
+    for ring_index, ring in enumerate(results, start=0):
+        for item in ring:
+            mask = item['mask'][0]
+            logits = item['logit']
+            block = item['block']
+            ox, oy = map(int, item['left_top'])
+            mh, mw = mask.shape[0], mask.shape[1]
 
-        if start_y >= end_y or start_x >= end_x:
-            continue
+            end_y, end_x = oy + mh, ox + mw
+            start_y, start_x = max(0, oy), max(0, ox)
+            end_y, end_x = min(image.shape[0], end_y), min(image.shape[1], end_x)
 
-        # Crop mask + logits to the region that actually overlaps the image (handles edge rows/cols).
-        crop_y0 = start_y - oy
-        crop_x0 = start_x - ox
-        crop_y1 = crop_y0 + (end_y - start_y)
-        crop_x1 = crop_x0 + (end_x - start_x)
-        mask = mask[crop_y0:crop_y1, crop_x0:crop_x1]
+            if start_y >= end_y or start_x >= end_x:
+                continue
 
-        new_logits = restore_sam_logits(logits, (mh, mw))
-        new_logits = new_logits[crop_y0:crop_y1, crop_x0:crop_x1]
+            # Crop mask + logits to the region that actually overlaps the image (handles edge rows/cols).
+            crop_y0 = start_y - oy
+            crop_x0 = start_x - ox
+            crop_y1 = crop_y0 + (end_y - start_y)
+            crop_x1 = crop_x0 + (end_x - start_x)
+            mask = mask[crop_y0:crop_y1, crop_x0:crop_x1]
 
-        valid_slice_y = slice(start_y, end_y)
-        valid_slice_x = slice(start_x, end_x)
-        current_logits = logits_map[valid_slice_y, valid_slice_x]
+            new_logits = restore_sam_logits(logits, (mh, mw))
+            new_logits = new_logits[crop_y0:crop_y1, crop_x0:crop_x1]
 
-        if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
-            raise ValueError(
-                f"Shape mismatch after crop: mask {mask.shape}, new_logits {new_logits.shape}, "
-                f"current_logits {current_logits.shape}"
-            )
+            valid_slice_y = slice(start_y, end_y)
+            valid_slice_x = slice(start_x, end_x)
+            current_logits = logits_map[valid_slice_y, valid_slice_x]
 
-        update_mask = (new_logits > current_logits) & mask
+            if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
+                raise ValueError(
+                    f"Shape mismatch after crop: mask {mask.shape}, new_logits {new_logits.shape}, "
+                    f"current_logits {current_logits.shape}"
+                )
 
-        logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
-        label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
-        ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
+            update_mask = (new_logits > current_logits) & mask
 
-result_image = label_map
-ring_image = ring_map
+            logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
+            label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
+            ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
 
-fix_ring = np.where((ring_image >= 1) & (ring_image <= (ring_count-1)), ring_count - ring_image, ring_image)
+    result_image = label_map
+    ring_image = ring_map
+
+    fix_ring = np.where((ring_image >= 1) & (ring_image <= (ring_count - 1)), ring_count - ring_image, ring_image)
 
 def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df):
     df_copy = df.copy()

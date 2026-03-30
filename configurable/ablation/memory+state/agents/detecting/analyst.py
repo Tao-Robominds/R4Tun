@@ -20,7 +20,6 @@ from memory_state_ablation_context import (
 
 class DetectingAnalyser:
     STAGE_NAME = "detecting"
-    COT_PATH = Path("agents/detecting/cot.md")
 
     def __init__(self, tunnel_id):
         self.tunnel_id = tunnel_id
@@ -29,7 +28,7 @@ class DetectingAnalyser:
 
     def load_analysis_data(self):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
-        cot_content = read_required_text(self.COT_PATH, "Chain-of-thought instructions")
+        cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/4-1_detection.py")
         code_content = read_required_text(code_path, "Sample detecting code")
