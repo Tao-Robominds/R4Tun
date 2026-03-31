@@ -21,8 +21,7 @@ Adapt parameters based on classification:
 - **hough_threshold_oblique/horizontal/vertical**: Adapt for density and noise
 - **minLineLength/maxLineGap**: Scale with tunnel dimensions
 - **resolution**: Keep aligned with point density
-- **angle_ranges, merge_distance**: Generally stable
-- **ring_spacing_constant**: **1.2–1.3** for regular/continuous (`1-*`, `2-*`, `3-*`). **1.8** for complex (`4-*`, `5-*`) — must match physical 1.8 m ring length (same rule as unfolding `slice_spacing_factor`).
+- **angle_ranges, merge_distance, ring_spacing**: Generally stable
 
 ### Parameter Guidelines:
 - **Always provide EXACT numerical values** - Never use ranges like "50-70"

@@ -50,3 +50,24 @@ Each row of `detected.csv` is the **K-block centre** for that ring: **B1** crops
 
 ### y_bounds for taller depth maps
 7.5 m tunnels produce taller unwrapped maps — extend **processing.y_bounds** so the full wall height used by SAM crops stays inside the clamp (proportional to image height vs the 5.5 m reference).
+
+---
+
+## Reflection ablation — interpreting intrinsic metrics (GT-free)
+
+Computed from **memory+state+knowledge** outputs: `final.csv` (`pred` only), `detected.csv`, `depth_map_outlier.npy`.
+
+### `detection_quality` (gate)
+- If **fallback_ratio** is high, **K-block Y** anchors are unreliable; SAM geometry tweaks help only partially — call this out in prose.
+
+### `coverage_balance`
+- **per_block_counts** — point counts per non-zero `pred` class (semantic blocks).
+- **coefficient_of_variation_pct** — across those blocks; **< 20%** excellent, **20–40%** good, **> 40%** poor balance.
+- **critical_blocks** — block keys with count **< 30%** of the mean non-background block count.
+- **weakest_block** — smallest count; prioritize template geometry, order, or label distributions for that block.
+- **non_background_ratio** — fraction of points with `pred != 0`; very low values flag global failure or massive NaN regions.
+- **per_ring_summary** — optional per-`pred_ring` sparsity; use to spot ring-local template misalignment.
+
+### `depth_map_context`
+- **nan_ratio** / **worst_column_nan_fraction** — structural missing data; do not over-expand masks to chase impossible coverage.
+

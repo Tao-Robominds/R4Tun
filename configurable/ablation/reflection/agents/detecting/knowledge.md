@@ -122,3 +122,22 @@ The evenly-spaced fallback `X_i ≈ (i + 0.5) * (W / ring_count)` matches measur
 | **assume** | Copied from prior ring; propagates errors |
 
 Target: keep **default** + **assume** as low as possible (<10% if achievable).
+
+---
+
+## Reflection ablation — interpreting intrinsic metrics (GT-free)
+
+These fields come from `intrinsic_metrics.build_intrinsic_quality_report()` on the **memory+state+knowledge** pipeline output directory.
+
+### `detection_quality`
+- **fallback_ratio** — fraction of rows with Type `assume` or `default`. **> ~0.30** suggests aggressive Hough / binary / morphology / angle tuning (see tunnel family notes above). **< ~0.10** is a strong target when achievable.
+- **good_detection_ratio** — `midpoint` + slopes + `horizontal`; maximize.
+- **x_spacing_cv** — std/mean of sorted X gaps; **> ~0.15** suggests irregular vertical grid or spacing prior mismatch.
+- **ring_count_match** — `num_detected_rings` should equal **ring_count_expected** from `ring_count.txt`.
+
+### `depth_map_context` (read-only; upstream frozen)
+- **nan_ratio** — share of NaN pixels in `depth_map_outlier.npy`; high values explain weak detection but are **not** fixable by changing detecting parameters alone in this ablation.
+
+### `coverage_balance` (secondary for detecting)
+- Use only for consistency checks (e.g. catastrophic pred collapse); **SAM stage** owns balance tuning.
+

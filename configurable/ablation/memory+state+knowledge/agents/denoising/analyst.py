@@ -29,6 +29,7 @@ class DenoisingAnalyser:
     def load_analysis_data(self):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
         cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
+        knowledge_content = read_required_text(self._agent_dir / "knowledge.md", "Domain knowledge")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/2_denoising.py")
         code_content = read_required_text(code_path, "Sample denoising code")
@@ -37,6 +38,7 @@ class DenoisingAnalyser:
         return {
             "role": role_content,
             "cot": cot_content,
+            "knowledge": knowledge_content,
             "sample_raw": sample_raw,
             "tunnel_raw": tunnel_raw,
             "sample_code": code_content,
@@ -58,10 +60,16 @@ class DenoisingAnalyser:
         ]
         if has_state:
             parts.append(state_context)
+        parts.append(f"# DOMAIN KNOWLEDGE\n{ctx['knowledge']}")
         parts += [
             f"# REFERENCE DENOISING PARAMETERS\n{ctx['parameters_source']}\n\n```json\n{ctx['parameters']}\n```",
             f"# PIPELINE CODE (reference)\n```python\n{ctx['sample_code']}\n```",
-            strict_output_instructions(ctx["archive_filename"], ctx["parameters"], has_state=has_state),
+            strict_output_instructions(
+                ctx["archive_filename"],
+                ctx["parameters"],
+                has_state=has_state,
+                has_knowledge=True,
+            ),
         ]
         return "\n\n".join(parts)
 

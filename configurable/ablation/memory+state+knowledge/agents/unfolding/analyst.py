@@ -26,6 +26,7 @@ class UnfoldingAnalyser:
     def load_analysis_data(self):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
         cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
+        knowledge_content = read_required_text(self._agent_dir / "knowledge.md", "Domain knowledge")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
         code_path = Path("sam4tun/1_upfolding.py")
         code_content = read_required_text(code_path, "Sample unfolding code")
@@ -34,6 +35,7 @@ class UnfoldingAnalyser:
         return {
             "role": role_content,
             "cot": cot_content,
+            "knowledge": knowledge_content,
             "sample_raw": sample_raw,
             "tunnel_raw": tunnel_raw,
             "sample_code": code_content,
@@ -47,11 +49,17 @@ class UnfoldingAnalyser:
         parts = [
             f"# ROLE\n{ctx['role']}",
             f"# ANALYSIS METHODOLOGY\n{ctx['cot']}",
+            f"# DOMAIN KNOWLEDGE\n{ctx['knowledge']}",
             f"# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)\n```json\n{ctx['sample_raw']}\n```",
             f"# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id={self.tunnel_id})\n```json\n{ctx['tunnel_raw']}\n```",
             f"# REFERENCE UNFOLDING PARAMETERS\n{ctx['parameters_source']}\n\n```json\n{ctx['parameters']}\n```",
             f"# PIPELINE CODE (reference)\n```python\n{ctx['sample_code']}\n```",
-            strict_output_instructions(ctx["archive_filename"], ctx["parameters"], has_state=False),
+            strict_output_instructions(
+                ctx["archive_filename"],
+                ctx["parameters"],
+                has_state=False,
+                has_knowledge=True,
+            ),
         ]
         return "\n\n".join(parts)
 
