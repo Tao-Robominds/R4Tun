@@ -43,12 +43,6 @@ ABLATION_CONDITIONS = {
         "per_tunnel": True,
         "out_prefix": "data/ablation/memory+state+knowledge",
     },
-    "r": {
-        "folder": "reflection",
-        "ablation_tag": "_r",
-        "per_tunnel": True,
-        "out_prefix": "data/ablation/reflection",
-    },
 }
 
 ABLATION_CODES = list(ABLATION_CONDITIONS.keys())

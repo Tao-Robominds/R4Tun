@@ -7,7 +7,7 @@
 #   ./run_agents.sh <tunnel_id> --ablation <code> [--model <tag>] [--schema 6|7|auto|both]
 #   ./run_agents.sh --all --ablation <code> [--model <tag>] [--schema 6|7|auto|both]
 #
-# Ablation codes: sam4tun, m, m_s, m_s_k, r
+# Ablation codes: sam4tun, m, m_s, m_s_k
 # Model tag: LLM model suffix for parameter filenames (default: opus4.6)
 #
 # Examples:
@@ -20,7 +20,7 @@ set -euo pipefail
 if [ $# -eq 0 ]; then
     echo "❌ Error: arguments required"
     echo "Usage: $0 <tunnel_id|--all> --ablation <code> [--schema 6|7|auto|both]"
-    echo "Ablation codes: sam4tun, m, m_s, m_s_k, r"
+    echo "Ablation codes: sam4tun, m, m_s, m_s_k"
     exit 1
 fi
 
@@ -92,16 +92,16 @@ done
 
 if [ -z "$ABLATION" ]; then
     echo "❌ Error: --ablation <code> is required"
-    echo "Ablation codes: sam4tun, m, m_s, m_s_k, r"
+    echo "Ablation codes: sam4tun, m, m_s, m_s_k"
     exit 1
 fi
 
 # Validate ablation code
 case "$ABLATION" in
-    sam4tun|m|m_s|m_s_k|r) ;;
+    sam4tun|m|m_s|m_s_k) ;;
     *)
         echo "❌ Unknown ablation code: $ABLATION"
-        echo "Valid codes: sam4tun, m, m_s, m_s_k, r"
+        echo "Valid codes: sam4tun, m, m_s, m_s_k"
         exit 1
         ;;
 esac
@@ -112,7 +112,6 @@ declare -A ABLATION_PREFIX=(
     [m]="data/ablation/memory"
     [m_s]="data/ablation/memory+state"
     [m_s_k]="data/ablation/memory+state+knowledge"
-    [r]="data/ablation/reflection"
 )
 export R4TUN_PIPELINE_OUT_PREFIX="${ABLATION_PREFIX[$ABLATION]}"
 
@@ -125,7 +124,6 @@ if [ "$RUN_ALL" = 1 ]; then
             [m]="memory"
             [m_s]="memory+state"
             [m_s_k]="memory+state+knowledge"
-            [r]="reflection"
         )
         PARAM_DIR="configurable/ablation/${ABLATION_FOLDER[$ABLATION]}/parameters"
         if [ ! -d "$PARAM_DIR" ]; then

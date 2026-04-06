@@ -29,7 +29,7 @@ Each `parameters_*_m_opus4.6.json` is a **byte-for-byte copy** of this tunnel’
 | Detecting | `parameters_detecting_m_opus4.6.json` | identical |
 | SAM | `parameters_sam_m_opus4.6.json` | identical |
 
-**Conclusion:** Memory-only baseline = **retain** archived parameters. Later ablation roots (`memory+state`, `memory+state+knowledge`, `reflection`) are where analyst context may diverge.
+**Conclusion:** Memory-only baseline = **retain** archived parameters. Later ablation roots (`memory+state`, `memory+state+knowledge`) are where analyst context may diverge.
 
 ## Archive history
 

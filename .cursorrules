@@ -22,7 +22,7 @@ When asked a question or making a claim about why something is happening:
 ## Project Structure
 
 - `configurable/` — **KEY folder.** Contains the five pipeline stage scripts (`configurable_unfolding.py`, `configurable_denoising.py`, `configurable_enhancing.py`, `configurable_detecting.py`, `configurable_sam.py`), `evaluation.py`, and `pipeline_data.py` (shared argument parsing, ablation parameter resolution, output directory helpers). All experiments run through these scripts.
-- `configurable/ablation/` — Ablation study conditions. Each subfolder holds LLM inference workspaces (agents, parameters, prompts) for one ablation level. Pipeline stages load parameters **directly** from here via `--ablation <code>` — no sync/copy step: `sam4tun/` (baseline, shared params), `memory/parameters/{tunnel_id}/`, `memory+state/`, `memory+state+knowledge/`, `reflection/`.
+- `configurable/ablation/` — Ablation study conditions. Each subfolder holds LLM inference workspaces (agents, parameters, prompts) for one ablation level. Pipeline stages load parameters **directly** from here via `--ablation <code>` — no sync/copy step: `sam4tun/` (baseline, shared params), `memory/parameters/{tunnel_id}/`, `memory+state/`, `memory+state+knowledge/`.
 - `agents/` — **Reference only.** Original per-stage analyst/coder agents (`role.md`, `cot.md`, `knowledge.md`, `analyst.py`, `coder.py`). Used for reading design patterns; ablation experiments use `configurable/ablation/` instead.
 - `data/` — Point clouds (`data/subsets/{tunnel_id}.txt`), pipeline run outputs (`data/ablation/{condition}/{tunnel_id}/`), characteristics, evaluation results. Do not overwrite existing results.
 - `methods/` — Plans, journals, scripts, templates.
@@ -45,7 +45,6 @@ Five configurable stages run sequentially: Unfolding → Denoising → Enhancing
 | 1 | **memory** | `configurable/ablation/memory/` | Raw tunnel characteristics (geometry, density, counts) |
 | 2 | **memory+state** | `configurable/ablation/memory+state/` | + pipeline intermediate outputs (stage artifacts) |
 | 3 | **memory+state+knowledge** | `configurable/ablation/memory+state+knowledge/` | + domain knowledge (`knowledge.md`, parameter semantics) |
-| 4 | **reflection** | `configurable/ablation/reflection/` | + iterative self-correction using evaluation feedback |
 
 ### Workflow per Ablation Condition
 
@@ -61,7 +60,6 @@ Five configurable stages run sequentially: Unfolding → Denoising → Enhancing
 | `m` | Memory only | `./run_agents.sh 1-1 --ablation m` |
 | `m_s` | Memory + state | `./run_agents.sh 1-1 --ablation m_s` |
 | `m_s_k` | Memory + state + knowledge | `./run_agents.sh 1-1 --ablation m_s_k` |
-| `r` | + Reflection | `./run_agents.sh 1-1 --ablation r` |
 
 Run all tunnels: `./run_agents.sh --all --ablation m --schema auto`
 

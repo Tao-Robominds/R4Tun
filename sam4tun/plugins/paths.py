@@ -14,7 +14,6 @@ Layout convention — see ``methods/plans/steps/00_methodology_chain.md``.
 | ``-m`` | ``memory`` |
 | ``-m+s`` | ``memory+state`` |
 | ``-m+s+k`` | ``memory+state+knowledge`` |
-| ``-m+s+k+r`` | ``reflection`` |
 """
 
 import os
@@ -26,14 +25,12 @@ ABLATION_TUNNEL_SUBROOT = "memory"
 ABLATION_OUTPUT_MEMORY = "memory"
 ABLATION_OUTPUT_MEMORY_STATE = "memory+state"
 ABLATION_OUTPUT_MEMORY_STATE_KNOWLEDGE = "memory+state+knowledge"
-ABLATION_OUTPUT_REFLECTION = "reflection"
 
 # Maps archived parameter suffix (e.g. "-m+s") to output folder name under data/ablation/.
 ABLATION_SUFFIX_TO_OUTPUT_ROOT = {
     "-m": ABLATION_OUTPUT_MEMORY,
     "-m+s": ABLATION_OUTPUT_MEMORY_STATE,
     "-m+s+k": ABLATION_OUTPUT_MEMORY_STATE_KNOWLEDGE,
-    "-m+s+k+r": ABLATION_OUTPUT_REFLECTION,
 }
 
 

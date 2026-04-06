@@ -1,6 +1,6 @@
 # Methodology chain: subset baselines → configurable ablation → paired statistics
 
-Single overview for the **ablation study** comparing a **fixed engineer-designed `sam4tun` pipeline** (no per-tunnel adaptation) against the **`configurable` + `agents` pipeline** with **staged analyst context** and **reflecting only at the final level**. 
+Single overview for the **ablation study** comparing a **fixed engineer-designed `sam4tun` pipeline** (no per-tunnel adaptation) against the **`configurable` + `agents` pipeline** with **staged analyst context** (memory → memory+state → memory+state+knowledge). 
 
 Read this before running plugins, baselines, ablation runs, evaluation, and statistical comparison.
 
@@ -24,7 +24,7 @@ Assign each file a **tunnel_id** (e.g. stem without `.txt`). Materialise working
 
 1. **Characteristics (plugins)** — Run **`sam4tun/plugins`** on **`data/sample.txt`** (reference tunnel) and on **every** subset point cloud, and save JSON features under a stable tree (see below).
 2. **Baseline mIoU (sam4tun)** — Run **one fixed** `sam4tun` script sequence and parameters **for all** subset tunnels (same engineer defaults; no BO, no per-tunnel retuning). Evaluate mIoU per tunnel with the correct **6 vs 7** schema. This quantifies **lack of adaptability** of the hand-tuned stack.
-3. **Ablation pipeline (configurable + agents)** — For each subset tunnel, run the **full** end-to-end process **four times** (same raw point cloud each time), differing by **analyst context**. Each condition stores inferred parameter JSONs under its own `configurable/ablation/{condition}/parameters/{tunnel_id}/`. Run: `./run_agents.sh <tunnel_id> --ablation <code>` (or `--all`). Pipeline stages load parameters **directly** from the ablation folder — no sync/copy. Outputs persist under `data/ablation/{condition}/{tunnel_id}/`. 
+3. **Ablation pipeline (configurable + agents)** — For each subset tunnel, run the **full** end-to-end process **three times** with agentic adaptation (same raw point cloud each time), differing by **analyst context** (`m`, `m_s`, `m_s_k`). Each condition stores inferred parameter JSONs under its own `configurable/ablation/{condition}/parameters/{tunnel_id}/`. Run: `./run_agents.sh <tunnel_id> --ablation <code>` (or `--all`). Pipeline stages load parameters **directly** from the ablation folder — no sync/copy. Outputs persist under `data/ablation/{condition}/{tunnel_id}/`. 
 4. **Evaluation** — `configurable/evaluation.py` with **`--ablation <code> --schema 6`** or **`--schema 7`** by family (or **`--schema auto`**); metrics under `data/ablation/{condition}/{tunnel_id}/evaluation/` (`performance.md`; **`--schema both`** adds `performance_6.md` / `performance_7.md` and suffixed plots).
 5. **Statistics** — **Paired** comparison per subset: **mIoU_agents − mIoU_sam4tun**. Report **mean and std** of the paired differences **per layout family** separately, plus a **p-value** (paired test) for whether agents/configurable beats the fixed sam4tun baseline on that family.
 
@@ -43,7 +43,7 @@ which reads `data/sample.txt` and `data/subsets/*.txt` and writes `raw_character
 **Outputs (convention):**
 
 - Reference sample (universal baseline): **`data/sample/characteristics/`** (JSON artefacts per plugin; folder name **`characteristics`**, not `charateristics`).
-- **`data/ablation/memory/{tunnel_id}/characteristics/`** — **raw / pre-pipeline** characteristics (e.g. `raw_characteristics.json`). **Level 1** (`-m`) **full pipeline** outputs use the **same tunnel root** **`data/ablation/memory/{tunnel_id}/`**: CSVs and other artefacts sit next to the existing `characteristics/` subfolder (so raw JSON and the memory-only run share one tree). **Levels 2–4** use **separate roots** (Step 3) with **no** duplicate raw batch there unless you copy for traceability.
+- **`data/ablation/memory/{tunnel_id}/characteristics/`** — **raw / pre-pipeline** characteristics (e.g. `raw_characteristics.json`). **Level 1** (`-m`) **full pipeline** outputs use the **same tunnel root** **`data/ablation/memory/{tunnel_id}/`**: CSVs and other artefacts sit next to the existing `characteristics/` subfolder (so raw JSON and the memory-only run share one tree). **Levels 2–3** use **separate roots** (Step 3) with **no** duplicate raw batch there unless you copy for traceability.
 
 If a plugin currently assumes paths like `data/{tunnel_id}/`, either run it after copying/symlinking the subset into `data/{tunnel_id}/` or adapt invocations so tunnel_id resolves correctly; the methodology requires **one clear row in the journal** listing exact commands and paths.
 
@@ -72,7 +72,7 @@ All four write under **`data/sample/characteristics/`** when `tunnel_id` is **`s
 
 ## Step 3 — Ablation: configurable end-to-end + analyst levels
 
-**Goal:** For each subset **`tunnel_id`**, same **raw** input as in **`data/subsets/{tunnel_id}.txt`** (materialised under **`data/{tunnel_id}/`** for the active run), produce **four** complete output trees comparable to **`data/sample/`**.
+**Goal:** For each subset **`tunnel_id`**, same **raw** input as in **`data/subsets/{tunnel_id}.txt`** (materialised under **`data/{tunnel_id}/`** for the active run), produce **three** agentic-condition output trees comparable to **`data/sample/`** (plus the shared **`sam4tun`** baseline).
 
 ### 3a — Full pipeline outputs per condition (mirror `data/sample/`)
 
@@ -84,20 +84,18 @@ All four write under **`data/sample/characteristics/`** when `tunnel_id` is **`s
 | `m` | Memory only | `configurable/ablation/memory/parameters/{tunnel_id}/parameters_{stage}_m_opus4.6.json` | `data/ablation/memory/{tunnel_id}/` |
 | `m_s` | Memory + state | `configurable/ablation/memory+state/parameters/{tunnel_id}/parameters_{stage}_m_s.json` | `data/ablation/memory+state/{tunnel_id}/` |
 | `m_s_k` | + Knowledge | `configurable/ablation/memory+state+knowledge/parameters/{tunnel_id}/parameters_{stage}_m_s_k.json` | `data/ablation/memory+state+knowledge/{tunnel_id}/` |
-| `r` | + Reflection | `configurable/ablation/reflection/parameters/{tunnel_id}/parameters_{stage}_r.json` | `data/ablation/reflection/{tunnel_id}/` |
 
 Each run populates the usual artefacts (`unwrapped.csv`, `denoised.csv`, `enhanced.csv`, `detected.csv`, `final.csv`, `only_label.csv`, `evaluation/`). **`data/sample/`** remains the **single universal reference**.
 
 **Shell note:** folder names contain **`+`**; `run_agents.sh` handles quoting internally.
 
-### 3b — Analyst context (four levels)
+### 3b — Analyst context (three levels)
 
-| Level | Name (concept) | What the analyst sees | Reflecting (`agents/reflecting`) |
-|-------|----------------|------------------------|----------------------------------|
-| **1** | Memory only (`m`) | Sample tunnel characteristics only | **Off** |
-| **2** | Memory + state (`m+s`) | Sample **+** new tunnel characteristics | **Off** |
-| **3** | + Knowledge (`m+s+k`) | As level 2 **+** `agents/denoising/knowledge.md` | **Off** |
-| **4** | Full (`m+s+k+r`) | Full analyst context **+** **full reflecting** | **On** |
+| Level | Name (concept) | What the analyst sees |
+|-------|----------------|------------------------|
+| **1** | Memory only (`m`) | Sample tunnel characteristics only |
+| **2** | Memory + state (`m+s`) | Sample **+** new tunnel characteristics |
+| **3** | + Knowledge (`m+s+k`) | As level 2 **+** `agents/denoising/knowledge.md` |
 
 ### 3c — Running a condition
 
@@ -113,7 +111,7 @@ Each condition's parameters live in their own folder under `configurable/ablatio
 
 The mapping from `--ablation <code>` to parameter paths and output prefixes is defined in `configurable/pipeline_data.py::ABLATION_CONDITIONS`.
 
-**Stopping rule:** **No BO.** Per subset, **one** final mIoU after the **`reflection`** condition; earlier conditions attribute gains.
+**Stopping rule:** **No BO.** Per subset, **one** final mIoU after the **`m_s_k`** condition; earlier conditions attribute gains.
 
 ---
 
@@ -160,19 +158,17 @@ flowchart TB
     D1[data/ablation/memory/tunnel_id]
     D2[data/ablation/memory+state/tunnel_id]
     D3[data/ablation/memory+state+knowledge/tunnel_id]
-    D4[data/ablation/reflection/tunnel_id]
     PA -->|"--ablation code"| C
     C --> D1
     C --> D2
     C --> D3
-    C --> D4
   end
   subgraph stats [Step 5 Stats]
     T[Paired delta mIoU per family]
     T --> M[mean std p-value]
   end
   E1 --> T
-  D4 --> E2[configurable/evaluation.py]
+  D3 --> E2[configurable/evaluation.py]
   E2 --> T
 ```
 
@@ -203,7 +199,6 @@ flowchart TB
 | Cross-condition comparison | `skills/scripts/compare_ablation_conditions.py` |
 | Denoising analyst | `agents/denoising/analyst.py` |
 | Denoising knowledge (level 3+) | `agents/denoising/knowledge.md` |
-| Reflecting (level 4 only) | `agents/reflecting/` |
 | Raw characteristics batch | `methods/plans/steps/run_raw_characteristics_ablation.py` |
 | Run logs | `data/logs/{tunnel_id}/` |
 
