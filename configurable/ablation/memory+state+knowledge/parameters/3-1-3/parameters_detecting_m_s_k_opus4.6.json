@@ -5,12 +5,12 @@
     3
   ],
   "dilation_iterations": 1,
-  "hough_threshold_oblique": 50,
-  "minLineLength_oblique": 90,
-  "maxLineGap_oblique": 45,
-  "hough_threshold_horizontal": 50,
-  "minLineLength_horizontal": 90,
-  "maxLineGap_horizontal": 12,
+  "hough_threshold_oblique": 40,
+  "minLineLength_oblique": 80,
+  "maxLineGap_oblique": 50,
+  "hough_threshold_horizontal": 35,
+  "minLineLength_horizontal": 80,
+  "maxLineGap_horizontal": 18,
   "hough_threshold_vertical": 450,
   "angle_range_oblique_positive": [
     6,

@@ -1,0 +1,104 @@
+{
+  "AB_height": 6867.5,
+  "K_height": 2289.18,
+  "angle": 14.0,
+  "processing": {
+    "resolution": 0.005,
+    "padding": 210,
+    "crop_margin": 70,
+    "mask_eps": 0.001,
+    "y_bounds": [
+      8906,
+      27773
+    ]
+  },
+  "prompt_points": {
+    "k_block": {
+      "outer_ring": 1328,
+      "middle_ring": 947,
+      "inner_ring": 659.61,
+      "center_ring": 616,
+      "spacing_factors": {
+        "k_block_spacing": 659.06,
+        "vertical_spacing": [
+          1552.4,
+          1072.5,
+          659.06,
+          464.24,
+          792.7
+        ]
+      }
+    },
+    "ab_blocks": {
+      "outer_ring": 1328,
+      "middle_ring": 968.23,
+      "inner_ring": 660,
+      "center_ring": 616,
+      "fine_spacing": 474,
+      "ultra_fine": 307.87,
+      "edge_ring": 659.61,
+      "edge_spacing": 664,
+      "vertical_levels": {
+        "level_1": 3645.74,
+        "level_2": 3221.79,
+        "level_3": 2850.84,
+        "level_4": 2310.71,
+        "level_5": 1733.04,
+        "level_6": 1155.37,
+        "level_7": 577.67,
+        "center": 0,
+        "special_levels": [
+          2753.4,
+          2948.24,
+          3025.8,
+          3417.63,
+          3449.87,
+          3502.74,
+          3547.81,
+          3743.65,
+          3788.71,
+          3841.58,
+          2851.08,
+          3078.79,
+          3123.86,
+          3319.7,
+          3364.76
+        ]
+      }
+    },
+    "template_mask": {
+      "k_block": {
+        "width": 1184,
+        "height_pos": 1312.46,
+        "height_neg": 976.72
+      },
+      "b1_block": {
+        "width": 1184,
+        "height_top": 3433.77,
+        "height_bottom_pos": 3265.88,
+        "height_bottom_neg": 3601.62
+      },
+      "b2_block": {
+        "width": 1184,
+        "height_top_pos": 3265.88,
+        "height_top_neg": 3601.62,
+        "height_bottom": 3433.77
+      },
+      "a_blocks": {
+        "width": 1184,
+        "height": 3433.77
+      }
+    }
+  },
+  "segment_order": [
+    "K",
+    "B1",
+    "A1",
+    "A2",
+    "A3",
+    "B2"
+  ],
+  "segment_per_ring": 6,
+  "segment_width": 2276,
+  "use_original_label_distributions": true
+}

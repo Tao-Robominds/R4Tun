@@ -1,0 +1,26 @@
+{
+  "binary_threshold": 127,
+  "morphological_kernel_size": [
+    3,
+    3
+  ],
+  "dilation_iterations": 2,
+  "hough_threshold_oblique": 45,
+  "minLineLength_oblique": 195,
+  "maxLineGap_oblique": 76,
+  "hough_threshold_horizontal": 45,
+  "minLineLength_horizontal": 195,
+  "maxLineGap_horizontal": 21,
+  "hough_threshold_vertical": 750,
+  "angle_range_oblique_positive": [
+    6,
+    9
+  ],
+  "angle_range_oblique_negative": [
+    -9,
+    -6
+  ],
+  "merge_distance": 3,
+  "ring_spacing_constant": 1.2,
+  "resolution": 0.005
+}

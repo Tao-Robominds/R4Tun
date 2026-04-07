@@ -4,7 +4,7 @@
     3,
     3
   ],
-  "dilation_iterations": 1,
+  "dilation_iterations": 2,
   "hough_threshold_oblique": 40,
   "minLineLength_oblique": 140,
   "maxLineGap_oblique": 55,

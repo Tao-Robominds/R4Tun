@@ -1,0 +1,104 @@
+{
+  "segment_per_ring": 6,
+  "segment_order": [
+    "K",
+    "B1",
+    "A1",
+    "A2",
+    "A3",
+    "B2"
+  ],
+  "segment_width": 2290,
+  "K_height": 2255,
+  "AB_height": 6765,
+  "angle": 10.47,
+  "use_original_label_distributions": true,
+  "processing": {
+    "resolution": 0.005,
+    "padding": 314,
+    "crop_margin": 105,
+    "mask_eps": 0.001,
+    "y_bounds": [
+      8595,
+      26805
+    ]
+  },
+  "prompt_points": {
+    "k_block": {
+      "outer_ring": 1335,
+      "middle_ring": 955,
+      "inner_ring": 665,
+      "center_ring": 620,
+      "spacing_factors": {
+        "k_block_spacing": 593,
+        "vertical_spacing": [
+          1530,
+          1056,
+          649,
+          457,
+          781
+        ]
+      }
+    },
+    "ab_blocks": {
+      "outer_ring": 1335,
+      "middle_ring": 975,
+      "inner_ring": 955,
+      "center_ring": 620,
+      "fine_spacing": 475,
+      "ultra_fine": 310,
+      "edge_ring": 665,
+      "edge_spacing": 667,
+      "vertical_levels": {
+        "level_1": 3591,
+        "level_2": 3174,
+        "level_3": 2807,
+        "level_4": 2276,
+        "level_5": 1707,
+        "level_6": 1138,
+        "level_7": 569,
+        "center": 0,
+        "special_levels": [
+          2711,
+          2903,
+          2979,
+          3365,
+          3397,
+          3449,
+          3493,
+          3686,
+          3731,
+          3783,
+          2808,
+          3033,
+          3078,
+          3270,
+          3314
+        ]
+      }
+    },
+    "template_mask": {
+      "k_block": {
+        "width": 1190,
+        "height_pos": 1293,
+        "height_neg": 962
+      },
+      "b1_block": {
+        "width": 1190,
+        "height_top": 3382,
+        "height_bottom_pos": 3216,
+        "height_bottom_neg": 3547
+      },
+      "b2_block": {
+        "width": 1190,
+        "height_top_pos": 3216,
+        "height_top_neg": 3547,
+        "height_bottom": 3382
+      },
+      "a_blocks": {
+        "width": 1190,
+        "height": 3382
+      }
+    }
+  }
+}

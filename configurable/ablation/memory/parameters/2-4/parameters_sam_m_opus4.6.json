@@ -8,9 +8,9 @@
     "A3",
     "B2"
   ],
-  "segment_width": 1304.4,
-  "K_height": 1173.88,
-  "AB_height": 3521.64,
+  "segment_width": 1200,
+  "K_height": 1079.92,
+  "AB_height": 3239.77,
   "angle": 7.52,
   "use_original_label_distributions": true,
   "processing": {
@@ -19,85 +19,85 @@
     "crop_margin": 50,
     "mask_eps": 0.001,
     "y_bounds": [
-      4565,
-      14240
+      4200,
+      13100
     ]
   },
   "prompt_points": {
     "k_block": {
-      "outer_ring": 760.9,
-      "middle_ring": 543.5,
-      "inner_ring": 378.45,
-      "center_ring": 353.28,
+      "outer_ring": 700,
+      "middle_ring": 500,
+      "inner_ring": 348.16,
+      "center_ring": 325,
       "spacing_factors": {
-        "k_block_spacing": 337.96,
+        "k_block_spacing": 310.91,
         "vertical_spacing": [
-          796.07,
-          549.98,
-          337.96,
-          238.06,
-          406.5
+          732.35,
+          505.96,
+          310.91,
+          219.01,
+          373.96
         ]
       }
     },
     "ab_blocks": {
-      "outer_ring": 760.9,
-      "middle_ring": 555.52,
-      "inner_ring": 543.5,
-      "center_ring": 353.28,
-      "fine_spacing": 271.75,
-      "ultra_fine": 176.64,
-      "edge_ring": 378.45,
-      "edge_spacing": 380.45,
+      "outer_ring": 700,
+      "middle_ring": 511.06,
+      "inner_ring": 500,
+      "center_ring": 325,
+      "fine_spacing": 250,
+      "ultra_fine": 162.5,
+      "edge_ring": 348.16,
+      "edge_spacing": 350,
       "vertical_levels": {
-        "level_1": 1869.53,
-        "level_2": 1652.12,
-        "level_3": 1461.9,
-        "level_4": 1184.93,
-        "level_5": 888.7,
-        "level_6": 592.47,
-        "level_7": 296.23,
-        "center": 0.0,
+        "level_1": 1719.89,
+        "level_2": 1519.89,
+        "level_3": 1344.89,
+        "level_4": 1090.09,
+        "level_5": 817.57,
+        "level_6": 545.05,
+        "level_7": 272.52,
+        "center": 0,
         "special_levels": [
-          1411.94,
-          1511.85,
-          1551.62,
-          1752.55,
-          1769.09,
-          1796.2,
-          1819.31,
-          1919.73,
-          1942.84,
-          1969.95,
-          1462.03,
-          1578.8,
-          1601.91,
-          1702.33,
-          1725.44
+          1298.93,
+          1390.84,
+          1427.43,
+          1612.28,
+          1627.49,
+          1652.43,
+          1673.69,
+          1766.08,
+          1787.34,
+          1812.28,
+          1345.01,
+          1452.43,
+          1473.69,
+          1566.08,
+          1587.34
         ]
       }
     },
     "template_mask": {
       "k_block": {
-        "width": 679.38,
-        "height_pos": 673.03,
-        "height_neg": 500.86
+        "width": 625,
+        "height_pos": 619.16,
+        "height_neg": 460.77
       },
       "b1_block": {
-        "width": 679.38,
-        "height_top": 1760.83,
-        "height_bottom_pos": 1674.73,
-        "height_bottom_neg": 1846.9
+        "width": 625,
+        "height_top": 1619.89,
+        "height_bottom_pos": 1540.69,
+        "height_bottom_neg": 1699.08
       },
       "b2_block": {
-        "width": 679.38,
-        "height_top_pos": 1674.73,
-        "height_top_neg": 1846.9,
-        "height_bottom": 1760.83
+        "width": 625,
+        "height_top_pos": 1540.69,
+        "height_top_neg": 1699.08,
+        "height_bottom": 1619.89
       },
       "a_blocks": {
-        "width": 679.38,
-        "height": 1760.83
+        "width": 625,
+        "height": 1619.89
       }
     }
   }

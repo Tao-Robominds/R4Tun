@@ -1,24 +1,24 @@
 {
-  "binary_threshold": 120,
+  "binary_threshold": 115,
   "morphological_kernel_size": [
     3,
     3
   ],
-  "dilation_iterations": 1,
-  "hough_threshold_oblique": 55,
-  "minLineLength_oblique": 140,
-  "maxLineGap_oblique": 55,
-  "hough_threshold_horizontal": 55,
-  "minLineLength_horizontal": 140,
-  "maxLineGap_horizontal": 15,
+  "dilation_iterations": 2,
+  "hough_threshold_oblique": 35,
+  "minLineLength_oblique": 100,
+  "maxLineGap_oblique": 70,
+  "hough_threshold_horizontal": 35,
+  "minLineLength_horizontal": 100,
+  "maxLineGap_horizontal": 25,
   "hough_threshold_vertical": 600,
   "angle_range_oblique_positive": [
-    6,
-    9
+    4,
+    12
   ],
   "angle_range_oblique_negative": [
-    -9,
-    -6
+    -12,
+    -4
   ],
   "merge_distance": 4,
   "ring_spacing_constant": 1.8,

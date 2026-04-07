@@ -1,5 +1,5 @@
 """
-Helpers for **memory+state ablation analyst** prompts.
+Helpers for **memory+state+knowledge ablation analyst** prompts.
 
 Extends the memory ablation context with stage-wise processed characteristics:
 after each pipeline stage, the characteriser plugin extracts a JSON summary which
@@ -51,9 +51,8 @@ PRIOR_STAGES: dict[str, list[str]] = {
     "sam":       ["unfolding", "denoising", "enhancing", "detecting"],
 }
 
-ABLATION_FOLDER = "memory+state"
-PARAM_ABLATION_FOLDER = "memory+state+knowledge"
-PARAM_BASE = Path("configurable/ablation") / PARAM_ABLATION_FOLDER / "parameters"
+ABLATION_FOLDER = "memory+state+knowledge"
+PARAM_BASE = Path("configurable/ablation") / ABLATION_FOLDER / "parameters"
 
 # ---------------------------------------------------------------------------
 # File I/O helpers (same as memory ablation)

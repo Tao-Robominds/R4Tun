@@ -1,0 +1,10 @@
+{
+  "mask_r_low": 2.3301,
+  "mask_r_high": 2.7809,
+  "y_step": 0.4,
+  "z_step": 0.005,
+  "grad_threshold": 0.15,
+  "smoothing_window_size": 5,
+  "smoothing_offset": -0.002,
+  "default_cutoff_z": 2.658666276018561
+}
