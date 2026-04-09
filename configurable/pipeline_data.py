@@ -97,7 +97,7 @@ def _build_suffix(ablation_code: str, model: str) -> str:
 
     sam4tun → '' (no suffix)
     m + opus4.6 → '_m_opus4.6'
-    m_s + gemini2.5 → '_m_s_gemini2.5'
+    m_s + gemini3flash → '_m_s_gemini3flash'
     """
     cond = ABLATION_CONDITIONS[ablation_code]
     tag = cond["ablation_tag"]

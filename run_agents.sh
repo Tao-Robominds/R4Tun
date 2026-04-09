@@ -12,7 +12,7 @@
 #
 # Examples:
 #   ./run_agents.sh 1-1 --ablation m --schema auto
-#   ./run_agents.sh 1-1 --ablation m --model gemini2.5 --schema auto
+#   ./run_agents.sh 1-1 --ablation m --model gemini3flash --schema auto
 #   ./run_agents.sh --all --ablation m --schema auto
 
 set -euo pipefail

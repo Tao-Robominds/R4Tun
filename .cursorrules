@@ -11,13 +11,14 @@ When asked a question or making a claim about why something is happening:
 ## Project Conventions
 
 1. **Venv:** Use local `./venv` only; do not create a new virtual environment.
-2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not overwrite existing results in `data/`.
-3. **GT columns:** `segment` and `ring` in the raw point cloud are ground truth; any metric using them is GT-dependent and not intrinsic for new tunnels.
-4. **Skills:** Put re-usable prompts and scripts under `skills/`.
-5. **Be concise:** Summaries, docs, and replies short and actionable; no long prose or redundancy.
-6. **Match existing style:** Journals follow `methods/journals/` (objective, experiments, summary table, key insights, files touched); plan outputs follow `methods/plans/output/` (artifact list, required format, verification).
-7. **GT at design time only:** Pipeline GT-free at runtime; use GT only for evalutions.
-8. **One deliverable per ask:** Produce only what was requested; do not add extra docs or scripts unless asked.
+2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not delete and overwrite existing results in `data/`.
+3. **Destructive operations — ask every time:** Before **deleting** (`rm`, `rm -rf`, emptying dirs), **truncating**, or **overwriting** any file or tree that could hold experiment or user work — especially under `data/` (including `data/ablation/`), `configurable/ablation/**/parameters/`, or any path the user did not explicitly list — **stop and ask**. Quote the **exact paths** you would change, say what would be lost, and **wait for explicit user confirmation** (e.g. “yes, delete X”). Never infer “clean” or “reset” as permission to wipe `data/` or ablation outputs without that confirmation. If the request is ambiguous, ask what to keep vs remove before running any destructive command.
+4. **GT columns:** `segment` and `ring` in the raw point cloud are ground truth; any metric using them is GT-dependent and not intrinsic for new tunnels.
+5. **Skills:** Put re-usable prompts and scripts under `skills/`.
+6. **Be concise:** Summaries, docs, and replies short and actionable; no long prose or redundancy.
+7. **Match existing style:** Journals follow `methods/journals/` (objective, experiments, summary table, key insights, files touched); plan outputs follow `methods/plans/output/` (artifact list, required format, verification).
+8. **GT at design time only:** Pipeline GT-free at runtime; use GT only for evalutions.
+9. **One deliverable per ask:** Produce only what was requested; do not add extra docs or scripts unless asked.
 
 ## Project Structure
 

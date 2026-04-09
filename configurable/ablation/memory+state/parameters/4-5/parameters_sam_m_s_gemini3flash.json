@@ -1,0 +1,104 @@
+{
+  "segment_per_ring": 6,
+  "segment_order": [
+    "K",
+    "B1",
+    "A1",
+    "A2",
+    "A3",
+    "B2"
+  ],
+  "segment_width": 2321,
+  "K_height": 2086.52,
+  "AB_height": 6259.56,
+  "angle": 8.65,
+  "use_original_label_distributions": true,
+  "processing": {
+    "resolution": 0.005,
+    "padding": 210,
+    "crop_margin": 70,
+    "mask_eps": 0.001,
+    "y_bounds": [
+      5840,
+      25312
+    ]
+  },
+  "prompt_points": {
+    "k_block": {
+      "outer_ring": 1352,
+      "middle_ring": 966,
+      "inner_ring": 672.68,
+      "center_ring": 628,
+      "spacing_factors": {
+        "k_block_spacing": 600.72,
+        "vertical_spacing": [
+          1414.98,
+          977.56,
+          600.72,
+          423.14,
+          722.52
+        ]
+      }
+    },
+    "ab_blocks": {
+      "outer_ring": 1352,
+      "middle_ring": 987.41,
+      "inner_ring": 966,
+      "center_ring": 628,
+      "fine_spacing": 484,
+      "ultra_fine": 313.97,
+      "edge_ring": 672.68,
+      "edge_spacing": 677,
+      "vertical_levels": {
+        "level_1": 3323.0,
+        "level_2": 2936.58,
+        "level_3": 2598.47,
+        "level_4": 2106.16,
+        "level_5": 1579.62,
+        "level_6": 1053.09,
+        "level_7": 526.53,
+        "center": 0,
+        "special_levels": [
+          2509.66,
+          2687.25,
+          2757.94,
+          3115.09,
+          3144.47,
+          3192.66,
+          3233.74,
+          3412.24,
+          3453.32,
+          3501.51,
+          2598.69,
+          2806.24,
+          2847.32,
+          3025.82,
+          3066.9
+        ]
+      }
+    },
+    "template_mask": {
+      "k_block": {
+        "width": 1208,
+        "height_pos": 1196.28,
+        "height_neg": 890.25
+      },
+      "b1_block": {
+        "width": 1208,
+        "height_top": 3129.79,
+        "height_bottom_pos": 2976.77,
+        "height_bottom_neg": 3282.79
+      },
+      "b2_block": {
+        "width": 1208,
+        "height_top_pos": 2976.77,
+        "height_top_neg": 3282.79,
+        "height_bottom": 3129.79
+      },
+      "a_blocks": {
+        "width": 1208,
+        "height": 3129.79
+      }
+    }
+  }
+}
