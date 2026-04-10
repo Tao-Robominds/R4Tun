@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run original sam4tun/*.py (not configurable) as true baseline.
+# Run original sam4tun/*.py (not agents pipeline) as true baseline.
 # Input: data/subsets/{tunnel_id}.txt via symlink data/{tunnel_id}.txt
 # Output: moved to data/ablation/sam4tun/{tunnel_id}/
 #

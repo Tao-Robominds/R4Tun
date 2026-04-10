@@ -148,7 +148,7 @@ def main() -> int:
             continue
         tids.append(s)
 
-    params_root = root / "configurable" / "ablation" / "memory" / "parameters"
+    params_root = root / "agents" / "ablation" / "memory" / "parameters"
     chars_root = root / "data" / "ablation" / "memory"
 
     for tid in tids:

@@ -22,7 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "configurable"))
+sys.path.insert(0, str(REPO_ROOT / "agents"))
 
 from pipeline_data import ABLATION_CONDITIONS
 

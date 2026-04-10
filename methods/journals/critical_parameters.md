@@ -134,5 +134,5 @@ These represent hard constraints or implementation-level settings that are invar
 | File | Purpose |
 |---|---|
 | `skills/analyze_parameter_adaptations.py` | Analysis script (reads all 1,350 JSONs, compares to baseline) |
-| `configurable/ablation/sam4tun/parameters_*.json` | Baseline parameter files (5 stages) |
-| `configurable/ablation/{memory,memory+state,memory+state+knowledge}/parameters/` | Adapted parameter files (30 tunnels × 3 LLMs × 5 stages) |
+| `agents/ablation/sam4tun/parameters_*.json` | Baseline parameter files (5 stages) |
+| `agents/ablation/{memory,memory+state,memory+state+knowledge}/parameters/` | Adapted parameter files (30 tunnels × 3 LLMs × 5 stages) |

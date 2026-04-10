@@ -5,7 +5,7 @@ Post–E2E check: characteristic drift vs sample vs parameter adaptation.
 FAIL (exit 1): drift above threshold and all five stage parameter JSONs match sample
     (no meaningful adaptation when the tunnel differs from sample).
 
-See configurable/ablation/memory/process.md for workflow context.
+See agents/ablation/memory/process.md for workflow context.
 """
 
 from __future__ import annotations
@@ -183,12 +183,13 @@ def main() -> int:
     ap.add_argument(
         "--configurable-root",
         type=str,
-        default="configurable",
+        default="agents/ablation/memory/parameters",
+        help="Parent of <tunnel_id>/parameters_*.json (default: agents/ablation/memory/parameters)",
     )
     ap.add_argument(
         "--sample-params-dir",
         type=str,
-        default="configurable/sample",
+        default="agents/parameters/sample",
     )
     ap.add_argument(
         "--drift-threshold",

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# End-to-end configurable pipeline with ablation support.
-# Parameters are loaded directly from configurable/ablation/{condition}/ — no sync step.
+# End-to-end pipeline with ablation support.
+# Parameters are loaded directly from agents/ablation/{condition}/ — no sync step.
 #
 # Usage:
 #   ./run_agents.sh <tunnel_id> --ablation <code> [--model <tag>] [--schema 6|7|auto|both]
@@ -126,7 +126,7 @@ if [ "$RUN_ALL" = 1 ]; then
             [m_s]="memory+state"
             [m_s_k]="memory+state+knowledge"
         )
-        PARAM_DIR="configurable/ablation/${ABLATION_FOLDER[$ABLATION]}/parameters"
+        PARAM_DIR="agents/ablation/${ABLATION_FOLDER[$ABLATION]}/parameters"
         if [ ! -d "$PARAM_DIR" ]; then
             echo "❌ No parameters directory: $PARAM_DIR"
             exit 1
@@ -189,8 +189,8 @@ preflight_check() {
     local mdl=$3
     "$PY" -c "
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath('.')), 'configurable'))
-sys.path.insert(0, 'configurable')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath('.')), 'agents'))
+sys.path.insert(0, 'agents')
 from pipeline_data import resolve_ablation_param_file
 stages = ['unfolding', 'denoising', 'enhancing', 'detecting', 'sam']
 missing = []
@@ -249,9 +249,9 @@ for TID in $TUNNEL_IDS; do
     echo "=========================================="
     echo "🚀 [${TUNNEL_CURRENT}/${TUNNEL_TOTAL}] Pipeline — tunnel: ${TID}, ablation: ${ABLATION}, model: ${MODEL}"
     if [ "$ABLATION" = "sam4tun" ]; then
-        echo "📂 Parameters: configurable/ablation/sam4tun/parameters_*.json (shared, all tunnels)"
+        echo "📂 Parameters: agents/ablation/sam4tun/parameters_*.json (shared, all tunnels)"
     else
-        echo "📂 Parameters: configurable/ablation/.../${TID}/"
+        echo "📂 Parameters: agents/ablation/.../${TID}/"
     fi
     echo "📊 Evaluation schema: ${EVAL_SCHEMA}"
     echo "📁 Output: ${TUNNEL_OUT}/"
@@ -266,10 +266,10 @@ for TID in $TUNNEL_IDS; do
 
     mkdir -p "${TUNNEL_OUT}"
 
-    run_step "Step 1/6: Unfolding (${TID})"  "$PY" configurable/configurable_unfolding.py "$TID" --ablation "$ABLATION" --model "$MODEL"
-    run_step "Step 2/6: Denoising (${TID})"  "$PY" configurable/configurable_denoising.py "$TID" --ablation "$ABLATION" --model "$MODEL"
-    run_step "Step 3/6: Enhancing (${TID})"  "$PY" configurable/configurable_enhancing.py "$TID" --ablation "$ABLATION" --model "$MODEL"
-    run_step "Step 4/6: Detecting (${TID})"  "$PY" configurable/configurable_detecting.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 1/6: Unfolding (${TID})"  "$PY" agents/unfolding.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 2/6: Denoising (${TID})"  "$PY" agents/denoising.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 3/6: Enhancing (${TID})"  "$PY" agents/enhancing.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 4/6: Detecting (${TID})"  "$PY" agents/detecting.py "$TID" --ablation "$ABLATION" --model "$MODEL"
 
     # GPU cleanup before SAM
     echo "=========================================="
@@ -288,11 +288,11 @@ for TID in $TUNNEL_IDS; do
     "$PY" -c "import torch; torch.cuda.empty_cache()" 2>/dev/null || true
     echo ""
 
-    run_step "Step 5/6: SAM (${TID})" "$PY" configurable/configurable_sam.py "$TID" --ablation "$ABLATION" --model "$MODEL"
+    run_step "Step 5/6: SAM (${TID})" "$PY" agents/sam.py "$TID" --ablation "$ABLATION" --model "$MODEL"
 
     if [ -f "${TUNNEL_OUT}/only_label.csv" ]; then
         run_step "Step 6/6: Evaluation (${TID})" \
-            "$PY" configurable/evaluation.py "$TID" --ablation "$ABLATION" --schema "$EVAL_SCHEMA"
+            "$PY" agents/evaluation.py "$TID" --ablation "$ABLATION" --schema "$EVAL_SCHEMA"
     else
         echo "⚠️  Skipping evaluation: ${TUNNEL_OUT}/only_label.csv not found"
         echo ""

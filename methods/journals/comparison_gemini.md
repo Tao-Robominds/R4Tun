@@ -6,7 +6,7 @@ Test: paired t-test (two-sided) vs baseline per tunnel subset
 
 ## Summary
 
-Gemini 3 Flash (gemini-3-flash-preview) ablation across 30 tunnels. Parameters inferred via google-genai SDK. Pipeline: configurable stages with --model gemini3flash. Conditions: memory (m), memory+state (m_s), memory+state+knowledge (m_s_k).
+Gemini 3 Flash (gemini-3-flash-preview) ablation across 30 tunnels. Parameters inferred via google-genai SDK. Pipeline: agents stage scripts with --model gemini3flash. Conditions: memory (m), memory+state (m_s), memory+state+knowledge (m_s_k).
 
 Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), memory+state+knowledge +0.163 (p<0.0001).
 

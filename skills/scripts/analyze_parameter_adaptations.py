@@ -11,7 +11,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
-ABLATION_ROOT = Path("configurable/ablation")
+ABLATION_ROOT = Path("agents/ablation")
 BASELINE_DIR = ABLATION_ROOT / "sam4tun"
 CONDITIONS = ["memory", "memory+state", "memory+state+knowledge"]
 CONDITION_CODES = {"memory": "m", "memory+state": "m_s", "memory+state+knowledge": "m_s_k"}

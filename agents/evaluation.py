@@ -1,6 +1,12 @@
 import argparse
 import os
+import sys
 from typing import Optional
+
+_cfg = os.path.dirname(os.path.abspath(__file__))
+if _cfg not in sys.path:
+    sys.path.insert(0, _cfg)
+from pipeline_data import tunnel_output_dir, ABLATION_CONDITIONS, ABLATION_CODES
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -46,9 +52,16 @@ def evaluation_output_dir(input_dir: str) -> str:
 
 
 def infer_segment_schema(gt_labels: np.ndarray, pred_labels: np.ndarray) -> int:
-    """If any label > 6, use 7-class naming and filter; else 6-class."""
-    mx = int(max(np.max(gt_labels), np.max(pred_labels)))
-    return 7 if mx > 6 else 6
+    """
+    Choose 6- vs 7-class naming from **ground truth only**.
+
+    Predictions may include 7, 8, or NaN (unmapped); using max(pred) wrongly forces
+    7-class for 6-class tunnels (e.g. 1-4: GT max 6, pred has 8).
+    """
+    del pred_labels  # API unchanged; schema follows GT convention
+    gt = np.asarray(gt_labels, dtype=np.float64)
+    mx_gt = float(np.nanmax(gt)) if np.any(np.isfinite(gt)) else 0.0
+    return 7 if mx_gt > 6 else 6
 
 
 def parse_args():
@@ -57,10 +70,16 @@ def parse_args():
     )
     p.add_argument("tunnel_id", help="Tunnel id, e.g. 4-1")
     p.add_argument(
+        "--ablation", "-a",
+        required=True,
+        choices=ABLATION_CODES,
+        help=f"Ablation condition code: {', '.join(ABLATION_CODES)}",
+    )
+    p.add_argument(
         "--schema",
         choices=("auto", "6", "7", "both"),
         default="auto",
-        help="auto: max label >6 => 7-class; 6/7: force schema; both: write evaluation/ with performance_6.md and performance_7.md",
+        help="auto: GT max label >6 => 7-class; 6/7: force schema; both: write evaluation/ with performance_6.md and performance_7.md",
     )
     return p.parse_args()
 
@@ -323,7 +342,7 @@ def evaluate_csv_data(
     """
     Evaluate using data/{tunnel_id}/only_label.csv.
 
-    segment_schema: 6, 7, or None (infer from max(gt_labels, pred_labels)).
+    segment_schema: 6, 7, or None (infer from GT).
     artifact_suffix: e.g. \"_6\" / \"_7\" when --schema both (same evaluation/ dir).
     """
     data_path = os.path.join(input_dir, "only_label.csv")
@@ -351,7 +370,12 @@ def evaluate_csv_data(
     class_names = cfg["class_names"]
 
     original_size = len(gt_labels)
-    valid_mask = (gt_labels <= max_id) & (pred_labels <= max_id)
+    valid_mask = (
+        np.isfinite(gt_labels)
+        & np.isfinite(pred_labels)
+        & (gt_labels <= max_id)
+        & (pred_labels <= max_id)
+    )
 
     gt_beyond = gt_labels[gt_labels > max_id]
     pred_beyond = pred_labels[pred_labels > max_id]
@@ -461,7 +485,11 @@ def evaluate_instance_segmentation(tunnel_id: str, input_dir: str):
 def main():
     args = parse_args()
     tunnel_id = args.tunnel_id
-    input_dir = os.path.join("data", tunnel_id)
+
+    cond = ABLATION_CONDITIONS[args.ablation]
+    os.environ["R4TUN_PIPELINE_OUT_PREFIX"] = cond["out_prefix"]
+
+    input_dir = tunnel_output_dir(tunnel_id).rstrip("/")
 
     print(f"Starting evaluation for tunnel: {tunnel_id}")
     print(f"=== Segmentation Evaluation Tool for Tunnel {tunnel_id} ===")

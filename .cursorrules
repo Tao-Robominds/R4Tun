@@ -12,7 +12,7 @@ When asked a question or making a claim about why something is happening:
 
 1. **Venv:** Use local `./venv` only; do not create a new virtual environment.
 2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not delete and overwrite existing results in `data/`.
-3. **Destructive operations — ask every time:** Before **deleting** (`rm`, `rm -rf`, emptying dirs), **truncating**, or **overwriting** any file or tree that could hold experiment or user work — especially under `data/` (including `data/ablation/`), `configurable/ablation/**/parameters/`, or any path the user did not explicitly list — **stop and ask**. Quote the **exact paths** you would change, say what would be lost, and **wait for explicit user confirmation** (e.g. “yes, delete X”). Never infer “clean” or “reset” as permission to wipe `data/` or ablation outputs without that confirmation. If the request is ambiguous, ask what to keep vs remove before running any destructive command.
+3. **Destructive operations — ask every time:** Before **deleting** (`rm`, `rm -rf`, emptying dirs), **truncating**, or **overwriting** any file or tree that could hold experiment or user work — especially under `data/` (including `data/ablation/`), `agents/ablation/**/parameters/`, or any path the user did not explicitly list — **stop and ask**. Quote the **exact paths** you would change, say what would be lost, and **wait for explicit user confirmation** (e.g. “yes, delete X”). Never infer “clean” or “reset” as permission to wipe `data/` or ablation outputs without that confirmation. If the request is ambiguous, ask what to keep vs remove before running any destructive command.
 4. **GT columns:** `segment` and `ring` in the raw point cloud are ground truth; any metric using them is GT-dependent and not intrinsic for new tunnels.
 5. **Skills:** Put re-usable prompts and scripts under `skills/`.
 6. **Be concise:** Summaries, docs, and replies short and actionable; no long prose or redundancy.
@@ -22,9 +22,9 @@ When asked a question or making a claim about why something is happening:
 
 ## Project Structure
 
-- `configurable/` — **KEY folder.** Contains the five pipeline stage scripts (`configurable_unfolding.py`, `configurable_denoising.py`, `configurable_enhancing.py`, `configurable_detecting.py`, `configurable_sam.py`), `evaluation.py`, and `pipeline_data.py` (shared argument parsing, ablation parameter resolution, output directory helpers). All experiments run through these scripts.
-- `configurable/ablation/` — Ablation study conditions. Each subfolder holds LLM inference workspaces (agents, parameters, prompts) for one ablation level. Pipeline stages load parameters **directly** from here via `--ablation <code>` — no sync/copy step: `sam4tun/` (baseline, shared params), `memory/parameters/{tunnel_id}/`, `memory+state/`, `memory+state+knowledge/`.
-- `agents/` — **Reference only.** Original per-stage analyst/coder agents (`role.md`, `cot.md`, `knowledge.md`, `analyst.py`, `coder.py`). Used for reading design patterns; ablation experiments use `configurable/ablation/` instead.
+- `agents/` — **KEY folder.** Contains the five pipeline stage scripts (`unfolding.py`, `denoising.py`, `enhancing.py`, `detecting.py`, `sam.py`), `evaluation.py`, and `pipeline_data.py` (shared argument parsing, ablation parameter resolution, output directory helpers). All experiments run through these scripts.
+- `agents/ablation/` — Ablation study conditions. Each subfolder holds LLM inference workspaces (per-condition `agents/`, `parameters/`, prompts) for one ablation level. Pipeline stages load parameters **directly** from here via `--ablation <code>` — no sync/copy step: `sam4tun/` (baseline, shared params), `memory/parameters/{tunnel_id}/`, `memory+state/`, `memory+state+knowledge/`.
+- `bo/` — BO (critical-parameters) orchestration: `bo/agents/` (analyst prompts), `bo/run_bo.py`, `bo/parameters/`.
 - `data/` — Point clouds (`data/subsets/{tunnel_id}.txt`), pipeline run outputs (`data/ablation/{condition}/{tunnel_id}/`), characteristics, evaluation results. Do not overwrite existing results.
 - `methods/` — Plans, journals, scripts, templates.
 - `skills/` — Reusable prompts and scripts (e.g. `export_llm_parameter_context.py`, `compare_ablation_conditions.py`).
@@ -36,22 +36,22 @@ When asked a question or making a claim about why something is happening:
 
 ### Pipeline
 
-Five configurable stages run sequentially: Unfolding → Denoising → Enhancing → Detecting → SAM segmentation. Each stage loads parameters directly from `configurable/ablation/{condition}/` via `--ablation <code>`; outputs flow through `data/ablation/{condition}/{tunnel_id}/`. Evaluation computes mIoU from `only_label.csv`.
+Five pipeline stages run sequentially: Unfolding → Denoising → Enhancing → Detecting → SAM segmentation. Each stage loads parameters directly from `agents/ablation/{condition}/` via `--ablation <code>`; outputs flow through `data/ablation/{condition}/{tunnel_id}/`. Evaluation computes mIoU from `only_label.csv`.
 
 ### Ablation Ladder (cumulative, each level adds one component)
 
 | Level | Condition | Folder | What the LLM sees |
 |-------|-----------|--------|--------------------|
-| 0 | **sam4tun** (baseline) | `configurable/ablation/sam4tun/` | Nothing — fixed default parameters for all tunnels |
-| 1 | **memory** | `configurable/ablation/memory/` | Raw tunnel characteristics (geometry, density, counts) |
-| 2 | **memory+state** | `configurable/ablation/memory+state/` | + pipeline intermediate outputs (stage artifacts) |
-| 3 | **memory+state+knowledge** | `configurable/ablation/memory+state+knowledge/` | + domain knowledge (`knowledge.md`, parameter semantics) |
+| 0 | **sam4tun** (baseline) | `agents/ablation/sam4tun/` | Nothing — fixed default parameters for all tunnels |
+| 1 | **memory** | `agents/ablation/memory/` | Raw tunnel characteristics (geometry, density, counts) |
+| 2 | **memory+state** | `agents/ablation/memory+state/` | + pipeline intermediate outputs (stage artifacts) |
+| 3 | **memory+state+knowledge** | `agents/ablation/memory+state+knowledge/` | + domain knowledge (`knowledge.md`, parameter semantics) |
 
 ### Workflow per Ablation Condition
 
-1. **LLM inference** — Generate adapted parameter JSONs under `configurable/ablation/{condition}/parameters/{tunnel_id}/`.
+1. **LLM inference** — Generate adapted parameter JSONs under `agents/ablation/{condition}/parameters/{tunnel_id}/`.
 2. **E2E run** — `./run_agents.sh <tunnel_id> --ablation <code>` (or `--all`). Each stage loads parameters directly from the ablation folder — no sync/copy step.
-3. **Evaluate** — `configurable/evaluation.py` computes mIoU per tunnel; compare across conditions.
+3. **Evaluate** — `agents/evaluation.py` computes mIoU per tunnel; compare across conditions.
 
 ### CLI
 
@@ -66,4 +66,4 @@ Run all tunnels: `./run_agents.sh --all --ablation m --schema auto`
 
 ### Key Invariant
 
-The five `configurable_*.py` stage scripts and `evaluation.py` never change between conditions — only the parameter JSONs fed to them change. This isolates the effect of each agentic component on mIoU.
+The five stage scripts (`unfolding.py`, … `sam.py`) and `evaluation.py` never change between conditions — only the parameter JSONs fed to them change. This isolates the effect of each agentic component on mIoU.

@@ -149,7 +149,7 @@ def load_stage_parameters_pretty(
     Search order:
     1. bo/parameters/<tunnel_id>/<archive_filename>
     2. Same dir, with _bo_{model} suffix
-    3. configurable/ablation/sam4tun/<archive_filename> (baseline fallback)
+    3. agents/ablation/sam4tun/<archive_filename> (baseline fallback)
     """
     tunnel_dir = PARAM_BASE / tunnel_id
 
@@ -166,7 +166,7 @@ def load_stage_parameters_pretty(
         note = f"Archived tunnel parameters (`{suffixed.as_posix()}`)."
         return text, note
 
-    baseline_path = Path("configurable/ablation/sam4tun") / archive_filename
+    baseline_path = Path("agents/ablation/sam4tun") / archive_filename
     if baseline_path.exists():
         text = read_required_json_pretty(baseline_path, f"Baseline parameters at {baseline_path}")
         note = f"Baseline (sam4tun) parameters (`{baseline_path.as_posix()}`); no archive yet for tunnel `{tunnel_id}`."

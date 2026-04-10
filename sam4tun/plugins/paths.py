@@ -36,7 +36,7 @@ ABLATION_SUFFIX_TO_OUTPUT_ROOT = {
 
 def tunnel_pipeline_dir(tunnel_id: str) -> str:
     """
-    Same artefact root as ``configurable.pipeline_data.tunnel_output_relpath`` (must match
+    Same artefact root as ``pipeline_data.tunnel_output_relpath`` (must match
     ``R4TUN_PIPELINE_OUT_PREFIX``). No default under ``data/<id>/`` without the env var.
     """
     p = (os.environ.get("R4TUN_PIPELINE_OUT_PREFIX") or "").strip().rstrip("/")

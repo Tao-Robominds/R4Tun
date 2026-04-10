@@ -6,7 +6,7 @@ Interleaves LLM inference (Anthropic Claude API) with pipeline stage execution
 and characteristic extraction. Knowledge is trimmed to critical parameters only
 with empirically observed adaptation ranges.
 
-Uses existing configurable/configurable_*.py stage scripts via --ablation bo.
+Uses existing agents/*.py stage scripts via --ablation bo.
 
 Usage:
     ./venv/bin/python bo/run_bo.py 1-1
@@ -44,11 +44,11 @@ MAX_TOKENS = 16384
 PARAM_FILE_SUFFIX = "_bo_"
 
 STAGES = [
-    ("unfolding", "configurable_unfolding.py", "1-unfolded_characteriser.py"),
-    ("denoising", "configurable_denoising.py", "2-denoised_characteriser.py"),
-    ("enhancing", "configurable_enhancing.py", "3-enhanced_characteriser.py"),
-    ("detecting", "configurable_detecting.py", "4-detected_characteriser.py"),
-    ("sam",       "configurable_sam.py",        None),
+    ("unfolding", "unfolding.py", "1-unfolded_characteriser.py"),
+    ("denoising", "denoising.py", "2-denoised_characteriser.py"),
+    ("enhancing", "enhancing.py", "3-enhanced_characteriser.py"),
+    ("detecting", "detecting.py", "4-detected_characteriser.py"),
+    ("sam",       "sam.py",        None),
 ]
 
 STAGE_TO_PARAM_NAME = {
@@ -172,7 +172,7 @@ def save_parameters(tunnel_id: str, stage_name: str, params: dict, model_tag: st
 
 def run_pipeline_stage(tunnel_id: str, stage_script: str, model_tag: str, env: dict) -> None:
     cmd = [
-        PYTHON, f"configurable/{stage_script}",
+        PYTHON, f"agents/{stage_script}",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--model", model_tag,
@@ -221,7 +221,7 @@ def run_evaluation(tunnel_id: str, env: dict) -> None:
         print(f"  Skipping evaluation: {only_label} not found")
         return
     cmd = [
-        PYTHON, "configurable/evaluation.py",
+        PYTHON, "agents/evaluation.py",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--schema", "auto",

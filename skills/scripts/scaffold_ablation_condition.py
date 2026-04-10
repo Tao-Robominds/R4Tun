@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "configurable"))
+sys.path.insert(0, str(REPO_ROOT / "agents"))
 
 from pipeline_data import ABLATION_CONDITIONS, DEFAULT_MODEL, _build_suffix
 
@@ -40,7 +40,7 @@ def scaffold(
     src_cond = ABLATION_CONDITIONS[from_code]
     dst_cond = ABLATION_CONDITIONS[to_code]
 
-    ablation_base = REPO_ROOT / "configurable" / "ablation"
+    ablation_base = REPO_ROOT / "agents" / "ablation"
     src_dir = ablation_base / src_cond["folder"]
     dst_dir = ablation_base / dst_cond["folder"]
 

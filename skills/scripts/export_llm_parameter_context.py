@@ -39,12 +39,12 @@ def main() -> int:
         sys.path.insert(0, str(root))
     os.chdir(root)
     tunnel_id = sys.argv[1] if len(sys.argv) > 1 else "1-4"
-    out_dir = root / "configurable" / "ablation" / "memory" / "parameters" / tunnel_id
+    out_dir = root / "agents" / "ablation" / "memory" / "parameters" / tunnel_id
     if not out_dir.is_dir():
         print(f"Missing parameters directory: {out_dir}", file=sys.stderr)
         return 1
 
-    base = "configurable/ablation/memory/agents"
+    base = "agents/ablation/memory/agents"
     stages: list[tuple[str, str, str]] = [
         (f"{base}/unfolding/analyst.py", "UnfoldingAnalyser", "parameters_unfolding.md"),
         (f"{base}/denoising/analyst.py", "DenoisingAnalyser", "parameters_denoising.md"),
@@ -57,7 +57,7 @@ def main() -> int:
 
 This document is the **same user message** the memory-ablation stage analyst builds (raw characteristics only). Use it for copy-paste into any chat or API.
 
-Regenerate after updating raw characteristics or the tunnel archive under `configurable/ablation/memory/parameters/<tunnel_id>/` (else falls back to `configurable/sample/`):
+Regenerate after updating raw characteristics or the tunnel archive under `agents/ablation/memory/parameters/<tunnel_id>/` (else falls back to `agents/parameters/sample/`):
 
 ```bash
 ./venv/bin/python skills/scripts/export_llm_parameter_context.py {tunnel_id}

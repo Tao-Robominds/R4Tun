@@ -44,11 +44,11 @@ MAX_TOKENS = 16384
 PARAM_FILE_SUFFIX = "_m_"
 
 STAGES = [
-    ("unfolding", "configurable_unfolding.py", "1-unfolded_characteriser.py"),
-    ("denoising", "configurable_denoising.py", "2-denoised_characteriser.py"),
-    ("enhancing", "configurable_enhancing.py", "3-enhanced_characteriser.py"),
-    ("detecting", "configurable_detecting.py", "4-detected_characteriser.py"),
-    ("sam",       "configurable_sam.py",        None),
+    ("unfolding", "unfolding.py", "1-unfolded_characteriser.py"),
+    ("denoising", "denoising.py", "2-denoised_characteriser.py"),
+    ("enhancing", "enhancing.py", "3-enhanced_characteriser.py"),
+    ("detecting", "detecting.py", "4-detected_characteriser.py"),
+    ("sam",       "sam.py",        None),
 ]
 
 STAGE_TO_PARAM_NAME = {
@@ -67,8 +67,8 @@ ANALYST_CLASSES = {
     "sam":       ("segmenting.analyst", "SegmentingAnalyser"),
 }
 
-PARAM_BASE = Path("configurable/ablation") / ABLATION_FOLDER / "parameters"
-AGENTS_DIR = Path("configurable/ablation") / ABLATION_FOLDER / "agents"
+PARAM_BASE = Path("agents/ablation") / ABLATION_FOLDER / "parameters"
+AGENTS_DIR = Path("agents/ablation") / ABLATION_FOLDER / "agents"
 PYTHON = sys.executable
 
 # ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ def save_parameters(tunnel_id: str, stage_name: str, params: dict, model_tag: st
 
 def run_pipeline_stage(tunnel_id: str, stage_script: str, model_tag: str, env: dict) -> None:
     cmd = [
-        PYTHON, f"configurable/{stage_script}",
+        PYTHON, f"agents/{stage_script}",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--model", model_tag,
@@ -216,7 +216,7 @@ def run_evaluation(tunnel_id: str, env: dict) -> None:
         print(f"  Skipping evaluation: {only_label} not found")
         return
     cmd = [
-        PYTHON, "configurable/evaluation.py",
+        PYTHON, "agents/evaluation.py",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--schema", "auto",
