@@ -98,10 +98,10 @@ fi
 
 # Validate ablation code
 case "$ABLATION" in
-    sam4tun|m|m_s|m_s_k) ;;
+    sam4tun|m|m_s|m_s_k|bo) ;;
     *)
         echo "❌ Unknown ablation code: $ABLATION"
-        echo "Valid codes: sam4tun, m, m_s, m_s_k"
+        echo "Valid codes: sam4tun, m, m_s, m_s_k, bo"
         exit 1
         ;;
 esac
@@ -112,6 +112,7 @@ declare -A ABLATION_PREFIX=(
     [m]="data/ablation/memory"
     [m_s]="data/ablation/memory+state"
     [m_s_k]="data/ablation/memory+state+knowledge"
+    [bo]="data/bo"
 )
 export R4TUN_PIPELINE_OUT_PREFIX="${ABLATION_PREFIX[$ABLATION]}"
 

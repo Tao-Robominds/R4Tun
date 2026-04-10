@@ -8,7 +8,7 @@ _agents_dir = Path(__file__).resolve().parent.parent
 if str(_agents_dir) not in sys.path:
     sys.path.insert(0, str(_agents_dir))
 
-from memory_state_ablation_context import (
+from context import (
     load_raw_characteristics_pair,
     load_stage_parameters_pretty,
     pipeline_tunnel_data_dir,

@@ -260,7 +260,17 @@ class RANSAC:
     # no improvement → infinite hang; dynamic k can also explode when w**N ≈ 0.
     _MAX_ITERATIONS = 5000
 
-    def __init__(self, data, threshold, P, S, N, initial_iterations=999, inlier_threshold_multiplier=0.8):
+    def __init__(
+        self,
+        data,
+        threshold,
+        P,
+        S,
+        N,
+        initial_iterations=999,
+        inlier_threshold_multiplier=0.8,
+        seed=None,
+    ):
         self.point_data = np.asarray(data, dtype=np.float64)  # Ellipse contour points
         self.error_threshold = threshold  # Error tolerance threshold
         self.N = N  # Number of points to sample
@@ -271,7 +281,7 @@ class RANSAC:
         self.inlier_threshold_multiplier = inlier_threshold_multiplier
         self.count = 0  # Number of inliers
         self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
-        self._rng = np.random.default_rng()
+        self._rng = np.random.default_rng(seed)
 
     def random_sampling(self, n):
         """Randomly select n data points (no O(N) list() of rows)."""
@@ -403,12 +413,30 @@ for i in tqdm(range(len(slicing_cloud)), desc="Ellipse fitting (RANSAC)"):
     points_data = np.reshape(fp, (-1, 2))  # Ellipse edge points
 
     # First RANSAC fit to find initial inliers
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    ransac = RANSAC(
+        data=points_data,
+        threshold=ransac_threshold,
+        P=ransac_probability,
+        S=ransac_inlier_ratio,
+        N=ransac_sample_size,
+        initial_iterations=ransac_initial_iterations,
+        inlier_threshold_multiplier=ransac_inlier_threshold_multiplier,
+        seed=42 + i,
+    )
     _, inliers_set = ransac.execute_ransac()
 
     # Refine fit using inliers from the first RANSAC
     points_data = np.reshape(inliers_set, (-1, 2))
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    ransac = RANSAC(
+        data=points_data,
+        threshold=ransac_threshold,
+        P=ransac_probability,
+        S=ransac_inlier_ratio,
+        N=ransac_sample_size,
+        initial_iterations=ransac_initial_iterations,
+        inlier_threshold_multiplier=ransac_inlier_threshold_multiplier,
+        seed=1000 + i,
+    )
     ellipse_params, _ = ransac.execute_ransac()
 
     # Extract center coordinates
@@ -487,9 +515,9 @@ y_poly = t_poly
 z_poly = t_poly
 
 # Initialize RANSAC Regressor for x, y, z
-ransac_x = RANSACRegressor()
-ransac_y = RANSACRegressor()
-ransac_z = RANSACRegressor()
+ransac_x = RANSACRegressor(random_state=42)
+ransac_y = RANSACRegressor(random_state=42)
+ransac_z = RANSACRegressor(random_state=42)
 
 # Fit the RANSAC model to x, y, z coordinates
 ransac_x.fit(x_poly, cps_arr[:, 0])

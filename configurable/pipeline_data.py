@@ -43,6 +43,13 @@ ABLATION_CONDITIONS = {
         "per_tunnel": True,
         "out_prefix": "data/ablation/memory+state+knowledge",
     },
+    "bo": {
+        "folder": "bo",
+        "ablation_tag": "_bo",
+        "per_tunnel": True,
+        "out_prefix": "data/bo",
+        "param_root": "bo",
+    },
 }
 
 ABLATION_CODES = list(ABLATION_CONDITIONS.keys())
@@ -115,24 +122,27 @@ def resolve_ablation_param_file(
 
     sam4tun (shared):  configurable/ablation/sam4tun/parameters_{stage}.json
     per-tunnel:        configurable/ablation/{folder}/parameters/{tunnel_id}/parameters_{stage}{tag}_{model}.json
+    bo (param_root):   bo/parameters/{tunnel_id}/parameters_{stage}{tag}_{model}.json
     """
     cond = ABLATION_CONDITIONS[ablation_code]
     root = _repo_root()
-    ablation_base = os.path.join(root, "configurable", "ablation")
     suffix = _build_suffix(ablation_code, model)
+
+    if "param_root" in cond:
+        param_base = os.path.join(root, cond["param_root"])
+    else:
+        param_base = os.path.join(root, "configurable", "ablation", cond["folder"])
 
     if cond["per_tunnel"]:
         path = os.path.join(
-            ablation_base,
-            cond["folder"],
+            param_base,
             "parameters",
             tunnel_id,
             f"parameters_{stage}{suffix}.json",
         )
     else:
         path = os.path.join(
-            ablation_base,
-            cond["folder"],
+            param_base,
             f"parameters_{stage}.json",
         )
     return path
