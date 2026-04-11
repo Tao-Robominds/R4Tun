@@ -89,11 +89,10 @@ PYTHON = sys.executable
 
 
 def _setup_env() -> dict[str, str]:
-    env = os.environ.copy()
-    env["R4TUN_PIPELINE_OUT_PREFIX"] = f"data/ablation/{ABLATION_FOLDER}"
-    env["R4TUN_ABLATION_TUNNEL_SUBROOT"] = ABLATION_FOLDER
-    env["PYTHONPATH"] = "."
-    return env
+    os.environ["R4TUN_PIPELINE_OUT_PREFIX"] = f"data/ablation/{ABLATION_FOLDER}"
+    os.environ["R4TUN_ABLATION_TUNNEL_SUBROOT"] = ABLATION_FOLDER
+    os.environ["PYTHONPATH"] = "."
+    return os.environ.copy()
 
 
 # ---------------------------------------------------------------------------
@@ -338,13 +337,16 @@ def process_tunnel(tunnel_id: str, model_tag: str, dry_run: bool, env: dict,
         if dry_run:
             continue
 
+        # Always save reasoning trace
+        analysis_dir = out_dir / "analysis"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        (analysis_dir / f"{stage_name}_reasoning_{model_tag}.md").write_text(response_text)
+
         # 3. Extract and save parameters
         try:
             params = extract_json_from_response(response_text)
         except (ValueError, json.JSONDecodeError) as e:
             print(f"  ERROR extracting JSON: {e}")
-            analysis_dir = out_dir / "analysis"
-            analysis_dir.mkdir(parents=True, exist_ok=True)
             (analysis_dir / f"{stage_name}_raw_response.md").write_text(response_text)
             print(f"  Raw response saved to {analysis_dir}/{stage_name}_raw_response.md")
             raise

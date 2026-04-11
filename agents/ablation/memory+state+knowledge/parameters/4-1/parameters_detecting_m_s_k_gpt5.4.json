@@ -1,5 +1,5 @@
 {
-  "binary_threshold": 120,
+  "binary_threshold": 115,
   "morphological_kernel_size": [
     3,
     3
@@ -11,7 +11,7 @@
   "hough_threshold_horizontal": 22,
   "minLineLength_horizontal": 70,
   "maxLineGap_horizontal": 70,
-  "hough_threshold_vertical": 500,
+  "hough_threshold_vertical": 550,
   "angle_range_oblique_positive": [
     4,
     12

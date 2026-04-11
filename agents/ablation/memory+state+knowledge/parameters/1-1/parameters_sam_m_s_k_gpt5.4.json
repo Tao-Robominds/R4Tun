@@ -19,8 +19,8 @@
     "crop_margin": 50,
     "mask_eps": 0.001,
     "y_bounds": [
-      4000,
-      13300
+      700,
+      14800
     ]
   },
   "prompt_points": {
