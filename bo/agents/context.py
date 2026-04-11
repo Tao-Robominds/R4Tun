@@ -26,8 +26,6 @@ SAMPLE_RAW_PATH = Path("data/sample/characteristics/raw_characteristics.json")
 SAMPLE_CHAR_DIR = Path("data/sample/characteristics")
 RAW_FILENAME = "raw_characteristics.json"
 
-STAGE_ORDER = ["unfolding", "denoising", "enhancing", "detecting", "sam"]
-
 STAGE_CHARS_MAP = {
     "unfolding": "unfolded_characteristics.json",
     "denoising": "denoised_characteristics.json",
@@ -97,7 +95,7 @@ def load_raw_characteristics_pair(tunnel_id: str) -> tuple[str, str]:
 
 
 def _tunnel_stage_char_path(tunnel_id: str, char_filename: str) -> Path:
-    return Path(f"data/{ABLATION_FOLDER}/{tunnel_id}/characteristics/{char_filename}")
+    return Path(tunnel_characteristics_dir(tunnel_id)) / char_filename
 
 
 def load_stage_characteristics_pair(

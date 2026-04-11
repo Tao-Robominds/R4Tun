@@ -7,7 +7,6 @@ import json
 import os
 
 import numpy as np
-import pandas as pd
 from scipy.spatial import ConvexHull, cKDTree
 from shapely.geometry import Polygon
 

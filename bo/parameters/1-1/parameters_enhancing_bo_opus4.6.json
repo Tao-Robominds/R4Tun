@@ -5,7 +5,7 @@
   "curvature_threshold": 0.005,
   "depth_threshold_low": 0.005,
   "depth_threshold_high": 0.015,
-  "inter_radius": 0.03,
+  "inter_radius": 0.04,
   "duplicate_threshold": 0.02,
   "n_segment_start": 0,
   "n_segment_end": 5,

@@ -44,10 +44,10 @@ MAX_TOKENS = 16384
 PARAM_FILE_SUFFIX = "_bo_"
 
 STAGES = [
-    ("unfolding", "unfolding.py", "1-unfolded_characteriser.py"),
-    ("denoising", "denoising.py", "2-denoised_characteriser.py"),
-    ("enhancing", "enhancing.py", "3-enhanced_characteriser.py"),
-    ("detecting", "detecting.py", "4-detected_characteriser.py"),
+    ("unfolding", "unfolding.py", "bo/characteriser/unfolded_characteriser.py"),
+    ("denoising", "denoising.py", "bo/characteriser/denoised_characteriser.py"),
+    ("enhancing", "enhancing.py", "bo/characteriser/enhanced_characteriser.py"),
+    ("detecting", "detecting.py", "bo/characteriser/detected_characteriser.py"),
     ("sam",       "sam.py",        None),
 ]
 
@@ -172,7 +172,7 @@ def save_parameters(tunnel_id: str, stage_name: str, params: dict, model_tag: st
 
 def run_pipeline_stage(tunnel_id: str, stage_script: str, model_tag: str, env: dict) -> None:
     cmd = [
-        PYTHON, f"agents/{stage_script}",
+        PYTHON, f"bo/pipeline/{stage_script}",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--model", model_tag,
@@ -188,7 +188,7 @@ def run_pipeline_stage(tunnel_id: str, stage_script: str, model_tag: str, env: d
 
 
 def run_characteriser(tunnel_id: str, characteriser_script: str, env: dict) -> None:
-    cmd = [PYTHON, f"sam4tun/plugins/{characteriser_script}", tunnel_id]
+    cmd = [PYTHON, characteriser_script, tunnel_id]
     print(f"  Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, env=env, capture_output=True, text=True)
     if result.stdout:
@@ -201,8 +201,8 @@ def run_characteriser(tunnel_id: str, characteriser_script: str, env: dict) -> N
 
 def run_raw_characteriser(tunnel_id: str, env: dict) -> None:
     cmd = [
-        PYTHON, "sam4tun/plugins/raw_characteristics.py",
-        "--tunnel_id", tunnel_id,
+        PYTHON, "bo/characteriser/raw_characteriser.py",
+        tunnel_id,
         "--data_dir", "data/subsets",
     ]
     print(f"  Running: {' '.join(cmd)}")
@@ -221,7 +221,7 @@ def run_evaluation(tunnel_id: str, env: dict) -> None:
         print(f"  Skipping evaluation: {only_label} not found")
         return
     cmd = [
-        PYTHON, "agents/evaluation.py",
+        PYTHON, "bo/pipeline/evaluation.py",
         tunnel_id,
         "--ablation", ABLATION_CODE,
         "--schema", "auto",
