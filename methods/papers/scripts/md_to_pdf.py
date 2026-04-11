@@ -1,12 +1,19 @@
-"""Convert r4tun.md to a styled PDF via markdown → HTML → weasyprint."""
+"""Convert a markdown file to a styled PDF via markdown → HTML → weasyprint.
+
+Usage:
+    python md_to_pdf.py                  # converts r4tun.md → r4tun.pdf
+    python md_to_pdf.py r4tun_concise    # converts r4tun_concise.md → r4tun_concise.pdf
+"""
 
 import pathlib
+import sys
 import markdown
 from weasyprint import HTML
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MD_PATH = ROOT / "r4tun.md"
-PDF_PATH = ROOT / "r4tun.pdf"
+stem = sys.argv[1] if len(sys.argv) > 1 else "r4tun"
+MD_PATH = ROOT / f"{stem}.md"
+PDF_PATH = ROOT / f"{stem}.pdf"
 
 CSS = """
 @page {
