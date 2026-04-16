@@ -1,0 +1,40 @@
+{
+  "_description": "Field-observable inputs per tunnel: values a site engineer can read from design drawings or measure with a tape. No characteriser or pipeline outputs.",
+  "_families": {
+    "T1_T2": "5.5 m diameter, 1.2 m ring, 6 segments, staggered joints",
+    "T3":    "5.5 m diameter, 1.2 m ring, 6 segments, continuous joints",
+    "T4_T5": "7.5 m diameter, 1.8 m ring, 7 segments, interleaved K-block"
+  },
+  "tunnels": {
+    "1-1": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "1-2": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "1-3": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "1-4": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "1-5": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "2-1": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "2-2": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "2-3": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "2-4": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "2-5": {"diameter_m": 5.5, "family": "T1_T2", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "3-1-1": {"diameter_m": 5.5, "family": "T3", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "3-1-2": {"diameter_m": 5.5, "family": "T3", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "3-1-3": {"diameter_m": 5.5, "family": "T3", "ring_length_m": 1.2, "segment_per_ring": 6},
+    "4-1":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-2":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-3":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-4":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-5":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-6":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-7":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-8":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-9":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "4-10": {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-1":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-2":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-3":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-4":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-5":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-6":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7},
+    "5-7":  {"diameter_m": 7.5, "family": "T4_T5", "ring_length_m": 1.8, "segment_per_ring": 7}
+  }
+}

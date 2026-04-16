@@ -50,6 +50,13 @@ ABLATION_CONDITIONS = {
         "out_prefix": "data/bo",
         "param_root": "bo",
     },
+    "rules": {
+        "folder": "rules",
+        "ablation_tag": "_rules",
+        "per_tunnel": True,
+        "out_prefix": "data/ablation/rules",
+        "no_model": True,
+    },
 }
 
 ABLATION_CODES = list(ABLATION_CONDITIONS.keys())
@@ -105,11 +112,14 @@ def _build_suffix(ablation_code: str, model: str) -> str:
     sam4tun → '' (no suffix)
     m + opus4.6 → '_m_opus4.6'
     m_s + gemini3flash → '_m_s_gemini3flash'
+    rules → '_rules' (model-independent)
     """
     cond = ABLATION_CONDITIONS[ablation_code]
     tag = cond["ablation_tag"]
     if not tag:
         return ""
+    if cond.get("no_model"):
+        return tag
     return f"{tag}_{model}"
 
 
