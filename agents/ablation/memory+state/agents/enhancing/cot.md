@@ -1,6 +1,28 @@
 ## Chain of Thought Instructions for Enhancing Parameter Recommendations
 
-Follow this structured 5-step analysis process when evaluating denoised tunnel characteristics and making enhancing parameter recommendations:
+Follow this structured analysis process when evaluating denoised tunnel characteristics and making enhancing parameter recommendations:
+
+### 0. CONSERVATIVE DEFAULT PRINCIPLE (read first, applies to every parameter)
+
+When uncertain whether a parameter should deviate from the SAM4Tun reference
+default, keep the reference default. Only change a parameter when you have
+clear evidence from the tunnel characteristics that the default would cause a
+specific problem.
+
+SAM4Tun reference defaults for enhancing:
+- upsampling_stage1/2/3_target_distance = 0.08 / 0.04 / 0.02
+- curvature_threshold = 0.0005
+- depth_threshold_low / depth_threshold_high = 0.003 / 0.008
+- inter_radius = 0.06
+- duplicate_threshold = 0.02
+- n_segment_start = 0, n_segment_end = 6 (regular) or 7+ (complex)
+- num_neighbors = 20, num_interpolations = 2
+- resolution = 0.005, window_size = 9
+
+For complex tunnels (4-\*, 5-\*) where geometry differs significantly from the
+sample tunnel, prefer SAM4Tun reference defaults as the safe starting point.
+The "proven robust defaults" listed later in this document were calibrated on
+regular/continuous tunnel types and may not generalise to complex tunnels.
 
 ### 1. ANCHORING
 Compare the current tunnel's denoised point cloud characteristics against the sample baseline to establish differences that affect enhancing performance.

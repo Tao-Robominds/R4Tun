@@ -102,15 +102,16 @@ The evenly-spaced fallback `X_i ≈ (i + 0.5) * (W / ring_count)` matches measur
 - **Physical layout**: 7 segments, interleaved K-blocks; scanner offset → variable density along X.
 - **Y is not a simple global pattern**: measured **midpoint** Y can span ~400–4300 px with **no** consistent alternation, monotonic trend, or single constant. **Default** rows sit on image-center Y and are usually wrong.
 - **Aggregate fallback** (default+assume): ~37% continuous, ~48% complex-4, ~36% complex-5 (memory+state runs).
-- **Goal**: aggressive Hough tuning (lower thresholds, more dilation, longer `minLineLength` for 1.8 m rings); minimize **default** count.
+- **Goal**: minimize **default** count while preserving Background IoU. Start from SAM4Tun defaults and make the smallest change justified by the state context.
 
 #### Complex sparse-side recovery (left/right imbalance)
-- If one side has many `default` rows while the other side has valid oblique/horizontal detections, prioritize **recall** first:
-  - lower `hough_threshold_oblique` and `hough_threshold_horizontal` into ~20-30,
-  - increase `dilation_iterations` to 2,
-  - widen oblique angle windows to about ±(4-12) deg,
-  - reduce `minLineLength_*` and increase `maxLineGap_*` to bridge fragmented joints.
-- Keep this strategy **complex-only** (`4-*`, `5-*`). Do not apply to `1-*`, `2-*`, `3-*` by default because it can over-detect and harm already-stable cases.
+- Only apply if the state context shows **clear evidence** of detection failure: default+assume rate >= 30% on at least one side, or measurable left/right imbalance in detected.csv.
+- **Start from SAM4Tun defaults** (hough_threshold_oblique=50, hough_threshold_horizontal=50, dilation_iterations=1, morphological_kernel_size=3x3) and make incremental adjustments:
+  - Lower hough thresholds by at most 10-15 (to ~35-40), not to 20-30.
+  - Prefer widening oblique angle windows (±4-12 deg) or increasing maxLineGap before lowering thresholds further.
+  - Avoid increasing dilation_iterations above 1 or morphological_kernel_size beyond 3x3 unless thresholds alone are insufficient.
+- **Warning**: Over-aggressive detection (thresholds < 30, dilation > 1, kernel > 3x3) inflates false-positive lines in background regions and collapses Background IoU — the single largest mIoU contributor. A conservative approach that misses some joints is far better than one that hallucninates lines.
+- Keep this strategy **complex-only** (`4-*`, `5-*`). Do not apply to `1-*`, `2-*`, `3-*`.
 
 ### Detection type quality (Y)
 | Type | Meaning |

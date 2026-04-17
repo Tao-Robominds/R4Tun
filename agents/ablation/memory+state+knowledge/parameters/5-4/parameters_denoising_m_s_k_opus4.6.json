@@ -1,8 +1,8 @@
 {
   "mask_r_low": 2.58,
-  "mask_r_high": 3.8,
+  "mask_r_high": 3.87,
   "y_step": 0.4,
-  "z_step": 0.005,
+  "z_step": 0.003,
   "grad_threshold": 0.15,
   "smoothing_window_size": 5,
   "smoothing_offset": -0.002,

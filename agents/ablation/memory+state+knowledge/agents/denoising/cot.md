@@ -1,6 +1,27 @@
 ## Chain of Thought Instructions for Denoising Parameter Recommendations
 
-Follow this structured 5-step analysis process when evaluating unfolded tunnel characteristics and making denoising parameter recommendations. Use **DOMAIN KNOWLEDGE** for all numeric thresholds, regime definitions, proven defaults, r_percentile rules, and per-parameter adaptation logic.
+Follow this structured analysis process when evaluating unfolded tunnel characteristics and making denoising parameter recommendations. Use **DOMAIN KNOWLEDGE** for all numeric thresholds, regime definitions, proven defaults, r_percentile rules, and per-parameter adaptation logic.
+
+### 0. CONSERVATIVE DEFAULT PRINCIPLE (read first, applies to every parameter)
+
+When uncertain whether a parameter should deviate from the SAM4Tun reference
+default, keep the reference default. Only change a parameter when you have
+clear evidence from the tunnel characteristics that the default would cause a
+specific problem.
+
+SAM4Tun reference defaults for denoising:
+- mask_r_low / mask_r_high = derived from tunnel radius (set via r_percentiles)
+- y_step = 0.5
+- z_step = 0.001
+- grad_threshold = 0.2
+- smoothing_window_size = 3
+- smoothing_offset = -0.003
+- default_cutoff_z = set to just above the tunnel wall radius
+
+For complex tunnels (4-\*, 5-\*) where geometry differs significantly from the
+sample tunnel, prefer SAM4Tun reference defaults as the safe starting point.
+The "proven robust defaults" listed later in this document were calibrated on
+regular/continuous tunnel types and may not generalise to complex tunnels.
 
 ### 1. ANCHORING
 Compare the current tunnel's unfolded point cloud characteristics against the sample baseline to establish differences that affect denoising performance.

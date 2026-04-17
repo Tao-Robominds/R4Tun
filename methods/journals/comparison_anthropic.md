@@ -6,16 +6,16 @@ Test: paired t-test (two-sided) vs baseline per tunnel subset
 
 ## Summary
 
-Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_s_k`) with smart-skip pipeline. Overall vs baseline: memory -0.006 (p=0.558), memory+state +0.162 (p<0.0001), memory+state+knowledge +0.178 (p<0.0001).
+Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_s_k`) with smart-skip pipeline. Overall vs baseline: memory -0.006 (p=0.558), memory+state +0.170 (p<0.0001), memory+state+knowledge +0.192 (p<0.0001).
 
 
 |                         | memory vs baseline | memory+state vs baseline | memory+state+knowledge vs baseline |
 | ----------------------- | ------------------ | ------------------------ | ---------------------------------- |
-| **Overall**             | -0.006 (p=0.558)   | +0.162 (p<0.0001)        | +0.178 (p<0.0001)                  |
+| **Overall**             | -0.006 (p=0.558)   | +0.170 (p<0.0001)        | +0.192 (p<0.0001)                  |
 | **Regular (n=13)**      | -0.031 (p=0.184)   | +0.225 (p<0.0001)        | +0.244 (p<0.0001)                  |
 | - **Alternated (n=10)** | -0.055 (p=0.024)   | +0.232 (p=0.000)         | +0.253 (p<0.0001)                  |
 | - **Continuous (n=3)**  | +0.049 (p=0.415)   | +0.201 (p=0.043)         | +0.213 (p=0.003)                   |
-| **Complex (n=17)**      | +0.013 (p=0.005)   | +0.113 (p<0.0001)        | +0.127 (p<0.0001)                  |
+| **Complex (n=17)**      | +0.013 (p=0.005)   | +0.128 (p<0.0001)        | +0.152 (p<0.0001)                  |
 
 ## Family-level Statistics
 
@@ -26,8 +26,8 @@ Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_
 | ---------------------- | --------- | ----------------- | ----------- | -------- |
 | sam4tun (baseline)     | 0.150     | —                 | —           | —        |
 | memory                 | 0.144     | -0.006            | 0.057       | p=0.558  |
-| memory+state           | 0.312     | +0.162            | 0.100       | p<0.0001 |
-| memory+state+knowledge | 0.328     | +0.178            | 0.110       | p<0.0001 |
+| memory+state           | 0.320     | +0.170            | 0.096       | p<0.0001 |
+| memory+state+knowledge | 0.342     | +0.192            | 0.098       | p<0.0001 |
 
 
 ### Regular additional — regular ∪ continuous (n=13)
@@ -70,8 +70,8 @@ Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_
 | ---------------------- | --------- | ----------------- | ----------- | -------- |
 | sam4tun (baseline)     | 0.042     | —                 | —           | —        |
 | memory                 | 0.055     | +0.013            | 0.016       | p=0.005  |
-| memory+state           | 0.155     | +0.113            | 0.061       | p<0.0001 |
-| memory+state+knowledge | 0.169     | +0.127            | 0.089       | p<0.0001 |
+| memory+state           | 0.170     | +0.128            | 0.059       | p<0.0001 |
+| memory+state+knowledge | 0.194     | +0.152            | 0.076       | p<0.0001 |
 
 ## Per-tunnel mIoU
 
@@ -94,7 +94,7 @@ Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_
 | 4-1       | com  | 0.038   | 0.038  | +0.000   | 0.091        | +0.053   | 0.172 | +0.134    |
 | 4-2       | com  | 0.044   | 0.053  | +0.009   | 0.129        | +0.085   | 0.166 | +0.122    |
 | 4-3       | com  | 0.043   | 0.066  | +0.023   | 0.171        | +0.128   | 0.254 | +0.211    |
-| 4-4       | com  | 0.042   | 0.042  | +0.000   | 0.099        | +0.057   | 0.047 | +0.005    |
+| 4-4       | com  | 0.042   | 0.042  | +0.000   | 0.152        | +0.110   | 0.245 | +0.203    |
 | 4-5       | com  | 0.044   | 0.088  | +0.044   | 0.200        | +0.156   | 0.254 | +0.210    |
 | 4-6       | com  | 0.047   | 0.070  | +0.023   | 0.108        | +0.061   | 0.139 | +0.092    |
 | 4-7       | com  | 0.047   | 0.061  | +0.014   | 0.227        | +0.180   | 0.325 | +0.278    |
@@ -103,8 +103,8 @@ Anthropic Opus 4.6 re-inference for memory (`m`) and memory+state+knowledge (`m_
 | 4-10      | com  | 0.041   | 0.041  | +0.000   | 0.155        | +0.114   | 0.190 | +0.149    |
 | 5-1       | com  | 0.037   | 0.037  | +0.000   | 0.191        | +0.154   | 0.150 | +0.113    |
 | 5-2       | com  | 0.039   | 0.039  | +0.000   | 0.130        | +0.091   | 0.109 | +0.070    |
-| 5-3       | com  | 0.044   | 0.044  | +0.000   | 0.123        | +0.079   | 0.089 | +0.045    |
-| 5-4       | com  | 0.042   | 0.042  | +0.000   | 0.106        | +0.064   | 0.068 | +0.026    |
+| 5-3       | com  | 0.044   | 0.044  | +0.000   | 0.227        | +0.183   | 0.178 | +0.134    |
+| 5-4       | com  | 0.042   | 0.042  | +0.000   | 0.195        | +0.153   | 0.207 | +0.165    |
 | 5-5       | com  | 0.040   | 0.070  | +0.030   | 0.248        | +0.208   | 0.342 | +0.302    |
 | 5-6       | com  | 0.041   | 0.042  | +0.001   | 0.085        | +0.044   | 0.123 | +0.082    |
 | 5-7       | com  | 0.043   | 0.043  | +0.000   | 0.261        | +0.218   | 0.262 | +0.219    |

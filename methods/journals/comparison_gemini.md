@@ -8,16 +8,16 @@ Test: paired t-test (two-sided) vs baseline per tunnel subset
 
 Gemini 3 Flash (gemini-3-flash-preview) ablation across 30 tunnels. Parameters inferred via google-genai SDK. Pipeline: agents stage scripts with --model gemini3flash. Conditions: memory (m), memory+state (m_s), memory+state+knowledge (m_s_k).
 
-Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), memory+state+knowledge +0.163 (p<0.0001).
+Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), memory+state+knowledge +0.166 (p<0.0001).
 
 
 |                         | memory vs baseline | memory+state vs baseline | memory+state+knowledge vs baseline |
 | ----------------------- | ------------------ | ------------------------ | ---------------------------------- |
-| **Overall**               | +0.049 (p=0.056)   | +0.152 (p<0.0001)        | +0.163 (p<0.0001)                  |
+| **Overall**               | +0.049 (p=0.056)   | +0.152 (p<0.0001)        | +0.166 (p<0.0001)                  |
 | **Regular (n=13)**        | +0.053 (p=0.374)   | +0.240 (p<0.0001)        | +0.204 (p=0.000)                   |
 | - **Alternated (n=10)**   | -0.035 (p=0.325)   | +0.223 (p<0.0001)        | +0.219 (p=0.002)                   |
 | - **Continuous (n=3)**    | +0.346 (p=0.100)   | +0.295 (p=0.011)         | +0.154 (p=0.006)                   |
-| **Complex (n=17)**        | +0.046 (p<0.0001)  | +0.084 (p<0.0001)        | +0.131 (p<0.0001)                  |
+| **Complex (n=17)**        | +0.046 (p<0.0001)  | +0.085 (p<0.0001)        | +0.137 (p<0.0001)                  |
 
 ## Family-level Statistics
 
@@ -29,7 +29,7 @@ Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), me
 | sam4tun (baseline)     | 0.150     | —                 | —           | —        |
 | memory                 | 0.199     | +0.049            | 0.136       | p=0.056  |
 | memory+state           | 0.302     | +0.152            | 0.104       | p<0.0001 |
-| memory+state+knowledge | 0.313     | +0.163            | 0.113       | p<0.0001 |
+| memory+state+knowledge | 0.316     | +0.166            | 0.110       | p<0.0001 |
 
 ### Regular additional — regular ∪ continuous (n=13)
 
@@ -68,8 +68,8 @@ Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), me
 | ---------------------- | --------- | ----------------- | ----------- | -------- |
 | sam4tun (baseline)     | 0.042     | —                 | —           | —        |
 | memory                 | 0.088     | +0.046            | 0.031       | p<0.0001 |
-| memory+state           | 0.126     | +0.084            | 0.051       | p<0.0001 |
-| memory+state+knowledge | 0.173     | +0.131            | 0.073       | p<0.0001 |
+| memory+state           | 0.127     | +0.085            | 0.051       | p<0.0001 |
+| memory+state+knowledge | 0.179     | +0.137            | 0.067       | p<0.0001 |
 
 ## Per-tunnel mIoU
 
@@ -92,7 +92,7 @@ Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), me
 | 4-1       | com | 0.038   | 0.056  |  +0.018   | 0.104        |   +0.066   | 0.163 |    +0.125    |
 | 4-2       | com | 0.044   | 0.047  |  +0.003   | 0.118        |   +0.074   | 0.167 |    +0.123    |
 | 4-3       | com | 0.043   | 0.095  |  +0.052   | 0.211        |   +0.168   | 0.282 |    +0.239    |
-| 4-4       | com | 0.042   | 0.046  |  +0.004   | 0.101        |   +0.059   | 0.072 |    +0.030    |
+| 4-4       | com | 0.042   | 0.046  |  +0.004   | 0.101        |   +0.059   | 0.108 |    +0.066    |
 | 4-5       | com | 0.044   | 0.097  |  +0.053   | 0.067        |   +0.023   | 0.126 |    +0.082    |
 | 4-6       | com | 0.047   | 0.093  |  +0.046   | 0.087        |   +0.040   | 0.115 |    +0.068    |
 | 4-7       | com | 0.047   | 0.125  |  +0.078   | 0.221        |   +0.174   | 0.311 |    +0.264    |
@@ -101,7 +101,7 @@ Overall vs baseline: memory +0.049 (p=0.056), memory+state +0.152 (p<0.0001), me
 | 4-10      | com | 0.041   | 0.090  |  +0.049   | 0.128        |   +0.087   | 0.168 |    +0.127    |
 | 5-1       | com | 0.037   | 0.120  |  +0.083   | 0.100        |   +0.063   | 0.171 |    +0.134    |
 | 5-2       | com | 0.039   | 0.153  |  +0.114   | 0.108        |   +0.069   | 0.128 |    +0.089    |
-| 5-3       | com | 0.044   | 0.126  |  +0.082   | 0.087        |   +0.043   | 0.080 |    +0.036    |
+| 5-3       | com | 0.044   | 0.126  |  +0.082   | 0.104        |   +0.060   | 0.143 |    +0.099    |
 | 5-4       | com | 0.042   | 0.051  |  +0.009   | 0.111        |   +0.069   | 0.122 |    +0.080    |
 | 5-5       | com | 0.040   | 0.080  |  +0.040   | 0.136        |   +0.096   | 0.140 |    +0.100    |
 | 5-6       | com | 0.041   | 0.069  |  +0.028   | 0.076        |   +0.035   | 0.301 |    +0.260    |

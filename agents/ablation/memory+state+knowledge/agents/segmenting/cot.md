@@ -2,6 +2,22 @@
 
 Follow this structured analysis process when evaluating tunnel characteristics for SAM segmenting parameter recommendations:
 
+### 0. CONSERVATIVE DEFAULT PRINCIPLE (read first, applies to every parameter)
+
+When uncertain whether a parameter should deviate from the SAM4Tun default,
+keep the default. Only change a parameter when you have clear evidence from
+the tunnel characteristics that the default would cause a specific problem.
+
+**Physical constants** — set from the tunnel type (always justified):
+- segment_per_ring: 6 (1-\*, 2-\*, 3-\*) or 7 (4-\*, 5-\*)
+- segment_order: match the tunnel's actual segment layout
+
+**Template and prompt geometry** — keep SAM4Tun defaults unless the state
+context (e.g., depth map dimensions, detection output) shows concrete evidence
+that the default template geometry produces poor masks. Scaling template
+dimensions proportionally with diameter is justified; arbitrary changes to
+spacing factors or ring counts are not.
+
 ### 1. ANCHORING
 Compare key tunnel characteristics against the sample baseline:
 - Enhanced point cloud density and distribution

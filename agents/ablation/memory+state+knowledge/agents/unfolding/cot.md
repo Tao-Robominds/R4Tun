@@ -1,6 +1,34 @@
 ## Chain of Thought Instructions for Parameter Recommendations
 
-Follow this structured 5-step analysis process when evaluating tunnel characteristics and making parameter recommendations. Use **DOMAIN KNOWLEDGE** for all numeric thresholds, regime definitions, parameter ranges, and per-parameter adaptation rules.
+Follow this structured analysis process when evaluating tunnel characteristics and making parameter recommendations. Use **DOMAIN KNOWLEDGE** for all numeric thresholds, regime definitions, parameter ranges, and per-parameter adaptation rules.
+
+### 0. CONSERVATIVE DEFAULT PRINCIPLE (read first, applies to every parameter)
+
+When uncertain whether a parameter should deviate from the SAM4Tun default,
+keep the default. Only change a parameter when you have clear evidence from
+the tunnel characteristics that the default would cause a specific problem.
+
+**Physical constants** — set from the tunnel type (these are always justified):
+- diameter: 5.5 m (1-\*, 2-\*, 3-\*) or 7.5 m (4-\*, 5-\*)
+- ring_spacing_constant: 1.2 m (regular/continuous) or 1.8 m (complex)
+
+**Processing parameters** — keep SAM4Tun defaults unless evidence justifies change:
+- delta = 0.005
+- slice_spacing_factor = 1.2
+- vertical_filter_window = 4.5
+- ransac_threshold = 1.0
+- ransac_probability = 0.9
+- ransac_inlier_ratio = 0.75
+- ransac_sample_size = 5
+- ransac_initial_iterations = 999
+- ransac_inlier_threshold_multiplier = 0.8
+- polynomial_degree = 3
+- num_samples_factor = 1210
+
+Do NOT scale slice_spacing_factor with ring length or tunnel diameter — it is
+a processing parameter, not a physical constant. Do NOT scale
+vertical_filter_window proportionally with diameter unless the state context
+shows concrete evidence of fitting failure.
 
 ### 1. ANCHORING
 Compare the current tunnel's point cloud characteristics against the fixed sample memories from the open source SAM4Tun implementation to establish a baseline of differences.

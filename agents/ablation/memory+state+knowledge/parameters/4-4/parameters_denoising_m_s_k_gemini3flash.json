@@ -1,6 +1,6 @@
 {
-  "mask_r_low": 3.5,
-  "mask_r_high": 3.85,
+  "mask_r_low": 2.22,
+  "mask_r_high": 4.17,
   "y_step": 0.4,
   "z_step": 0.005,
   "grad_threshold": 0.15,

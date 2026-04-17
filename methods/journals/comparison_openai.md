@@ -8,16 +8,16 @@ Test: paired t-test (two-sided) vs baseline per tunnel subset
 
 OpenAI GPT-5.4: parameter files use tag `gpt5.4` (`*_m_gpt5.4.json`, `*_m_s_gpt5.4.json`, `*_m_s_k_gpt5.4.json`). E2E orchestrator log: `logs/gpt5.4_e2e.log`. Tables from current `data/ablation/*/evaluation/performance.md`.
 
-Overall vs baseline: memory +0.032 (p=0.028), memory+state +0.149 (p<0.0001), memory+state+knowledge +0.171 (p<0.0001).
+Overall vs baseline: memory +0.032 (p=0.028), memory+state +0.150 (p<0.0001), memory+state+knowledge +0.171 (p<0.0001).
 
 
 |                         | memory vs baseline | memory+state vs baseline | memory+state+knowledge vs baseline |
 | ----------------------- | ------------------ | ------------------------ | ---------------------------------- |
-| **Overall**               | +0.032 (p=0.028)   | +0.149 (p<0.0001)        | +0.171 (p<0.0001)                  |
+| **Overall**               | +0.032 (p=0.028)   | +0.150 (p<0.0001)        | +0.171 (p<0.0001)                  |
 | **Regular (n=13)**        | -0.004 (p=0.890)   | +0.235 (p<0.0001)        | +0.217 (p<0.0001)                  |
 | - **Alternated (n=10)**   | -0.043 (p=0.051)   | +0.240 (p=0.000)         | +0.231 (p<0.0001)                  |
 | - **Continuous (n=3)**    | +0.127 (p=0.044)   | +0.218 (p=0.118)         | +0.168 (p=0.088)                   |
-| **Complex (n=17)**        | +0.059 (p<0.0001)  | +0.084 (p<0.0001)        | +0.135 (p<0.0001)                  |
+| **Complex (n=17)**        | +0.059 (p<0.0001)  | +0.085 (p<0.0001)        | +0.136 (p<0.0001)                  |
 
 ## Family-level Statistics
 
@@ -28,7 +28,7 @@ Overall vs baseline: memory +0.032 (p=0.028), memory+state +0.149 (p<0.0001), me
 | ---------------------- | --------- | ----------------- | ----------- | -------- |
 | sam4tun (baseline)     | 0.150     | —                 | —           | —        |
 | memory                 | 0.182     | +0.032            | 0.076       | p=0.028  |
-| memory+state           | 0.299     | +0.149            | 0.113       | p<0.0001 |
+| memory+state           | 0.300     | +0.150            | 0.113       | p<0.0001 |
 | memory+state+knowledge | 0.321     | +0.171            | 0.088       | p<0.0001 |
 
 ### Regular additional — regular ∪ continuous (n=13)
@@ -68,8 +68,8 @@ Overall vs baseline: memory +0.032 (p=0.028), memory+state +0.149 (p<0.0001), me
 | ---------------------- | --------- | ----------------- | ----------- | -------- |
 | sam4tun (baseline)     | 0.042     | —                 | —           | —        |
 | memory                 | 0.101     | +0.059            | 0.046       | p<0.0001 |
-| memory+state           | 0.126     | +0.084            | 0.030       | p<0.0001 |
-| memory+state+knowledge | 0.177     | +0.135            | 0.057       | p<0.0001 |
+| memory+state           | 0.127     | +0.085            | 0.029       | p<0.0001 |
+| memory+state+knowledge | 0.178     | +0.136            | 0.056       | p<0.0001 |
 
 ## Per-tunnel mIoU
 
@@ -101,8 +101,8 @@ Overall vs baseline: memory +0.032 (p=0.028), memory+state +0.149 (p<0.0001), me
 | 4-10      | com | 0.041   | 0.121  |  +0.080   | 0.122        |   +0.081   | 0.215 |    +0.174    |
 | 5-1       | com | 0.037   | 0.206  |  +0.169   | 0.097        |   +0.060   | 0.150 |    +0.113    |
 | 5-2       | com | 0.039   | 0.117  |  +0.078   | 0.098        |   +0.059   | 0.106 |    +0.067    |
-| 5-3       | com | 0.044   | 0.077  |  +0.033   | 0.106        |   +0.062   | 0.116 |    +0.072    |
-| 5-4       | com | 0.042   | 0.070  |  +0.028   | 0.096        |   +0.054   | 0.098 |    +0.056    |
+| 5-3       | com | 0.044   | 0.077  |  +0.033   | 0.110        |   +0.066   | 0.124 |    +0.080    |
+| 5-4       | com | 0.042   | 0.070  |  +0.028   | 0.103        |   +0.061   | 0.098 |    +0.056    |
 | 5-5       | com | 0.040   | 0.051  |  +0.011   | 0.180        |   +0.140   | 0.255 |    +0.215    |
 | 5-6       | com | 0.041   | 0.081  |  +0.040   | 0.168        |   +0.127   | 0.113 |    +0.072    |
 | 5-7       | com | 0.043   | 0.112  |  +0.069   | 0.169        |   +0.126   | 0.231 |    +0.188    |
