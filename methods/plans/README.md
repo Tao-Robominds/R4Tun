@@ -1,62 +1,50 @@
-# No-GT Portable Workflow
+# Ring-wise BO + Fixed-Rule Reflection Workflow
 
 ## Purpose
-Portable workflow pack for irregular tunnel adaptation.
+Primary paper methodology for ring-wise BO, consolidated proxy learning, fixed-rule reflection ablation, and held-out generalisation.
 
-## Dataset
-- `data/4-1.txt` — 583k pts, 6 rings (120–125), 7 block types, diameter 7.5 m, ring spacing 1.816 m.
-- `data/5-1.txt` — 1.5M pts, 7 rings (107–113), 7 block types, diameter 7.5 m, ring spacing 1.816 m.
+## Scope boundaries
+- Include: ring-wise BO, regime-based calibration, tuning memory, pipeline intrinsics + ontology features, ridge+Platt proxy, fixed-rule reflection, ablation, generalisation.
+- Exclude: LLM routing, RL routing/policy learning, adaptive backtracking, learned correction sequencing.
 
-## Folders
-- `steps/`: abstract step manuals. Define what each step must do, its inputs, outputs, and verification.
-- `output/`: canonical filled outputs for the steps. Concrete artifacts with evidence from 4-1 and 5-1.
-- `templates/`: artifact templates.
-- `scripts/`: scaffold and verify helpers.
-
-## How to read
-- `steps/` = the plan (what to do).
-- `output/` = the results (what was found).
-- Per-run runtime artifacts go under `data/{tunnel_id}/workflow/{run_id}/`.
+## Folder map
+- `steps/`: paper-scope workflow manuals (01 to 07).
+- `output/`: canonical output stubs aligned with `steps/`.
+- `preparation/`: design-time reverse-engineering history retained for traceability.
+- `templates/`: reusable artifact templates.
+- `scripts/`: helper scripts (for example, detection parameter dependency graph).
 
 ## Step order and dependencies
 
-Steps are **strictly sequential**. Each step requires the output of all previous steps. Do not start step N until step N−1 is verified.
+Per-run runtime artifacts should be written under:
+`data/{tunnel_id}/workflow/{run_id}/{step_dir}/`
 
 | # | Step | Depends on | Runtime artifact | Canonical output |
-|---|------|-----------|-----------------|-----------------|
-| 01 | Assumptions | — | `01_assumptions/` | `output/01_assumptions_output.md` |
-| 02 | Challenge map | 01 | `02_challenge_map/` | `output/02_challenge_map_output.md` |
-| 03 | Upgrade solution | 01, 02 | `03_upgrade_solution/` | — |
-| 04 | Critical params for BO | 02, 03 | `04_critical_params_for_bo/` | `critical_params.yaml` |
-| 05 | GT warm start | 04 | `05_gt_warm_start/` | — |
-| 06 | BO runs | 04, 05 | `06_bo_runs/` | — |
-| 07 | Intrinsic analysis | 06 | `07_intrinsic_analysis/` | — |
-| 08 | Proxy training | 07 | `08_proxy_training/` | — |
-| 09 | Reflection agent | 07, 08 | `09_reflection_agent/` | — |
+|---|------|-----------|------------------|------------------|
+| 01 | Ring regime discovery | — | `01_ring_regime_discovery/` | `output/01_ring_regime_discovery_output.md` |
+| 02 | BO calibration | 01 | `02_bo_calibration/` | `output/02_bo_calibration_output.md` |
+| 03 | Tuning memory | 02 | `03_tuning_memory/` | `output/03_tuning_memory_output.md` |
+| 04 | Intrinsics and ontology | 02 | `04_intrinsics_and_ontology/` | `output/04_intrinsics_and_ontology_output.md` |
+| 05 | Proxy and calibration | 04 | `05_proxy_and_calibration/` | `output/05_proxy_and_calibration_output.md` |
+| 06 | Reflection ablation | 03, 04, 05 | `06_reflection_ablation/` | `output/06_reflection_ablation_output.md` |
+| 07 | Generalisation test | 01, 03, 04, 05, 06 | `07_generalisation_test/` | `output/07_generalisation_test_output.md` |
 
-**Rule:** Without the previous step's verified output, the current step cannot proceed.
+## Consolidated proxy strategy
+- Feature blocks:
+  - `x_P`: pipeline intrinsic metrics
+  - `x_O`: ontology/structural plausibility metrics
+- Model: ridge regression on `x = [x_P; x_O]` to predict mIoU.
+- Calibration: Platt scaling on `s = y_hat - tau` to compute `p_good`.
+- Acceptance: `y_hat >= tau` and `p_good >= p_min`.
 
-## SOP Table
-| Step | Verification condition | Fail action |
-|---|---|---|
-| `01` | scope + assumptions + gaps + evidence present | stop; restate baseline and assumptions |
-| `02` | every assumption marked stable/broken with evidence, class, failure mode, response | stop; compare GT and classify gaps |
-| `03` | edits + structural limits + risks present | stop; split code vs structural |
-| `04` | critical params: selected + excluded + safe fixed + rule documented | stop; complete inventory + data-flow + selection |
-| `05` | warm start + fixed + bounds + priors present | stop; redo GT reverse-engineering |
-| `06` | metadata + params + GT + artefacts + feature bank + reflection logs present | stop; fix log schema |
-| `07` | metric bank + selected intrinsics + ranges + guardrails + knowledge write-back present | stop; refine intrinsic analysis |
-| `08` | validation + calibration + uncertainty + confidence bank + trust rule present | stop; do not deploy proxy |
-| `09` | case rules + actions + fallback + uncertainty logic present | stop; rewrite policy prompt |
+## Reflection policy (fixed only)
+- poor ring boundary quality -> rerun boundary detection
+- poor oblique line quality -> adjust K-line detection
+- invalid segment count -> adjust geometry segmentation
+- high spacing irregularity -> rerun ring boundary detection
 
-## Non-Negotiable
-- Proxy uncertainty is mandatory.
-- Do not trust predicted mIoU without holdout validation, calibration, and confidence signals.
-- Do not skip steps. Without the previous step's output, the current step cannot start.
+No template/mask action and no RL/LLM routing.
 
-## Quick Start
-```bash
-python plans/scripts/scaffold_run.py --tunnel 5-1 --run pilot_001
-python plans/scripts/verify_step.py --root data/5-1/workflow/pilot_001 --step 01
-python plans/scripts/verify_step.py --root data/5-1/workflow/pilot_001 --step all
-```
+## Coding plans
+Implementation-level step-by-step coding guidance is maintained in:
+`methods/ablation/steps/`

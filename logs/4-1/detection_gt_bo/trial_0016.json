@@ -1,0 +1,29 @@
+{
+  "trial_id": 16,
+  "tunnel_id": "4-1",
+  "timestamp": "2026-03-12T18:07:29.173738Z",
+  "params": {
+    "binary_threshold": 161,
+    "hough_threshold": 69,
+    "hough_min_length": 54,
+    "hough_max_gap": 69,
+    "angle_oblique_min": 3.399,
+    "angle_oblique_max": 9.76714141668224,
+    "hough_horizontal_threshold": 67,
+    "hough_horizontal_min_length": 30,
+    "hough_horizontal_max_gap": 32,
+    "horizontal_angle_tolerance": 3.402238168213889,
+    "canny_low": 86,
+    "canny_high": 230,
+    "dilation_kernel_size": 5,
+    "dilation_iterations": 3
+  },
+  "metrics": {
+    "matched_frac": 0.7073170731707317,
+    "mae_avg": 225.33645632326966,
+    "n_matched": 29,
+    "n_gt": 41
+  },
+  "loss": -0.7073170731707317,
+  "runtime_sec": 2.75
+}

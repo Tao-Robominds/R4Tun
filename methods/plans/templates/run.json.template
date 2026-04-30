@@ -2,8 +2,10 @@
   "tunnel_id": "",
   "run_id": "",
   "trial_id": 0,
+  "ring_id": null,
   "params": {},
   "objective_value": null,
+  "per_ring_miou": {},
   "stage_artifacts": {},
   "timestamp": ""
 }

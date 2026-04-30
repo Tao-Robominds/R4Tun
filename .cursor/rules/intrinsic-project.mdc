@@ -1,0 +1,38 @@
+---
+description: Intrinsic project-only conventions, structure, and BO-to-intrinsic methodology.
+globs:
+alwaysApply: true
+---
+
+# Intrinsic project rules
+
+## Project conventions
+
+1. **Venv (mandatory):** Always run Python through `./venv/bin/python` (or activate `./venv` first). Do NOT use `python3`, `pyenv` shims, system Python, or any other interpreter. Do NOT create a new venv, a new directory, or install packages globally / `--user` / into a `.deps` folder. If `./venv/bin/python` is missing or broken, repair it in place with `python3.12 -m venv ./venv --upgrade-deps` — never recreate it elsewhere or under a different name.
+2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not overwrite existing results in `data/`.
+3. **GT columns:** `segment` and `ring` in raw point cloud are ground truth; metrics using them are GT-dependent and not intrinsic for new tunnels.
+4. **Skills:** Put reusable prompts and scripts under `skills/`.
+5. **Be concise:** Keep summaries/docs/replies short and actionable.
+6. **Match existing style:** Journals follow `methods/journals/`; plan outputs follow `methods/plans/output/`.
+7. **GT at design time only:** Keep runtime pipeline GT-free; use GT only for reverse-engineering or baselines.
+8. **One deliverable per ask:** Produce only what was requested.
+
+## Project structure
+
+- `agents/{agent_type}/`: stage pipelines (e.g. irregular preprocessing/detection/segmentation), plus parameters/knowledge/memory.
+- `bo/{agent_type}/`: Bayesian optimization scripts by stage.
+- `data/`: point clouds and outputs; do not overwrite existing experiment results.
+- `methods/plans/`: no-GT workflow steps/templates/scripts/output.
+- `p4tun/`: cross-tunnel optimizer and proxy predictor.
+- `skills/`: reusable prompts and scripts.
+
+## Guiding methodology: BO to intrinsic metrics pipeline
+
+1. Reverse-engineer GT-labeled tunnels for GT-informed baseline.
+2. Run per-stage BO with GT to identify critical parameters and sensitivity.
+3. Define intrinsic no-GT metrics; correlate against mIoU; add guardrails and learned predictor.
+4. Deploy on new tunnels with fixed/BO-tuned params and predictor/guardrails objective.
+
+**Plan sequence (strict):** `methods/plans/steps/` from 01 to 07.  
+**Canonical outputs:** `methods/plans/output/`.  
+**Coding guides:** `methods/ablation/steps/` from 01 to 07.

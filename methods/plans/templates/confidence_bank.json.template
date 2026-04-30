@@ -1,6 +1,14 @@
 {
   "tunnel_id": "",
+  "tau": null,
+  "p_min": null,
+  "platt_a": null,
+  "platt_c": null,
+  "p_good_example": null,
+  "calibration_n": null,
   "metrics": {
+    "brier": null,
+    "ece": null,
     "coverage_90": null,
     "calibration_error": null,
     "max_acceptable_uncertainty": null

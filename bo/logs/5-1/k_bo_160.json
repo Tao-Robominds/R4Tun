@@ -1,0 +1,34 @@
+{
+  "trial": 160,
+  "tunnel_id": "5-1",
+  "target_ring": null,
+  "timestamp": "2026-03-10T11:49:25.311393Z",
+  "params": {
+    "binary_threshold": 163,
+    "hough_threshold": 46,
+    "hough_min_length": 85,
+    "hough_max_gap": 44,
+    "reg_target_gap": 502.2596804033019,
+    "reg_gap_tolerance": 0.5473330863768127,
+    "reg_blend_weight": 0.914600471179575,
+    "reg_max_det_line_dist": 448.73500187540316,
+    "merge_close_fraction": 0.11361663324355593,
+    "max_line_length_factor": 1.5896907929356794,
+    "angle_pos_min": 4.463140180790613,
+    "angle_pos_max": 6.995620798288258,
+    "angle_neg_min": -6.995620798288258,
+    "angle_neg_max": -4.463140180790613
+  },
+  "per_ring_px": {
+    "0": 514.038778877888,
+    "1": 870.3217445873088,
+    "2": 1001.8776076786467,
+    "3": 559.3242639291288,
+    "4": 227.0136668163732,
+    "5": 980.5988503918702,
+    "6": 696.3157922418727
+  },
+  "score": 692.7843863604412,
+  "runtime_sec": 2.18,
+  "mean_px": 692.7843863604412
+}

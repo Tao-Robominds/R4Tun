@@ -1,0 +1,12 @@
+{
+  "tunnel_id": "",
+  "run_id": "",
+  "tau": null,
+  "platt_a": null,
+  "platt_c": null,
+  "calibration_n": null,
+  "brier": null,
+  "ece": null,
+  "score_definition": "s = proxy_pred - tau",
+  "timestamp": ""
+}

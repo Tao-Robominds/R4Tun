@@ -1,17 +1,43 @@
 # Proxy — {tunnel_id}
 
 ## Model
-- (Type: e.g. GP, RF, MLP; target: e.g. mIoU.)
+- **Type:** ridge regression (default) from intrinsic vector **x** to **mIoU**.
+- **Target:** scalar mIoU (GT, design-time / calibration only).
 
-## Validation
-- Holdout split: (e.g. tunnel or trial subset)
-- Metrics: MAE, RMSE, calibration error, coverage
+## Training / validation splits
+- **Training:** (list trial IDs or rule)
+- **Regression holdout:** (list or rule) — MAE, RMSE reported below
+- **Calibration holdout:** (list or rule) — used only for Platt; disjoint from training when possible
+
+## Regression metrics (holdout)
+- MAE: 
+- RMSE: 
+
+## Success event and threshold
+- **τ** (target mIoU): e.g. 0.60
+- **G = 1[mIoU ≥ τ]** on calibration set
+
+## Platt calibration
+- **Score:** **s = ŷ − τ** (proxy margin)
+- **Fitted:** **P(G=1|s) = σ(a·s + c)**
+- **a:** 
+- **c:** 
+- **Calibration sample size (n):** 
+- **Brier score:** 
+- **ECE (optional):** 
+
+## p_good (operational)
+- For a new configuration with proxy **ŷ**: **s = ŷ − τ**, **p_good = σ(a·s + c)**.
+
+## Acceptance rule
+- Require **ŷ ≥ τ** **and** **p_good ≥ p_min** (state **p_min**).
+- Rationale: point prediction alone is insufficient without calibrated pass probability.
 
 ## Uncertainty
-- (How uncertainty is produced: posterior, ensemble, etc.)
+- (Ensemble variance, CV, or posterior — if used alongside Platt.)
 
 ## Confidence bank
-- (Structured trust signals; see confidence_bank.json.)
+- See `confidence_bank.json` (tau, platt_a, platt_c, p_min, trust fields).
 
 ## Trust rule
-- (When to trust proxy vs use fallback.)
+- (When to trust proxy vs fallback; tie to step 09 reflection.)

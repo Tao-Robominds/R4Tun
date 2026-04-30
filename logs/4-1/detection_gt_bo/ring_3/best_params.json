@@ -1,0 +1,20 @@
+{
+  "matched_frac": 0.3333333333333333,
+  "params": {
+    "binary_threshold": 162,
+    "hough_threshold": 92,
+    "hough_min_length": 145,
+    "hough_max_gap": 103,
+    "angle_oblique_min": 6.413605958764797,
+    "angle_oblique_max": 7.78702043328665,
+    "hough_horizontal_threshold": 72,
+    "hough_horizontal_min_length": 34,
+    "hough_horizontal_max_gap": 47,
+    "horizontal_angle_tolerance": 2.358819840174876,
+    "canny_low": 72,
+    "canny_high": 237,
+    "dilation_kernel_size": 4,
+    "dilation_iterations": 2
+  },
+  "ring_index": 3
+}

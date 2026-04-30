@@ -1,0 +1,85 @@
+{
+  "per_ring_offsets": {
+    "0": {
+      "K": -128.9,
+      "B1": -788.5,
+      "B2": 121.7,
+      "A1": -1265.9,
+      "A2": -2332.1,
+      "A3": 1554.7,
+      "A4": 904.9
+    },
+    "1": {
+      "K": -21.1,
+      "B1": -878.5,
+      "B2": 115.0,
+      "A1": -1609.7,
+      "A2": -2363.7,
+      "A3": 1618.3,
+      "A4": 685.1
+    },
+    "2": {
+      "K": 827.5,
+      "B1": 486.3,
+      "B2": 1715.0,
+      "A1": -785.6,
+      "A2": -1232.1,
+      "A3": -2350.1,
+      "A4": 2418.9
+    },
+    "3": {
+      "K": -1241.3,
+      "B1": -850.2,
+      "B2": -2111.2,
+      "A1": -46.2,
+      "A2": 897.1,
+      "A3": 1360.8,
+      "A4": 2416.0
+    },
+    "4": {
+      "K": -1677.7,
+      "B1": -868.6,
+      "B2": -2783.0,
+      "A1": -827.3,
+      "A2": 639.9,
+      "A3": 1016.6,
+      "A4": 1183.2
+    },
+    "5": {
+      "K": 577.3,
+      "B1": 602.8,
+      "B2": -89.5,
+      "A1": 1144.4,
+      "A2": 2301.1,
+      "A3": -1473.9,
+      "A4": -1080.9
+    }
+  },
+  "k_expected_height_px": 500,
+  "eps": 0.108,
+  "subdivision_threshold": 1.23,
+  "max_subdivisions": 4,
+  "reg_target_gap": 429.2,
+  "reg_gap_tolerance": 0.516,
+  "reg_blend_weight": 0.709,
+  "reg_max_det_line_dist": 423.3,
+  "angle_oblique_min": 7.035856557515298,
+  "angle_oblique_max": 7.449862521144466,
+  "angle_min_oblique_deg": 3.0,
+  "binary_threshold": 154,
+  "hough_threshold": 53,
+  "hough_min_length": 198,
+  "hough_max_gap": 67,
+  "dilation_kernel_size": 2,
+  "dilation_iterations": 2,
+  "canny_low": 48,
+  "canny_high": 153,
+  "hough_horizontal_threshold": 75,
+  "hough_horizontal_min_length": 165,
+  "hough_horizontal_max_gap": 44,
+  "horizontal_angle_tolerance": 1.5247960737082082,
+  "hough_vertical_threshold": 500,
+  "merge_distance_threshold": 3.0,
+  "reg_max_det_line_dist_frac": 1.0,
+  "k_detection_method": "line_midpoint"
+}

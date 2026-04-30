@@ -1,39 +1,51 @@
-# PR4Tun Project Rules
+# Always-On Agent Behavior (Intrinsic)
 
-## Thinking Patterns
+Use these as global execution defaults in this repository.  
+Project-specific details live in `.cursor/rules/*.mdc`.
 
-When asked a question or making a claim about why something is happening:
-1. **Dig deep critically.** Do not stop at surface-level explanations. If the first answer does not quantitatively explain the observation, keep investigating.
-2. **Always provide hard evidence.** Every conclusion must be backed by data: run a script, print numbers, compare before/after. Never state a reason without showing the numbers that prove it.
-3. **Prove, don't speculate.** If you say "X causes Y", immediately show the experiment that proves it: run with X fixed vs X broken, report both mIoU values side by side, show per-ring or per-class breakdowns.
-4. **When evidence contradicts a claim, abandon the claim** and dig for the real cause rather than making another unsupported guess.
+## 1) Think Before Coding
 
-## Project Conventions
+- State assumptions explicitly; ask when uncertainty affects correctness.
+- If multiple interpretations are possible, surface them before implementation.
+- Prefer the simplest correct path; do not choose complexity silently.
+- If requirements are unclear, pause and ask a targeted question.
 
-1. **Venv:** Use local `./venv` only; do not create a new virtual environment.
-2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not overwrite existing results in `data/`.
-3. **GT columns:** `segment` and `ring` in the raw point cloud are ground truth; any metric using them is GT-dependent and not intrinsic for new tunnels.
-4. **Skills:** Put re-usable prompts and scripts under `skills/`.
-5. **Be concise:** Summaries, docs, and replies short and actionable; no long prose or redundancy.
-6. **Match existing style:** Journals follow `methods/journals/` (objective, experiments, summary table, key insights, files touched); plan outputs follow `methods/plans/output/` (artifact list, required format, verification).
-7. **GT at design time only:** Pipeline GT-free at runtime; use GT only for reverse-engineering or baselines.
-8. **One deliverable per ask:** Produce only what was requested; do not add extra docs or scripts unless asked.
+## 2) Simplicity First
 
-## Project Structure
+- Implement only what was requested; no speculative features.
+- Avoid premature abstractions for single-use logic.
+- Avoid unnecessary configurability that was not requested.
+- Keep error handling realistic; skip impossible edge cases.
+- If a solution is overbuilt, simplify before finalizing.
 
-- `agents/{agent_type}/` — Pipeline stages per tunnel pattern (e.g. `irregular`: preprocessing, detection, segmentation); `parameters/{tunnel_id}/`, `knowledge/`, `memory/`.
-- `bo/{agent_type}/` — Bayesian optimization scripts per stage.
-- `data/` — Point clouds (`{tunnel_id}.txt`), pipeline outputs; experiment results under `data/{tunnel_id}/` (do not overwrite existing).
-- `methods/plans/` — No-GT portable workflow: `steps/` (step manuals 01–09), `output/` (canonical step outputs), `templates/`, `scripts/`.
-- `p4tun/` — Cross-tunnel BO and predictor (no-GT optimizer, proxy BO).
-- `skills/` — Reusable prompts and scripts.
+## 3) Surgical Changes
 
-## Guiding Methodology: BO to Intrinsic Metrics Pipeline
+- Touch only code required for the task.
+- Do not refactor unrelated areas unless asked.
+- Match existing repository style and conventions.
+- If unrelated issues are noticed, report them; do not silently change them.
+- Remove only orphans introduced by your own changes.
 
-1. **GT reverse-engineer** parameters from labelled tunnels → GT-informed baseline (step 05).
-2. **BO with GT** per stage (preprocessing, detection, segmentation) to find critical params and sensitivity.
-3. **Intrinsic metrics** (no GT at inference): define, correlate with mIoU, then guardrails + learned predictor (steps 06–08).
-4. **Deploy on new tunnels**: run pipeline with fixed/BO-tuned params; use predictor + guardrails as objective.
+## 4) Goal-Driven Execution
 
-**Plan steps (strict order):** `methods/plans/steps/` — 01 assumptions → 02 challenge map → 03 upgrade solution → 04 critical params for BO → 05 GT warm start → 06 BO runs → 07 intrinsic analysis → 08 proxy training → 09 reflection agent. Outputs: `methods/plans/output/`. Verify: `methods/plans/scripts/verify_step.py`.
+- Convert requests into verifiable success criteria.
+- For multi-step work, use a short plan with explicit checks.
+- Verify outcomes with tests/runs where appropriate before concluding.
 
+## 5) Evidence Standards
+
+- Do not stop at surface explanations.
+- Back claims with evidence from run/query/output.
+- If claiming causality, show controlled comparison (before/after or fixed/broken).
+- If evidence contradicts a claim, drop the claim and re-investigate.
+
+## 6) Communication Style
+
+- Keep replies concise and actionable.
+- Deliver one requested outcome at a time unless asked for more.
+
+## 7) Project Rule Sources
+
+Also apply focused rules in `.cursor/rules/`:
+
+- `intrinsic-project.mdc`

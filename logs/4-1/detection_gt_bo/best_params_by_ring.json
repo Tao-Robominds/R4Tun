@@ -1,0 +1,116 @@
+{
+  "0": {
+    "matched_frac": 0.6666666666666666,
+    "params": {
+      "binary_threshold": 254,
+      "hough_threshold": 110,
+      "hough_min_length": 174,
+      "hough_max_gap": 50,
+      "angle_oblique_min": 4.001045262065823,
+      "angle_oblique_max": 9.688018417627852,
+      "hough_horizontal_threshold": 54,
+      "hough_horizontal_min_length": 36,
+      "hough_horizontal_max_gap": 50,
+      "horizontal_angle_tolerance": 1.3173024340654604,
+      "canny_low": 44,
+      "canny_high": 188,
+      "dilation_kernel_size": 3,
+      "dilation_iterations": 3
+    }
+  },
+  "1": {
+    "matched_frac": 0.5,
+    "params": {
+      "binary_threshold": 218,
+      "hough_threshold": 114,
+      "hough_min_length": 173,
+      "hough_max_gap": 69,
+      "angle_oblique_min": 7.230131266903536,
+      "angle_oblique_max": 8.836931704600257,
+      "hough_horizontal_threshold": 117,
+      "hough_horizontal_min_length": 139,
+      "hough_horizontal_max_gap": 46,
+      "horizontal_angle_tolerance": 1.3327276147949878,
+      "canny_low": 59,
+      "canny_high": 95,
+      "dilation_kernel_size": 4,
+      "dilation_iterations": 1
+    }
+  },
+  "2": {
+    "matched_frac": 0.16666666666666666,
+    "params": {
+      "binary_threshold": 162,
+      "hough_threshold": 92,
+      "hough_min_length": 145,
+      "hough_max_gap": 103,
+      "angle_oblique_min": 6.413605958764797,
+      "angle_oblique_max": 7.78702043328665,
+      "hough_horizontal_threshold": 72,
+      "hough_horizontal_min_length": 34,
+      "hough_horizontal_max_gap": 47,
+      "horizontal_angle_tolerance": 2.358819840174876,
+      "canny_low": 72,
+      "canny_high": 237,
+      "dilation_kernel_size": 4,
+      "dilation_iterations": 2
+    }
+  },
+  "3": {
+    "matched_frac": 0.3333333333333333,
+    "params": {
+      "binary_threshold": 162,
+      "hough_threshold": 92,
+      "hough_min_length": 145,
+      "hough_max_gap": 103,
+      "angle_oblique_min": 6.413605958764797,
+      "angle_oblique_max": 7.78702043328665,
+      "hough_horizontal_threshold": 72,
+      "hough_horizontal_min_length": 34,
+      "hough_horizontal_max_gap": 47,
+      "horizontal_angle_tolerance": 2.358819840174876,
+      "canny_low": 72,
+      "canny_high": 237,
+      "dilation_kernel_size": 4,
+      "dilation_iterations": 2
+    }
+  },
+  "4": {
+    "matched_frac": 0.16666666666666666,
+    "params": {
+      "binary_threshold": 192,
+      "hough_threshold": 77,
+      "hough_min_length": 193,
+      "hough_max_gap": 83,
+      "angle_oblique_min": 7.242324143675631,
+      "angle_oblique_max": 10.712466974634282,
+      "hough_horizontal_threshold": 25,
+      "hough_horizontal_min_length": 107,
+      "hough_horizontal_max_gap": 43,
+      "horizontal_angle_tolerance": 1.1746938787268932,
+      "canny_low": 121,
+      "canny_high": 185,
+      "dilation_kernel_size": 4,
+      "dilation_iterations": 3
+    }
+  },
+  "5": {
+    "matched_frac": 0.16666666666666666,
+    "params": {
+      "binary_threshold": 162,
+      "hough_threshold": 92,
+      "hough_min_length": 145,
+      "hough_max_gap": 103,
+      "angle_oblique_min": 6.413605958764797,
+      "angle_oblique_max": 7.78702043328665,
+      "hough_horizontal_threshold": 72,
+      "hough_horizontal_min_length": 34,
+      "hough_horizontal_max_gap": 47,
+      "horizontal_angle_tolerance": 2.358819840174876,
+      "canny_low": 72,
+      "canny_high": 237,
+      "dilation_kernel_size": 4,
+      "dilation_iterations": 2
+    }
+  }
+}

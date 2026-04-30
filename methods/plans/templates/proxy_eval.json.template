@@ -6,7 +6,20 @@
     "mae": null,
     "rmse": null,
     "calibration_error": null,
-    "coverage_90": null
+    "coverage_90": null,
+    "brier": null,
+    "ece": null
+  },
+  "platt": {
+    "tau": null,
+    "a": null,
+    "c": null,
+    "calibration_n": null
+  },
+  "acceptance": {
+    "requires_proxy_geq_tau": true,
+    "requires_p_good_geq_p_min": true,
+    "p_min": null
   },
   "trust_rule": "",
   "timestamp": ""

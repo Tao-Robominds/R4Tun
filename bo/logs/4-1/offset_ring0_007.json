@@ -1,0 +1,64 @@
+{
+  "schema": "intrinsic.v1",
+  "trial_id": "offset_ring0_007",
+  "tunnel_id": "4-1",
+  "ring_idx": 0,
+  "timestamp": "2026-03-10T10:16:46.826428Z",
+  "params": {
+    "boundary_offsets": {
+      "K": -166.9,
+      "B1": -798.4,
+      "B2": -138.9,
+      "A1": -963.8,
+      "A2": -2288.4,
+      "A3": 1237.9,
+      "A4": 926.0
+    }
+  },
+  "observables": {
+    "n_positive_lines": 31,
+    "n_negative_lines": 31,
+    "k_count": 6,
+    "k_confidence_mean": 0.8500000000000001,
+    "k_x_spacing_cv": 5.844020174275425e-16,
+    "segment_count": 42,
+    "blocks_per_ring": [
+      7,
+      7,
+      7,
+      7,
+      7,
+      7
+    ],
+    "boundary_min_gap_px": 28.0,
+    "boundary_coverage_pct": 100.0,
+    "groove_alignment_pct": null,
+    "pred_nonzero_pct": 13.34,
+    "pred_class_counts": {
+      "1": 39510,
+      "2": 80204,
+      "3": 55234,
+      "4": 94738,
+      "5": 59754,
+      "6": 39188,
+      "7": 96146
+    },
+    "pred_k_fraction": 0.085
+  },
+  "gt_metrics": {
+    "mIoU": 0.30097611409467306,
+    "OA": 0.4946911659905712,
+    "F1": 0.4277879056577499,
+    "iou_per_class": {
+      "Background": 0.598569488123937,
+      "K-block": 0.00025477707006369424,
+      "B1-block": 0.6019634448080453,
+      "A1-block": 0.12586187498995483,
+      "A2-block": 0.28588665954654036,
+      "A3-block": 0.3061243019930086,
+      "A4-block": 0.21631952886511602,
+      "B2-block": 0.27282883736071856
+    }
+  },
+  "runtime_sec": 25.49
+}
