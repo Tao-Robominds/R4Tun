@@ -1,0 +1,30 @@
+{
+  "ring_spacing": 1.816,
+  "tunnel_diameter": 7.5,
+  "depth_map_resolution": 0.005,
+  "radius_min": 2.684869856013189,
+  "radius_max": 4.591933756904126,
+  "gradient_threshold": 6.110362631200544,
+  "double_zero_cutoff": false,
+  "smoothing_offset": 0.0027724530973872417,
+  "target_distances": [
+    0.08079722923035461,
+    0.040398614615177304,
+    0.02
+  ],
+  "curvature_neighbors": 16,
+  "interpolation_window": 1,
+  "num_slicing_planes": 1,
+  "samples_per_ring": 698,
+  "outlier_depth_threshold_low": 0.005333821795907695,
+  "outlier_depth_threshold_high": 0.003712993426497915,
+  "outlier_high_density_ring_start": 0,
+  "outlier_high_density_ring_end": 5,
+  "outlier_neighbors": 57,
+  "max_outlier_points": 5000,
+  "outlier_interpolation_radius": 0.03762032737432652,
+  "outlier_num_interpolations": 5,
+  "outlier_duplicate_threshold": 0.02,
+  "outlier_bidirectional": false,
+  "outlier_depth_map_window": 2
+}

@@ -1,0 +1,303 @@
+{
+  "run_id": "preprocessing_bo_selection_v1",
+  "n_selected": 14,
+  "n_failure_representatives": 3,
+  "n_controls": 3,
+  "n_characteristic_representatives": 8,
+  "failure_reasons_covered": [
+    "dominant_empty_component",
+    "many_empty_row_bands",
+    "near_empty_valid_ratio"
+  ],
+  "selection": [
+    {
+      "tunnel_id": "1-3",
+      "ring_id": 128,
+      "ring_key": "1-3/r128",
+      "group": "failure_mode_representative",
+      "selection_reason": "dominant_empty_component",
+      "baseline_status": "FAIL",
+      "baseline_failure_reason": "dominant_empty_component",
+      "characteristics": {
+        "valid_ratio": 0.04141898148148148,
+        "largest_empty_ratio": 0.9584270833333334,
+        "empty_row_bands": 3168,
+        "empty_col_bands": 5,
+        "shape_h": 3456,
+        "shape_w": 250,
+        "n_points": 239279,
+        "nan_ratio": 0.9586
+      }
+    },
+    {
+      "tunnel_id": "1-3",
+      "ring_id": 127,
+      "ring_key": "1-3/r127",
+      "group": "control",
+      "selection_reason": "control_for_dominant_empty_component",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.6997406376518218,
+        "largest_empty_ratio": 0.29372727357924727,
+        "empty_row_bands": 875,
+        "empty_col_bands": 0,
+        "shape_h": 3456,
+        "shape_w": 247,
+        "n_points": 105190,
+        "nan_ratio": 0.3003
+      }
+    },
+    {
+      "tunnel_id": "2-3",
+      "ring_id": 221,
+      "ring_key": "2-3/r221",
+      "group": "failure_mode_representative",
+      "selection_reason": "many_empty_row_bands",
+      "baseline_status": "FAIL",
+      "baseline_failure_reason": "many_empty_row_bands",
+      "characteristics": {
+        "valid_ratio": 0.16293160690571049,
+        "largest_empty_ratio": 0.8357830253061826,
+        "empty_row_bands": 2769,
+        "empty_col_bands": 0,
+        "shape_h": 3456,
+        "shape_w": 251,
+        "n_points": 279318,
+        "nan_ratio": 0.8371
+      }
+    },
+    {
+      "tunnel_id": "2-3",
+      "ring_id": 222,
+      "ring_key": "2-3/r222",
+      "group": "control",
+      "selection_reason": "control_for_many_empty_row_bands",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.7045729354862993,
+        "largest_empty_ratio": 0.28916600797952424,
+        "empty_row_bands": 886,
+        "empty_col_bands": 1,
+        "shape_h": 3456,
+        "shape_w": 246,
+        "n_points": 132742,
+        "nan_ratio": 0.2954
+      }
+    },
+    {
+      "tunnel_id": "1-5",
+      "ring_id": 272,
+      "ring_key": "1-5/r272",
+      "group": "failure_mode_representative",
+      "selection_reason": "near_empty_valid_ratio",
+      "baseline_status": "FAIL",
+      "baseline_failure_reason": "near_empty_valid_ratio",
+      "characteristics": {
+        "valid_ratio": 0.016192761826953003,
+        "largest_empty_ratio": 0.9833294428882664,
+        "empty_row_bands": 3371,
+        "empty_col_bands": 7,
+        "shape_h": 3456,
+        "shape_w": 238,
+        "n_points": 251689,
+        "nan_ratio": 0.9838
+      }
+    },
+    {
+      "tunnel_id": "1-5",
+      "ring_id": 273,
+      "ring_key": "1-5/r273",
+      "group": "control",
+      "selection_reason": "control_for_near_empty_valid_ratio",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.7085199357520786,
+        "largest_empty_ratio": 0.28358253023431595,
+        "empty_row_bands": 844,
+        "empty_col_bands": 0,
+        "shape_h": 3456,
+        "shape_w": 245,
+        "n_points": 115983,
+        "nan_ratio": 0.2915
+      }
+    },
+    {
+      "tunnel_id": "5-7",
+      "ring_id": 315,
+      "ring_key": "5-7/r315",
+      "group": "characteristic_representative",
+      "selection_reason": "high_density",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.7290179915986368,
+        "largest_empty_ratio": 0.27055031571160604,
+        "empty_row_bands": 448,
+        "empty_col_bands": 0,
+        "shape_h": 4650,
+        "shape_w": 407,
+        "n_points": 874469,
+        "nan_ratio": 0.271
+      }
+    },
+    {
+      "tunnel_id": "4-6",
+      "ring_id": 283,
+      "ring_key": "4-6/r283",
+      "group": "characteristic_representative",
+      "selection_reason": "low_density",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.6582180438157668,
+        "largest_empty_ratio": 0.3079891898108217,
+        "empty_row_bands": 733,
+        "empty_col_bands": 6,
+        "shape_h": 4650,
+        "shape_w": 374,
+        "n_points": 7938,
+        "nan_ratio": 0.3418
+      }
+    },
+    {
+      "tunnel_id": "4-4",
+      "ring_id": 215,
+      "ring_key": "4-4/r215",
+      "group": "characteristic_representative",
+      "selection_reason": "large_map",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.7027188671925514,
+        "largest_empty_ratio": 0.29541752355844036,
+        "empty_row_bands": 627,
+        "empty_col_bands": 2,
+        "shape_h": 4712,
+        "shape_w": 407,
+        "n_points": 627874,
+        "nan_ratio": 0.2973
+      }
+    },
+    {
+      "tunnel_id": "1-1",
+      "ring_id": 25,
+      "ring_key": "1-1/r25",
+      "group": "characteristic_representative",
+      "selection_reason": "small_map",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.7138671875,
+        "largest_empty_ratio": 0.2180471161265432,
+        "empty_row_bands": 827,
+        "empty_col_bands": 0,
+        "shape_h": 3456,
+        "shape_w": 240,
+        "n_points": 31182,
+        "nan_ratio": 0.2861
+      }
+    },
+    {
+      "tunnel_id": "5-1",
+      "ring_id": 114,
+      "ring_key": "5-1/r114",
+      "group": "characteristic_representative",
+      "selection_reason": "high_valid_coverage",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.821953167336927,
+        "largest_empty_ratio": 0.17302758050255268,
+        "empty_row_bands": 509,
+        "empty_col_bands": 0,
+        "shape_h": 4650,
+        "shape_w": 377,
+        "n_points": 228332,
+        "nan_ratio": 0.178
+      }
+    },
+    {
+      "tunnel_id": "5-6",
+      "ring_id": 285,
+      "ring_key": "5-6/r285",
+      "group": "characteristic_representative",
+      "selection_reason": "low_valid_coverage_pass",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.46761767991766146,
+        "largest_empty_ratio": 0.5318627558784979,
+        "empty_row_bands": 1823,
+        "empty_col_bands": 2,
+        "shape_h": 4712,
+        "shape_w": 386,
+        "n_points": 649420,
+        "nan_ratio": 0.5324
+      }
+    },
+    {
+      "tunnel_id": "5-1",
+      "ring_id": 116,
+      "ring_key": "5-1/r116",
+      "group": "characteristic_representative",
+      "selection_reason": "high_column_skew",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.721957041827694,
+        "largest_empty_ratio": 0.26974156742119515,
+        "empty_row_bands": 449,
+        "empty_col_bands": 0,
+        "shape_h": 4650,
+        "shape_w": 409,
+        "n_points": 591746,
+        "nan_ratio": 0.278
+      }
+    },
+    {
+      "tunnel_id": "5-1",
+      "ring_id": 113,
+      "ring_key": "5-1/r113",
+      "group": "characteristic_representative",
+      "selection_reason": "low_nan_ratio",
+      "baseline_status": "PASS",
+      "baseline_failure_reason": "",
+      "characteristics": {
+        "valid_ratio": 0.8165106358111267,
+        "largest_empty_ratio": 0.17017122487143524,
+        "empty_row_bands": 551,
+        "empty_col_bands": 2,
+        "shape_h": 4650,
+        "shape_w": 368,
+        "n_points": 97333,
+        "nan_ratio": 0.1835
+      }
+    }
+  ],
+  "holdout": [
+    {
+      "tunnel_id": "2-2",
+      "ring_id": 135,
+      "ring_key": "2-2/r135",
+      "group": "holdout",
+      "selection_reason": "generalisation_holdout"
+    },
+    {
+      "tunnel_id": "5-7",
+      "ring_id": 319,
+      "ring_key": "5-7/r319",
+      "group": "holdout",
+      "selection_reason": "generalisation_holdout"
+    },
+    {
+      "tunnel_id": "4-10",
+      "ring_id": 394,
+      "ring_key": "4-10/r394",
+      "group": "holdout",
+      "selection_reason": "generalisation_holdout"
+    }
+  ]
+}
