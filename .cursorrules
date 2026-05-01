@@ -26,6 +26,31 @@ Project-specific details live in `.cursor/rules/*.mdc`.
 - If unrelated issues are noticed, report them; do not silently change them.
 - Remove only orphans introduced by your own changes.
 
+## 3a) DATA-IMMUTABILITY (HARD RULE)
+
+These paths are read-only. NEVER write under them, NEVER point a `--base-dir` /
+`--output-dir` / scratch directory at them, NEVER use them as a sandbox for any
+BO trial, sweep, or experiment:
+
+- `data/ablation/**`, `data/bo/**` (includes user-promoted snapshots such as
+  `data/bo/preprocessing/**` — never delete or overwrite), `data/baseline/**`,
+  `data/preprocessing_qa/**`, `data/represents/**`
+- `logs/context_preprocessing_v1/**` (fixed B+C+D baseline snapshot — read-only)
+- `data/<tunnel_id>/r*/**` (per-ring corpora; `tunnel_id` matches `\d+(?:-\d+)+`)
+- `r4tun/data/**`, `r4tun/references/**`
+- `methods/plans/output/**`
+
+All experiment outputs go under `logs/<run_id>/<tunnel>/r<ring>/`. If a runner
+needs baseline files as input, COPY them into a `logs/...` sandbox first.
+Restoring a parameter file does NOT restore overwritten data — these dirs are
+never opened for writing in the first place.
+
+Before running ANY runner that takes a `--base-dir`/`--output-dir` flag,
+explicitly check the resolved value. If it falls under any prefix above, FIX
+the default before running. The only legitimate writer of `data/<tunnel>/r*/**`
+is `agents/1_preprocessing/scripts/run_all_rings.py` when the user explicitly
+asks to regenerate the corpus.
+
 ## 4) Goal-Driven Execution
 
 - Convert requests into verifiable success criteria.

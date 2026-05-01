@@ -208,6 +208,10 @@ __marimo__/
 
 # Data
 data/
+logs/context_preprocessing_v1/
+logs/preprocessing_context_bo/
+bo/logs/
+logs/preprocessing_bo/
 
 bo/results/archive/
 bo4tun/training/

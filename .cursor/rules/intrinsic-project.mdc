@@ -9,13 +9,35 @@ alwaysApply: true
 ## Project conventions
 
 1. **Venv (mandatory):** Always run Python through `./venv/bin/python` (or activate `./venv` first). Do NOT use `python3`, `pyenv` shims, system Python, or any other interpreter. Do NOT create a new venv, a new directory, or install packages globally / `--user` / into a `.deps` folder. If `./venv/bin/python` is missing or broken, repair it in place with `python3.12 -m venv ./venv --upgrade-deps` — never recreate it elsewhere or under a different name.
-2. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not overwrite existing results in `data/`.
-3. **GT columns:** `segment` and `ring` in raw point cloud are ground truth; metrics using them are GT-dependent and not intrinsic for new tunnels.
-4. **Skills:** Put reusable prompts and scripts under `skills/`.
-5. **Be concise:** Keep summaries/docs/replies short and actionable.
-6. **Match existing style:** Journals follow `methods/journals/`; plan outputs follow `methods/plans/output/`.
-7. **GT at design time only:** Keep runtime pipeline GT-free; use GT only for reverse-engineering or baselines.
-8. **One deliverable per ask:** Produce only what was requested.
+
+2. **DATA-IMMUTABILITY (HARD RULE — NO EXCEPTIONS).** The following paths are **read-only** for every script, BO runner, agent, and shell command. They MUST NEVER be opened for writing, deleted, or used as a working directory by any tool that emits new outputs:
+
+   - `data/ablation/**`
+   - `data/bo/**` (includes promoted preprocessing archives under `data/bo/preprocessing/**`; never delete or overwrite)
+   - `data/baseline/**`
+   - `data/preprocessing_qa/**`
+   - `data/represents/**`
+   - `logs/context_preprocessing_v1/**` (fixed B+C+D baseline snapshot; read-only)
+   - `data/<tunnel_id>/r*/**` (per-ring preprocessing corpora; `tunnel_id` matches `\d+(?:-\d+)+`)
+   - `r4tun/data/**`
+   - `r4tun/references/**`
+   - `methods/plans/output/**`
+
+   **All experiment / BO / sweep / trial outputs go under `logs/<run_id>/<tunnel>/r<ring>/`.** A runner that needs the baseline as input must **copy** the relevant files into its own `logs/...` sandbox and operate there.
+
+   Restoring a parameter file at the end of a BO run does **not** restore overwritten data artifacts. There is no acceptable "I'll put it back" path — these directories are never opened for writing in the first place.
+
+   The only legitimate writer of `data/<tunnel>/r*/**` is `agents/1_preprocessing/scripts/run_all_rings.py` when **deliberately regenerating** the per-ring corpus, and even then it must be invoked explicitly by the user — never as a side effect of a BO trial, sweep, or other experiment. If a runner's default `--base-dir`, `--output-dir`, or equivalent argument resolves under any of the prefixes above, that is a stop-the-world bug — fix the default before running anything.
+
+   **Plans are required to declare a sandbox path.** Every plan under `methods/plans/output/<plan>/` and `.cursor/plans/` must include a `Sandbox path: logs/<run_id>/<tunnel>/r<ring>/` line. Plans that omit it or point it at a protected prefix must be rejected before implementation.
+
+3. **Experiment outputs:** Save under `logs/{tunnel_id}/`; do not overwrite existing results in `data/`. (See rule 2 for the full immutability list.)
+4. **GT columns:** `segment` and `ring` in raw point cloud are ground truth; metrics using them are GT-dependent and not intrinsic for new tunnels.
+5. **Skills:** Put reusable prompts and scripts under `skills/`.
+6. **Be concise:** Keep summaries/docs/replies short and actionable.
+7. **Match existing style:** Journals follow `methods/journals/`; plan outputs follow `methods/plans/output/`.
+8. **GT at design time only:** Keep runtime pipeline GT-free; use GT only for reverse-engineering or baselines.
+9. **One deliverable per ask:** Produce only what was requested.
 
 ## Project structure
 
