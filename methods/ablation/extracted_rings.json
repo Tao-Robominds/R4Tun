@@ -1,0 +1,41 @@
+{
+  "source_panel": "data/subsets/workflow/regime_v1/01_ring_regime_discovery/minimum_reference_panel.json",
+  "rings": [
+    {
+      "tunnel_id": "5-5",
+      "ring_id": 258,
+      "n_points": 91547,
+      "path": "data/ablation/5-5/r258/5-5_r258.txt"
+    },
+    {
+      "tunnel_id": "4-9",
+      "ring_id": 366,
+      "n_points": 396950,
+      "path": "data/ablation/4-9/r366/4-9_r366.txt"
+    },
+    {
+      "tunnel_id": "5-3",
+      "ring_id": 190,
+      "n_points": 20512,
+      "path": "data/ablation/5-3/r190/5-3_r190.txt"
+    },
+    {
+      "tunnel_id": "4-8",
+      "ring_id": 337,
+      "n_points": 157262,
+      "path": "data/ablation/4-8/r337/4-8_r337.txt"
+    },
+    {
+      "tunnel_id": "4-1",
+      "ring_id": 116,
+      "n_points": 579860,
+      "path": "data/ablation/4-1/r116/4-1_r116.txt"
+    },
+    {
+      "tunnel_id": "4-6",
+      "ring_id": 283,
+      "n_points": 7938,
+      "path": "data/ablation/4-6/r283/4-6_r283.txt"
+    }
+  ]
+}

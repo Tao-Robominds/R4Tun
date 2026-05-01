@@ -1,30 +1,7 @@
-# Coding Plans (Implementation Guides)
+# data/ablation/
 
-## Purpose
-This folder is the implementation companion to `methods/plans/`.
+Per-ring point clouds for the GT-detection ceiling experiment.
 
-- `methods/plans/steps/` defines methodology and study logic.
-- `methods/ablation/steps/` defines concrete coding guidance to build that methodology.
+Layout: `{tunnel_id}/r{ring_id}/{tunnel_id}_r{ring_id}.txt`.
 
-## What each coding guide contains
-
-Each step file documents:
-- plan reference (`methods/plans/steps/NN_*.md`)
-- target artifacts (exact output files)
-- files to create/modify
-- suggested public function signatures
-- data-flow sketch
-- reuse points in current codebase
-- run commands and verification checks
-
-## Scope boundaries
-
-Implementation guidance follows paper constraints:
-- use fixed-rule reflection only
-- no LLM routing
-- no RL routing/policy learning
-- no adaptive correction sequencing
-
-## Step mapping
-
-`methods/ablation/steps/01..07` maps one-to-one to `methods/plans/steps/01..07`.
+Reference panel: `reference_panel.json`. Extraction record: `extracted_rings.json`.
