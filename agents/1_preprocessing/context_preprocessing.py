@@ -7,6 +7,7 @@ D: neighbor-ring context preprocessing with target-ring-only reporting
 
 from __future__ import annotations
 
+import gc
 import importlib.util
 import json
 import pickle
@@ -254,6 +255,8 @@ def write_trial_outputs(
     save_depth_map_exact(depth_map_context, resolution=resolution, filename=str(out_dir / "context_depth_map.png"))
     with (out_dir / "context_pixel_to_point.pkl").open("wb") as f:
         pickle.dump(pixel_to_point_context, f)
+    context_pixel_support = int(len(pixel_to_point_context))
+    del depth_map_context, pixel_to_point_context
 
     target_seg = df_enhance_segment[df_enhance_segment["ring"].astype(int) == int(target_ring)].copy()
     target_joint = df_enhance_joint[df_enhance_joint["ring"].astype(int) == int(target_ring)].copy()
@@ -307,7 +310,7 @@ def write_trial_outputs(
 
     valid = np.isfinite(depth_map_target) & (depth_map_target > 0)
     valid_out = np.isfinite(depth_map_target_outlier) & (depth_map_target_outlier > 0)
-    return {
+    summary = {
         "depth_shape_h": int(depth_map_target.shape[0]),
         "depth_shape_w": int(depth_map_target.shape[1]),
         "valid_ratio": float(valid.mean()) if valid.size else 0.0,
@@ -315,8 +318,10 @@ def write_trial_outputs(
         "largest_empty_row_band": largest_empty_row_band(valid),
         "largest_empty_row_band_outlier": largest_empty_row_band(valid_out),
         "target_pixel_support": int(len(pixel_to_point_target)),
-        "context_pixel_support": int(len(pixel_to_point_context)),
+        "context_pixel_support": context_pixel_support,
     }
+    del depth_map_target, depth_map_target_outlier, pixel_to_point_target, valid, valid_out
+    return summary
 
 
 def run_context_trial(
@@ -422,4 +427,15 @@ def run_context_trial(
         "summary": summary,
     }
     _save_json(out_dir / "trial_meta.json", meta)
+    del (
+        df_raw_context,
+        df_u_context,
+        df_d,
+        df_d2,
+        df_enhance_segment,
+        df_enhance_joint,
+        df_context_enhanced,
+        df_d_target,
+    )
+    gc.collect()
     return out_dir

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import sys
 import time
@@ -22,8 +23,8 @@ if str(PREPROCESSING_DIR) not in sys.path:
     sys.path.insert(0, str(PREPROCESSING_DIR))
 
 from bo.preprocessing_iou_metrics import (  # noqa: E402
-    compute_foreground_mask_iou_metrics,
     compute_target_guarded_metrics,
+    iou_diagnostic_from_guarded,
 )
 from context_preprocessing import run_context_trial  # noqa: E402
 
@@ -147,8 +148,9 @@ def _run_trial_once(
         min_coverage_ratio=min_coverage_ratio,
         max_empty_row_band_ratio=max_empty_row_band_ratio,
     )
-    metrics["iou_diagnostic"] = compute_foreground_mask_iou_metrics(out_dir)
+    metrics["iou_diagnostic"] = iou_diagnostic_from_guarded(metrics)
     metrics["output_dir"] = str(out_dir)
+    gc.collect()
     return metrics
 
 
@@ -214,6 +216,7 @@ def main() -> int:
     )
     baseline_metrics["elapsed_sec"] = round(time.time() - t0, 3)
     baseline_metrics["objective"] = -float(baseline_metrics["guarded_score"])
+    gc.collect()
 
     trial_rows: List[Dict[str, Any]] = []
 
@@ -270,6 +273,8 @@ def main() -> int:
                 "output_dir": str(ring_trials_root / f"trial_{trial_id:03d}" / tunnel_id / ring_key),
             }
             obj = 1.0
+        finally:
+            gc.collect()
         elapsed = time.time() - t0
         row = {
             "trial_id": trial_id,
@@ -315,6 +320,7 @@ def main() -> int:
         min_coverage_ratio=float(args.min_coverage_ratio),
         max_empty_row_band_ratio=float(args.max_empty_row_band_ratio),
     )
+    gc.collect()
 
     improved = float(best_metrics["guarded_score"]) > float(baseline_metrics["guarded_score"])
     selected_source = "bo_best" if improved else "fixed_baseline"

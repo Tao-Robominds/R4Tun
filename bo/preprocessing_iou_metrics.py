@@ -25,15 +25,22 @@ def _load_depth_map(ring_dir: Path) -> np.ndarray:
     raise FileNotFoundError(f"Missing depth map in {ring_dir} (expected depth_map_outlier.npy or depth_map.npy)")
 
 
-def build_gt_foreground_mask_from_segment_mapping(ring_dir: Path) -> np.ndarray:
+def build_gt_foreground_mask_from_segment_mapping(
+    ring_dir: Path,
+    *,
+    depth_map: np.ndarray | None = None,
+) -> np.ndarray:
     """Build a pixel foreground mask from denoised segment labels + pixel mapping.
 
     Uses:
     - `denoised.csv` (`segment` column; foreground is segment > 0)
     - `pixel_to_point.pkl` (pixel -> denoised row index mapping)
     - depth map shape for mask dimensions
+
+    Pass ``depth_map`` when the caller already loaded it to avoid a second disk read.
     """
-    depth_map = _load_depth_map(ring_dir)
+    if depth_map is None:
+        depth_map = _load_depth_map(ring_dir)
     h, w = depth_map.shape
     fg_mask = np.zeros((h, w), dtype=bool)
 
@@ -62,7 +69,7 @@ def compute_foreground_mask_iou_metrics(ring_dir: Path) -> Dict[str, Any]:
     """Compute IoU and diagnostics for preprocessing BO."""
     depth_map = _load_depth_map(ring_dir)
     valid = np.isfinite(depth_map) & (depth_map > 0.0)
-    gt_fg = build_gt_foreground_mask_from_segment_mapping(ring_dir)
+    gt_fg = build_gt_foreground_mask_from_segment_mapping(ring_dir, depth_map=depth_map)
 
     tp = int(np.count_nonzero(valid & gt_fg))
     fp = int(np.count_nonzero(valid & (~gt_fg)))
@@ -86,6 +93,25 @@ def compute_foreground_mask_iou_metrics(ring_dir: Path) -> Dict[str, Any]:
         "gt_foreground_ratio": gt_fg_ratio,
         "depth_shape_h": int(depth_map.shape[0]),
         "depth_shape_w": int(depth_map.shape[1]),
+    }
+
+
+def iou_diagnostic_from_guarded(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """Legacy IoU-diagnostic dict without an extra depth-map load.
+
+    ``compute_target_guarded_metrics`` already computes the same TP/FP/FN/IoU.
+    """
+    return {
+        "foreground_mask_iou": float(metrics["foreground_mask_iou"]),
+        "tp": int(metrics["tp"]),
+        "fp": int(metrics["fp"]),
+        "fn": int(metrics["fn"]),
+        "precision": float(metrics["precision"]),
+        "recall": float(metrics["target_foreground_recall"]),
+        "valid_ratio": float(metrics["valid_ratio"]),
+        "gt_foreground_ratio": float(metrics["gt_foreground_ratio"]),
+        "depth_shape_h": int(metrics["depth_shape_h"]),
+        "depth_shape_w": int(metrics["depth_shape_w"]),
     }
 
 
@@ -123,7 +149,7 @@ def compute_target_guarded_metrics(
     """
     depth_map = _load_depth_map(ring_dir)
     valid = np.isfinite(depth_map) & (depth_map > 0.0)
-    gt_fg = build_gt_foreground_mask_from_segment_mapping(ring_dir)
+    gt_fg = build_gt_foreground_mask_from_segment_mapping(ring_dir, depth_map=depth_map)
 
     tp = int(np.count_nonzero(valid & gt_fg))
     fp = int(np.count_nonzero(valid & (~gt_fg)))
