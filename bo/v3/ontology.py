@@ -321,14 +321,23 @@ def evaluate_ontology(ring_dir: Path) -> dict[str, Any]:
     hard_failures = [name for name in HARD_CHECKS if not breakdown[name]["passed"]]
 
     one_k_factor = 1.0 if one_k["passed"] else 0.5
-    cc_count = (one_k.get("details") or {}).get("n_components_significant")
+    one_k_details = one_k.get("details")
+    if not isinstance(one_k_details, dict):
+        one_k_details = {}
+    cc_count = one_k_details.get("n_components_significant")
     if isinstance(cc_count, int):
         if cc_count == 0 or cc_count >= 4:
             one_k_factor = 0.0
-    centrality_factor = (centrality.get("details") or {}).get("largest_cc_col_fraction") or 0.0
+    cent_details = centrality.get("details")
+    if not isinstance(cent_details, dict):
+        cent_details = {}
+    centrality_factor = cent_details.get("largest_cc_col_fraction") or 0.0
     centrality_factor = _safe_clip(float(centrality_factor) / max(K_CENTRALITY_MIN_FRAC, 1e-9))
 
-    dup_count = (no_dup.get("details") or {}).get("duplicate_count") or 0
+    no_dup_details = no_dup.get("details")
+    if not isinstance(no_dup_details, dict):
+        no_dup_details = {}
+    dup_count = no_dup_details.get("duplicate_count") or 0
     duplicate_penalty = _safe_clip(1.0 - float(dup_count) / float(len(EXPECTED_BLOCK_IDS)))
 
     soft_score = float(one_k_factor * centrality_factor)

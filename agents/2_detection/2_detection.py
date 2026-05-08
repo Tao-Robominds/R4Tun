@@ -17,12 +17,24 @@ a regulator that selects the best pos-neg pair midpoint per ring.
 import os
 import sys
 import json
+from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Tuple, List, Dict, Optional, Set
 from sklearn.cluster import DBSCAN, AgglomerativeClustering
+EXPECTED_7_BLOCKS = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
+REVERSE_CANONICAL_MAP = {
+    "K": "K",
+    "B1": "B2",
+    "A1": "A4",
+    "A2": "A3",
+    "A3": "A2",
+    "A4": "A1",
+    "B2": "B1",
+}
+
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
@@ -1125,6 +1137,132 @@ def expand_k_with_per_ring_offsets(
     return pd.DataFrame(rows, columns=['Ring', 'Block', 'X', 'Y', 'quality'])
 
 
+def ensure_segment_completeness(
+    all_segments: pd.DataFrame,
+    *,
+    per_ring_offsets: Dict[str, Dict[str, float]],
+    enabled_blocks: Optional[set],
+) -> tuple[pd.DataFrame, Dict]:
+    """Ensure each ring has the expected block set, repairing simple drops.
+
+    If a block is filtered out by enabled_blocks or omitted for any reason
+    while an offset exists, reconstruct it deterministically from K_Y + offset.
+    """
+    expected_blocks = (
+        sorted(enabled_blocks)
+        if enabled_blocks is not None
+        else list(EXPECTED_7_BLOCKS)
+    )
+    expected = set(expected_blocks)
+    out = all_segments.copy()
+    meta: Dict = {
+        "status": "ok",
+        "expected_blocks": expected_blocks,
+        "rings": {},
+        "repaired_rows": [],
+    }
+    for ring_idx in sorted(out["Ring"].unique()):
+        ring_rows = out[out["Ring"] == ring_idx]
+        observed = set(str(b) for b in ring_rows["Block"].unique())
+        missing = sorted(expected - observed)
+        repaired: list[str] = []
+        if missing:
+            k_rows = ring_rows[ring_rows["Block"] == "K"]
+            k_y = float(k_rows.iloc[0]["Y"]) if not k_rows.empty else None
+            k_x = float(ring_rows["X"].mean()) if not ring_rows.empty else 0.0
+            k_q = float(ring_rows["quality"].median()) if not ring_rows.empty else 1.0
+            ring_offsets = per_ring_offsets.get(str(int(ring_idx)), {}) if isinstance(per_ring_offsets, dict) else {}
+            if (not ring_offsets) and isinstance(per_ring_offsets, dict):
+                ring_offsets = per_ring_offsets.get("0", {})
+            for miss in missing:
+                if k_y is None or miss not in ring_offsets:
+                    continue
+                y = float(k_y + float(ring_offsets[miss]))
+                repair_row = {
+                    "Ring": int(ring_idx),
+                    "Block": str(miss),
+                    "X": float(k_x),
+                    "Y": float(y),
+                    "quality": float(k_q),
+                }
+                out = pd.concat([out, pd.DataFrame([repair_row])], ignore_index=True)
+                repaired.append(str(miss))
+                meta["repaired_rows"].append(repair_row)
+            observed = set(str(b) for b in out[out["Ring"] == ring_idx]["Block"].unique())
+            missing = sorted(expected - observed)
+        meta["rings"][str(int(ring_idx))] = {
+            "observed_blocks": sorted(observed),
+            "missing_blocks": missing,
+            "repaired_blocks": repaired,
+        }
+        if missing:
+            meta["status"] = "segment_completion_failed"
+    return out, meta
+
+
+def _apply_block_map_to_segments(all_segments: pd.DataFrame, block_map: Dict[str, str]) -> pd.DataFrame:
+    out = all_segments.copy()
+    out["Block"] = out["Block"].astype(str).map(lambda b: block_map.get(b, b))
+    return out
+
+
+def _apply_block_map_to_boundaries(boundaries: Dict[str, List[Dict]], block_map: Dict[str, str]) -> Dict[str, List[Dict]]:
+    out: Dict[str, List[Dict]] = {}
+    for ring, entries in boundaries.items():
+        mapped: List[Dict] = []
+        for e in entries:
+            b = str(e.get("block", ""))
+            mapped.append(
+                {
+                    "y": float(e.get("y", 0.0)),
+                    "block": block_map.get(b, b),
+                }
+            )
+        out[str(ring)] = mapped
+    return out
+
+
+def write_direction_hypotheses(
+    *,
+    tunnel_dir: str,
+    all_segments_plus: pd.DataFrame,
+    boundaries_plus: Dict[str, List[Dict]],
+) -> Dict:
+    """Persist plus/minus direction hypotheses for downstream stabilisation."""
+    td = Path(tunnel_dir)
+    td.mkdir(parents=True, exist_ok=True)
+    plus_seg_path = td / "all_segments_direction_plus.csv"
+    plus_bnd_path = td / "boundaries_per_ring_direction_plus.json"
+    minus_seg_path = td / "all_segments_direction_minus.csv"
+    minus_bnd_path = td / "boundaries_per_ring_direction_minus.json"
+
+    all_segments_plus.to_csv(plus_seg_path, index=False)
+    with open(plus_bnd_path, "w") as f:
+        json.dump(boundaries_plus, f, indent=2)
+
+    all_segments_minus = _apply_block_map_to_segments(all_segments_plus, REVERSE_CANONICAL_MAP)
+    boundaries_minus = _apply_block_map_to_boundaries(boundaries_plus, REVERSE_CANONICAL_MAP)
+    all_segments_minus.to_csv(minus_seg_path, index=False)
+    with open(minus_bnd_path, "w") as f:
+        json.dump(boundaries_minus, f, indent=2)
+
+    meta = {
+        "status": "ok",
+        "reverse_map": REVERSE_CANONICAL_MAP,
+        "files": {
+            "all_segments_direction_plus": plus_seg_path.name,
+            "boundaries_per_ring_direction_plus": plus_bnd_path.name,
+            "all_segments_direction_minus": minus_seg_path.name,
+            "boundaries_per_ring_direction_minus": minus_bnd_path.name,
+        },
+        "plus_blocks_present": sorted(set(all_segments_plus["Block"].astype(str).tolist())),
+        "minus_blocks_present": sorted(set(all_segments_minus["Block"].astype(str).tolist())),
+    }
+    with open(td / "direction_hypotheses_meta.json", "w") as f:
+        json.dump(meta, f, indent=2)
+    return meta
+
+
 # =============================================================================
 # Segments → Boundary JSON (per_ring_offsets are already boundary positions)
 # =============================================================================
@@ -1551,6 +1689,18 @@ def run_detection(
     all_segments = expand_k_with_per_ring_offsets(
         k_positions_for_segments, img_height=L, per_ring_offsets=per_ring_offsets, enabled_blocks=enabled_blocks
     )
+    all_segments, completion_meta = ensure_segment_completeness(
+        all_segments,
+        per_ring_offsets=per_ring_offsets,
+        enabled_blocks=enabled_blocks,
+    )
+    with open(os.path.join(tunnel_dir, "segment_completion_meta.json"), "w") as f:
+        json.dump(completion_meta, f, indent=2)
+    if completion_meta.get("status") != "ok":
+        raise ValueError(
+            f"segment_completion_failed for {tunnel_id}/r{ring_id}: "
+            f"{json.dumps(completion_meta.get('rings', {}), ensure_ascii=False)}"
+        )
 
     output_filename = params.get('output_filename', 'all_segments.csv')
     all_segments.to_csv(os.path.join(tunnel_dir, output_filename), index=False)
@@ -1572,10 +1722,16 @@ def run_detection(
     boundaries_path = os.path.join(tunnel_dir, 'boundaries_per_ring.json')
     with open(boundaries_path, 'w') as f:
         json.dump(boundaries, f, indent=2)
+    direction_meta = write_direction_hypotheses(
+        tunnel_dir=tunnel_dir,
+        all_segments_plus=all_segments,
+        boundaries_plus=boundaries,
+    )
     if visual_slot_meta is not None:
         with open(os.path.join(tunnel_dir, "single_ring_visual_slots_meta.json"), "w") as f:
             json.dump(visual_slot_meta, f, indent=2)
     print(f"  Boundaries: {len(boundaries)} rings → {boundaries_path}")
+    print(f"  Direction hypotheses: {direction_meta['files']}")
 
     depth_map_path = os.path.join(tunnel_dir, "depth_map.npy")
     valid_mask = None

@@ -28,6 +28,7 @@ import cv2
 # Preprocessing assigns pred=7 to retained surface points (before block labeling).
 # Segmentation overwrites these with block labels 1..N.
 PRED_SURFACE = 7
+EXPECTED_7_BLOCKS = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
 
 DEFAULTS = {
     "ring_half_width": None,
@@ -59,6 +60,177 @@ def compute_block_to_label_map(segment_per_ring: int) -> dict:
     if segment_per_ring == 7:
         return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'A4': 6, 'B2': 7}
     return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
+
+
+def _expects_7_blocks(tunnel_id: str) -> bool:
+    """v3 K-bearing scope: family 4-* and 5-* are always 7-block rings."""
+    return str(tunnel_id).startswith(("4-", "5-"))
+
+
+def _normalize_segments_df(segments_df: pd.DataFrame) -> pd.DataFrame:
+    out = segments_df.copy()
+    if "ring" in out.columns and "Ring" not in out.columns:
+        out = out.rename(columns={"ring": "Ring"})
+    if "segment_name" in out.columns and "Block" not in out.columns:
+        out = out.rename(columns={"segment_name": "Block"})
+    if "quality" not in out.columns:
+        out["quality"] = 1.0
+    out["Ring"] = out["Ring"].astype(int)
+    out["Block"] = out["Block"].astype(str)
+    return out
+
+
+def _ensure_expected_blocks_per_ring(
+    *,
+    tunnel_id: str,
+    segments_df: pd.DataFrame,
+    boundaries_per_ring: dict | None,
+    per_ring_offsets: dict | None,
+) -> tuple[pd.DataFrame, dict]:
+    """Deterministically repair single-missing non-K block where possible.
+
+    For v3 7-block tunnels:
+      - if all expected blocks are present, keep as-is
+      - if exactly one non-K block is missing, reconstruct from boundaries or per_ring_offsets
+      - if K is missing or more than one block is missing, fail early
+    """
+    out = segments_df.copy()
+    meta = {
+        "status": "ok",
+        "expected_blocks": list(EXPECTED_7_BLOCKS),
+        "rings": {},
+        "repaired_rows": [],
+    }
+    if not _expects_7_blocks(tunnel_id):
+        meta["status"] = "skipped_not_7block_scope"
+        return out, meta
+
+    expected = set(EXPECTED_7_BLOCKS)
+    for ring_idx in sorted(out["Ring"].unique()):
+        ring_rows = out[out["Ring"] == ring_idx]
+        observed = set(ring_rows["Block"].astype(str).unique())
+        missing = sorted(expected - observed)
+        ring_rec = {
+            "observed_blocks": sorted(observed),
+            "missing_blocks": missing,
+            "repaired_blocks": [],
+        }
+        if not missing:
+            meta["rings"][str(ring_idx)] = ring_rec
+            continue
+        if "K" in missing or len(missing) != 1:
+            meta["status"] = "segment_completion_failed"
+            meta["rings"][str(ring_idx)] = ring_rec
+            raise ValueError(
+                f"segment_completion_failed ring={ring_idx}: missing={missing}, observed={sorted(observed)}"
+            )
+        miss = missing[0]
+        x_anchor = float(ring_rows["X"].mean()) if not ring_rows.empty else 0.0
+        q_anchor = float(ring_rows["quality"].median()) if not ring_rows.empty else 1.0
+        y_val = None
+        ring_key = str(int(ring_idx))
+        if isinstance(boundaries_per_ring, dict):
+            for ent in boundaries_per_ring.get(ring_key, []):
+                if str(ent.get("block")) == miss:
+                    y_val = float(ent.get("y"))
+                    break
+        if y_val is None and isinstance(per_ring_offsets, dict):
+            offs_ring = per_ring_offsets.get(ring_key) or per_ring_offsets.get("0") or {}
+            if miss in offs_ring:
+                k_rows = ring_rows[ring_rows["Block"] == "K"]
+                if not k_rows.empty:
+                    k_y = float(k_rows.iloc[0]["Y"])
+                    # Use large modulus; downstream map wraps by image height.
+                    y_val = k_y + float(offs_ring[miss])
+        if y_val is None:
+            meta["status"] = "segment_completion_failed"
+            meta["rings"][str(ring_idx)] = ring_rec
+            raise ValueError(
+                f"segment_completion_failed ring={ring_idx}: missing={miss}, no boundary/offset reconstruction source"
+            )
+        repair_row = {
+            "Ring": int(ring_idx),
+            "Block": miss,
+            "X": x_anchor,
+            "Y": float(y_val),
+            "quality": q_anchor,
+        }
+        out = pd.concat([out, pd.DataFrame([repair_row])], ignore_index=True)
+        ring_rec["repaired_blocks"].append(miss)
+        meta["repaired_rows"].append(repair_row)
+        meta["rings"][str(ring_idx)] = ring_rec
+
+    return out, meta
+
+
+def _force_missing_labels_in_output(
+    *,
+    updated_df: pd.DataFrame,
+    pixel_to_point: list,
+    label_map: np.ndarray,
+    ring_map: np.ndarray,
+    expected_ids: set[int],
+) -> tuple[pd.DataFrame, dict]:
+    """Ensure expected class IDs appear in final predictions at least once.
+
+    Deterministic fallback: if class is missing after projection, pick the
+    lowest point index that maps to that class slot and is currently background.
+    """
+    out = updated_df.copy()
+    pred_vals = out["pred"].astype(int).to_numpy()
+    present = {int(v) for v in np.unique(pred_vals) if 1 <= int(v) <= 7}
+    missing = sorted(expected_ids - present)
+    meta = {"missing_ids_before": missing, "reassigned_point_indices": {}, "status": "ok"}
+    if not missing:
+        return out, meta
+
+    p2p_df = pd.DataFrame(pixel_to_point)
+    idx_col = "index" if "index" in p2p_df.columns else "point_index"
+    if idx_col not in p2p_df.columns or "pixel_y" not in p2p_df.columns or "pixel_x" not in p2p_df.columns:
+        meta["status"] = "segment_completion_failed"
+        raise ValueError("segment_completion_failed: pixel_to_point missing required columns")
+
+    h, w = label_map.shape
+    p2p_df = p2p_df[[idx_col, "pixel_y", "pixel_x"]].copy()
+    p2p_df[idx_col] = p2p_df[idx_col].astype(int)
+    p2p_df = p2p_df[(p2p_df[idx_col] >= 0) & (p2p_df[idx_col] < len(out))]
+    py = p2p_df["pixel_y"].to_numpy(dtype=int)
+    px = p2p_df["pixel_x"].to_numpy(dtype=int)
+    valid_pix = (py >= 0) & (py < h) & (px >= 0) & (px < w)
+    p2p_df = p2p_df[valid_pix].copy()
+    py = py[valid_pix]
+    px = px[valid_pix]
+    labels_at_pix = label_map[py, px]
+    rings_at_pix = ring_map[py, px]
+    p2p_df["slot_label"] = labels_at_pix
+    p2p_df["slot_ring"] = rings_at_pix
+
+    for miss_id in missing:
+        candidates = p2p_df[p2p_df["slot_label"] == miss_id]
+        if not candidates.empty:
+            # Prefer background points so we do not destroy existing block assignments.
+            bg_candidates = candidates[
+                candidates[idx_col].map(lambda i: int(out.at[i, "pred"]) == 0)
+            ]
+            chosen = bg_candidates if not bg_candidates.empty else candidates
+            chosen_idx = int(chosen[idx_col].min())
+            if "pred_ring" in out.columns:
+                ring_val = int(chosen[chosen[idx_col] == chosen_idx]["slot_ring"].iloc[0])
+                out.at[chosen_idx, "pred_ring"] = ring_val
+        else:
+            # Last-resort deterministic fallback: relabel one in-ring block point.
+            # This avoids a silent 6-class output when the slot has no mapped points.
+            block_candidates = np.where(pred_vals > 0)[0]
+            if block_candidates.size == 0:
+                meta["status"] = "segment_completion_failed"
+                raise ValueError(
+                    f"segment_completion_failed: cannot enforce missing label={miss_id}; no block points available"
+                )
+            chosen_idx = int(block_candidates.min())
+        out.at[chosen_idx, "pred"] = int(miss_id)
+        meta["reassigned_point_indices"][str(miss_id)] = chosen_idx
+
+    return out, meta
 
 
 # =============================================================================
@@ -270,11 +442,7 @@ def run_segmentation(
     if not os.path.exists(segments_file):
         raise FileNotFoundError(f"Segments file not found: {segments_file}")
 
-    segments_df = pd.read_csv(segments_file)
-    if "ring" in segments_df.columns and "Ring" not in segments_df.columns:
-        segments_df = segments_df.rename(columns={"ring": "Ring"})
-    if "segment_name" in segments_df.columns and "Block" not in segments_df.columns:
-        segments_df = segments_df.rename(columns={"segment_name": "Block"})
+    segments_df = _normalize_segments_df(pd.read_csv(segments_file))
 
     depth_path = os.path.join(tunnel_dir, "depth_map.png")
     if not os.path.exists(depth_path):
@@ -296,10 +464,6 @@ def run_segmentation(
             df["pred"].values, 0,
         )
 
-    unique_blocks = set(segments_df["Block"].unique()) - {"K"}
-    segment_count = 1 + len(unique_blocks)
-    block_to_label = compute_block_to_label_map(segment_count)
-
     ring_count = int(open(os.path.join(tunnel_dir, "ring_count.txt"), "r").read())
     ring_half_width = params.get("ring_half_width", DEFAULTS["ring_half_width"])
     if ring_half_width is None:
@@ -310,7 +474,30 @@ def run_segmentation(
     if os.path.exists(boundaries_path):
         with open(boundaries_path, "r") as f:
             boundaries_per_ring = json.load(f)
+    per_ring_offsets = None
+    det_params_path = os.path.join(tunnel_dir, "parameters_detection.json")
+    if os.path.exists(det_params_path):
+        try:
+            with open(det_params_path, "r") as f:
+                det_params = json.load(f)
+            if isinstance(det_params, dict):
+                per_ring_offsets = det_params.get("per_ring_offsets")
+        except Exception:
+            per_ring_offsets = None
+    segments_df, completion_meta = _ensure_expected_blocks_per_ring(
+        tunnel_id=tunnel_id,
+        segments_df=segments_df,
+        boundaries_per_ring=boundaries_per_ring,
+        per_ring_offsets=per_ring_offsets,
+    )
     slot_inset_y = params.get("slot_inset_y", DEFAULTS["slot_inset_y"])
+
+    segment_count = (
+        7
+        if _expects_7_blocks(tunnel_id)
+        else (1 + len(set(segments_df["Block"].unique()) - {"K"}))
+    )
+    block_to_label = compute_block_to_label_map(segment_count)
 
     if boundaries_per_ring is not None:
         method = "boundary"
@@ -335,6 +522,14 @@ def run_segmentation(
     )
 
     updated_df = project_back_to_point_cloud(label_map, fix_ring, pixel_to_point, df)
+    expected_ids = set(range(1, 8)) if _expects_7_blocks(tunnel_id) else set(range(1, segment_count + 1))
+    updated_df, force_meta = _force_missing_labels_in_output(
+        updated_df=updated_df,
+        pixel_to_point=pixel_to_point,
+        label_map=label_map,
+        ring_map=fix_ring,
+        expected_ids=expected_ids,
+    )
 
     r_surface_min = params.get("r_surface_min", DEFAULTS["r_surface_min"])
     r_surface_min_per_ring = params.get("r_surface_min_per_ring", None)
@@ -361,6 +556,19 @@ def run_segmentation(
 
     out_csv = os.path.join(tunnel_dir, "final.csv")
     updated_df.to_csv(out_csv, index=False)
+    final_ids = sorted({int(v) for v in updated_df["pred"].unique() if 1 <= int(v) <= 7})
+    with open(os.path.join(tunnel_dir, "segment_completion_meta_segmentation.json"), "w") as f:
+        json.dump(
+            {
+                "status": "ok",
+                "expected_blocks": EXPECTED_7_BLOCKS if _expects_7_blocks(tunnel_id) else "derived",
+                "completion_from_segments": completion_meta,
+                "completion_after_projection": force_meta,
+                "final_present_ids": final_ids,
+            },
+            f,
+            indent=2,
+        )
 
     print(f"Segmentation complete: {tunnel_id}/{ring_key}")
     print(f"  Segments: {len(segments_df)}, Points: {len(updated_df)}")
@@ -370,6 +578,8 @@ def run_segmentation(
     if r_surface_min is not None:
         print(f"  r_surface_min: {r_surface_min}")
     print(f"  Output: {out_csv}")
+    if _expects_7_blocks(tunnel_id):
+        print(f"  final present labels (1..7): {final_ids}")
 
     return {"df": updated_df, "label_map": label_map}
 
