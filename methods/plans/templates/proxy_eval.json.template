@@ -1,26 +1,33 @@
 {
   "tunnel_id": "",
   "run_id": "",
-  "holdout_trials": [],
-  "metrics": {
-    "mae": null,
-    "rmse": null,
-    "calibration_error": null,
-    "coverage_90": null,
-    "brier": null,
-    "ece": null
+  "tau_miou": null,
+  "validation_trials": [],
+  "stage_proxies": {
+    "depth": {
+      "score": "S_depth = S_coverage * S_empty",
+      "spearman_vs_final_miou": null,
+      "threshold": null,
+      "bad_case_recall": null,
+      "trigger_precision": null,
+      "false_negative_rate": null,
+      "accepted_case_miou": null
+    },
+    "boundary": {
+      "score": "S_boundary = S_continuity * S_K * S_spacing * S_layout",
+      "spearman_vs_final_miou": null,
+      "threshold": null,
+      "bad_case_recall": null,
+      "trigger_precision": null,
+      "false_negative_rate": null,
+      "accepted_case_miou": null
+    }
   },
-  "platt": {
-    "tau": null,
-    "a": null,
-    "c": null,
-    "calibration_n": null
+  "decision_rule": "trigger reflection when S_depth < T_depth or S_boundary < T_boundary",
+  "optional_appendix": {
+    "leave_one_out_ablation": false,
+    "ridge_regression": false,
+    "logistic_calibration": false
   },
-  "acceptance": {
-    "requires_proxy_geq_tau": true,
-    "requires_p_good_geq_p_min": true,
-    "p_min": null
-  },
-  "trust_rule": "",
   "timestamp": ""
 }

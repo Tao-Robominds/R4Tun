@@ -40,10 +40,12 @@ DEFAULTS = {
 
 def load_parameters(tunnel_id: str, ring_id: int = None, base_dir: str = "data") -> dict:
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    base_only = os.environ.get("INTRINSIC_PARAMS_BASE_DIR_ONLY") == "1"
     candidates = []
     if ring_id is not None:
         ring_key = f"r{int(ring_id)}"
-        candidates.append(os.path.join(script_dir, "parameters", tunnel_id, ring_key, "parameters_segmentation.json"))
+        if not base_only:
+            candidates.append(os.path.join(script_dir, "parameters", tunnel_id, ring_key, "parameters_segmentation.json"))
         candidates.append(os.path.join(base_dir, tunnel_id, ring_key, "parameters_segmentation.json"))
     candidates.append(os.path.join(script_dir, "parameters", "_default_irregular", "parameters_segmentation.json"))
     for path in candidates:

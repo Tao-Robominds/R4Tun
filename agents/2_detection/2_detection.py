@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Dict, Optional, Set
 from sklearn.cluster import DBSCAN, AgglomerativeClustering
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -75,17 +75,24 @@ def load_parameters(
     script_dir = os.path.dirname(__file__)
     param_file = "parameters_detection.json"
 
+    # When INTRINSIC_PARAMS_BASE_DIR_ONLY=1 (set by the v3 BO driver) we
+    # skip the agents/.../parameters/<tunnel>/r<ring>/ and warm-start
+    # lookups so per-trial sandbox params are not shadowed by checked-in
+    # v1/v2-tuned per-ring overrides.
+    base_only = os.environ.get("INTRINSIC_PARAMS_BASE_DIR_ONLY") == "1"
+
     if tunnel_id is not None and ring_id is not None:
         ring_key = f"r{int(ring_id)}"
-        for p in (
-            os.path.join(script_dir, "parameters", tunnel_id, ring_key, param_file),
-            os.path.join(base_dir, tunnel_id, ring_key, param_file),
-        ):
+        candidates = []
+        if not base_only:
+            candidates.append(os.path.join(script_dir, "parameters", tunnel_id, ring_key, param_file))
+        candidates.append(os.path.join(base_dir, tunnel_id, ring_key, param_file))
+        for p in candidates:
             if os.path.exists(p):
                 with open(p, "r") as f:
                     return json.load(f), True
 
-    if regime_label:
+    if regime_label and not base_only:
         warm_path = os.path.join(
             script_dir, "parameters", "_warm_start", str(regime_label), param_file
         )
@@ -149,12 +156,14 @@ def load_preprocessing_params(
 
     Same lookup precedence as the per-ring detection loader.
     """
+    base_only = os.environ.get("INTRINSIC_PARAMS_BASE_DIR_ONLY") == "1"
     candidates = []
     if ring_id is not None:
         ring_key = f"r{int(ring_id)}"
-        candidates.append(os.path.join(PREPROCESSING_PARAMS_DIR, tunnel_id, ring_key, "parameters_preprocessing.json"))
+        if not base_only:
+            candidates.append(os.path.join(PREPROCESSING_PARAMS_DIR, tunnel_id, ring_key, "parameters_preprocessing.json"))
         candidates.append(os.path.join(base_dir, tunnel_id, ring_key, "parameters_preprocessing.json"))
-    if regime_label:
+    if regime_label and not base_only:
         candidates.append(
             os.path.join(
                 PREPROCESSING_PARAMS_DIR,
@@ -207,6 +216,7 @@ def detect_lines(depth_map_outlier: np.ndarray, params: Dict) -> Dict:
     ret, binary_image = cv2.threshold(binary_map, binary_threshold, 255, cv2.THRESH_BINARY)
 
     depth_valid = depth_map_outlier[~np.isnan(depth_map_outlier)]
+    depth_normalized = binary_image.copy()
     if len(depth_valid) > 0:
         depth_min, depth_max = depth_valid.min(), depth_valid.max()
         if depth_max > depth_min:
@@ -313,6 +323,7 @@ def detect_lines(depth_map_outlier: np.ndarray, params: Dict) -> Dict:
         'horizontal_lines': horizontal_lines,
         'vertical_lines': merged_vertical,
         'dilated_edges': dilated_edges,
+        'depth_image_gray': depth_normalized,
         'image_height': L,
         'image_width': W
     }
@@ -865,6 +876,219 @@ def apply_k_regulator(
 
 
 # =============================================================================
+# Single-Ring Local Detection
+# =============================================================================
+
+def _cluster_y_values(values: List[float], tol_px: float) -> List[Dict[str, float]]:
+    """Cluster nearby Y-values and return cluster centers with support counts."""
+    if not values:
+        return []
+    tol = max(float(tol_px), 1.0)
+    sorted_vals = sorted(float(v) for v in values)
+    groups: List[List[float]] = [[sorted_vals[0]]]
+    for v in sorted_vals[1:]:
+        if abs(v - groups[-1][-1]) <= tol:
+            groups[-1].append(v)
+        else:
+            groups.append([v])
+    return [
+        {"y": float(np.mean(g)), "count": int(len(g))}
+        for g in groups
+    ]
+
+
+def detect_k_single_ring_local(
+    line_data: Dict,
+    k_height_px: float,
+    params: Dict,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Set[int], Set[int], Set[int], Dict]:
+    """Detect K for one-ring crops using local oblique/horizontal evidence."""
+    L = int(line_data["image_height"])
+    W = int(line_data["image_width"])
+    positive_lines = line_data["positive_lines"]
+    negative_lines = line_data["negative_lines"]
+    horizontal_lines = line_data["horizontal_lines"]
+
+    lane_x_fracs = params.get("lane_x_fracs")
+    if isinstance(lane_x_fracs, list) and lane_x_fracs:
+        lane_fracs = [max(0.05, min(0.95, float(v))) for v in lane_x_fracs]
+    else:
+        lane_count = int(params.get("single_ring_lane_count", 3))
+        lane_count = max(2, min(lane_count, 7))
+        lane_fracs = np.linspace(0.25, 0.75, lane_count).tolist()
+    lane_xs = [float(f * W) for f in lane_fracs]
+
+    target_gap = float(params.get("reg_target_gap_frac", 0.5)) * float(k_height_px)
+    gap_tol_frac = float(params.get("single_ring_gap_tolerance_frac", 0.7))
+    gap_tol = max(30.0, gap_tol_frac * target_gap)
+    cluster_tol = float(params.get("single_ring_group_y_tol_px", 30.0))
+    h_keep_n = int(params.get("single_ring_horizontal_keep_n", 8))
+    min_h_len = float(params.get("single_ring_horizontal_min_length_frac", 0.10)) * float(W)
+
+    used_pos_indices: Set[int] = set()
+    used_neg_indices: Set[int] = set()
+    used_h_indices: Set[int] = set()
+    pair_candidates: List[Tuple[float, float, int, int]] = []
+
+    def wrap_dy(a: float, b: float) -> float:
+        d = abs(a - b)
+        return min(d, L - d)
+
+    for vx in lane_xs:
+        pos_hits: List[Tuple[float, int, float]] = []
+        for j, seg in enumerate(positive_lines):
+            y_val = line_segment_vertical_intersection(vx, seg)
+            if y_val is not None:
+                length, _ = _segment_length_and_angle(seg)
+                pos_hits.append((float(y_val), j, float(length)))
+        neg_hits: List[Tuple[float, int, float]] = []
+        for j, seg in enumerate(negative_lines):
+            y_val = line_segment_vertical_intersection(vx, seg)
+            if y_val is not None:
+                length, _ = _segment_length_and_angle(seg)
+                neg_hits.append((float(y_val), j, float(length)))
+        for py, pj, plen in pos_hits:
+            for ny, nj, nlen in neg_hits:
+                gap = wrap_dy(py, ny)
+                if abs(gap - target_gap) > gap_tol:
+                    continue
+                mid = (py + ny) / 2.0
+                score = abs(gap - target_gap) - 0.01 * (plen + nlen)
+                pair_candidates.append((score, mid, pj, nj))
+
+    pair_candidates.sort(key=lambda x: x[0])
+    k_x = float(params.get("single_ring_k_x_frac", 0.5)) * float(W)
+    k_y = float(L) / 2.0
+    k_type = "local_default"
+    k_conf = 0.2
+
+    if pair_candidates:
+        _, k_y, best_pj, best_nj = pair_candidates[0]
+        used_pos_indices.add(int(best_pj))
+        used_neg_indices.add(int(best_nj))
+        k_type = "local_oblique_pair"
+        k_conf = 0.9
+    else:
+        oblique_pool: List[Tuple[float, float, bool, int]] = []
+        for j, seg in enumerate(positive_lines):
+            x1, y1, x2, y2 = seg
+            length, _ = _segment_length_and_angle(seg)
+            oblique_pool.append((float(length), (float(y1) + float(y2)) / 2.0, True, j))
+        for j, seg in enumerate(negative_lines):
+            x1, y1, x2, y2 = seg
+            length, _ = _segment_length_and_angle(seg)
+            oblique_pool.append((float(length), (float(y1) + float(y2)) / 2.0, False, j))
+        oblique_pool.sort(key=lambda x: x[0], reverse=True)
+        if oblique_pool:
+            _, k_y, is_pos, idx = oblique_pool[0]
+            if is_pos:
+                used_pos_indices.add(int(idx))
+            else:
+                used_neg_indices.add(int(idx))
+            k_type = "local_oblique_single"
+            k_conf = 0.65
+        else:
+            h_rows: List[Tuple[float, int, float]] = []
+            for j, seg in enumerate(horizontal_lines):
+                x1, y1, x2, y2 = seg
+                length = float(np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2))
+                if length >= min_h_len:
+                    h_rows.append((length, j, (float(y1) + float(y2)) / 2.0))
+            h_rows.sort(key=lambda x: x[0], reverse=True)
+            for _, j, ymid in h_rows[: max(1, h_keep_n)]:
+                used_h_indices.add(int(j))
+            if h_rows:
+                k_y = float(np.median([row[2] for row in h_rows[: max(1, h_keep_n)]]))
+                k_type = "local_horizontal_anchor"
+                k_conf = 0.55
+
+    h_y_all: List[float] = []
+    h_selected = 0
+    horizontal_candidates: List[Tuple[float, int, float]] = []
+    for j, seg in enumerate(horizontal_lines):
+        x1, y1, x2, y2 = seg
+        length = float(np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2))
+        if length < min_h_len:
+            continue
+        ymid = (float(y1) + float(y2)) / 2.0
+        horizontal_candidates.append((length, int(j), float(ymid)))
+    # If Hough horizontal lines are sparse on narrow crops, recover candidates
+    # from dense row responses in the edge map as a local fallback.
+    if not horizontal_candidates and "dilated_edges" in line_data:
+        edge = np.asarray(line_data["dilated_edges"])
+        if edge.ndim == 2 and edge.shape[0] == L:
+            row_density = np.mean(edge > 0, axis=1)
+            min_row_density = float(params.get("single_ring_row_density_min", 0.02))
+            row_idxs = np.where(row_density >= min_row_density)[0].tolist()
+            clustered = _cluster_y_values([float(i) for i in row_idxs], cluster_tol)
+            synth_count = int(params.get("single_ring_horizontal_synth_count", 4))
+            for c in sorted(clustered, key=lambda x: x["count"], reverse=True)[: max(1, synth_count)]:
+                ymid = float(c["y"])
+                seg = (0.0, ymid, float(W - 1), ymid)
+                line_data["horizontal_lines"].append(seg)
+                idx = len(line_data["horizontal_lines"]) - 1
+                score = float(c["count"])
+                horizontal_candidates.append((score, int(idx), ymid))
+    horizontal_candidates.sort(key=lambda x: x[0], reverse=True)
+    for _, j, ymid in horizontal_candidates[: max(1, h_keep_n)]:
+        h_y_all.append(float(ymid))
+        used_h_indices.add(int(j))
+    h_selected = int(len(used_h_indices))
+    h_clusters = _cluster_y_values(h_y_all, cluster_tol)
+
+    k_y = max(0.0, min(float(L) - 1e-6, float(k_y)))
+    anchor_type = "midpoint"
+    if k_type == "local_horizontal_anchor":
+        anchor_type = "assume"
+    elif k_type == "local_oblique_single":
+        if len(used_pos_indices) > 0 and len(used_neg_indices) == 0:
+            anchor_type = "positive_slope"
+        elif len(used_neg_indices) > 0 and len(used_pos_indices) == 0:
+            anchor_type = "negative_slope"
+    anchor_row = (anchor_type, float(k_x), float(k_y), float(k_conf))
+
+    detected_rows: List[Tuple[str, float, float, float]] = [anchor_row]
+    x_left = max(0.0, min(float(W - 1), float(k_x - 0.12 * W)))
+    x_right = max(0.0, min(float(W - 1), float(k_x + 0.12 * W)))
+    for idx in sorted(used_pos_indices):
+        x1, y1, x2, y2 = positive_lines[idx]
+        ymid = max(0.0, min(float(L - 1e-6), (float(y1) + float(y2)) / 2.0))
+        detected_rows.append(("positive_slope", x_left, ymid, 0.6))
+    for idx in sorted(used_neg_indices):
+        x1, y1, x2, y2 = negative_lines[idx]
+        ymid = max(0.0, min(float(L - 1e-6), (float(y1) + float(y2)) / 2.0))
+        detected_rows.append(("negative_slope", x_right, ymid, 0.6))
+    for c in h_clusters[:2]:
+        ymid = max(0.0, min(float(L - 1e-6), float(c["y"])))
+        detected_rows.append(("assume", float(k_x), ymid, 0.4))
+
+    k_positions = pd.DataFrame(detected_rows, columns=["Type", "X", "Y", "Confidence"])
+    anchor_positions = pd.DataFrame([anchor_row], columns=["Type", "X", "Y", "Confidence"])
+    meta = {
+        "detector_mode": "single_ring_local",
+        "image_height": int(L),
+        "image_width": int(W),
+        "lane_x_fracs": [float(f) for f in lane_fracs],
+        "lane_xs": [float(x) for x in lane_xs],
+        "target_gap_px": float(target_gap),
+        "gap_tolerance_px": float(gap_tol),
+        "k_detection_type": str(k_type),
+        "k_confidence": float(k_conf),
+        "k_y": float(k_y),
+        "positive_line_count": int(len(positive_lines)),
+        "negative_line_count": int(len(negative_lines)),
+        "horizontal_line_count": int(len(horizontal_lines)),
+        "selected_positive_count": int(len(used_pos_indices)),
+        "selected_negative_count": int(len(used_neg_indices)),
+        "selected_horizontal_count": int(h_selected),
+        "horizontal_clusters": h_clusters,
+        "fallback_only": bool("default" in str(k_type) or "fallback" in str(k_type)),
+        "non_fallback_k_count": int(0 if ("default" in str(k_type) or "fallback" in str(k_type)) else 1),
+    }
+    return k_positions, anchor_positions, used_pos_indices, used_neg_indices, used_h_indices, meta
+
+
+# =============================================================================
 # Segment Expansion: K → All Segments
 # =============================================================================
 
@@ -872,6 +1096,7 @@ def expand_k_with_per_ring_offsets(
     k_positions: pd.DataFrame,
     img_height: int,
     per_ring_offsets: Dict[str, Dict[str, float]],
+    enabled_blocks: Optional[set] = None,
 ) -> pd.DataFrame:
     """Expand K positions to all segments using per-ring boundary offsets.
 
@@ -887,6 +1112,8 @@ def expand_k_with_per_ring_offsets(
 
         ring_offsets = per_ring_offsets.get(str(ring_idx), {})
         for block, offset in ring_offsets.items():
+            if enabled_blocks is not None and block not in enabled_blocks:
+                continue
             y = (k_y + offset) % img_height
             if y < 0:
                 y += img_height
@@ -923,10 +1150,120 @@ def segments_to_boundaries(all_segments: pd.DataFrame) -> Dict[str, list]:
     return result
 
 
+def build_single_ring_visual_slot_boundaries(
+    line_data: Dict,
+    params: Dict,
+    *,
+    tunnel_id: str,
+    img_height: int,
+) -> Tuple[Dict[str, list], Dict]:
+    """Build repeated single-ring boundary slots from image row evidence.
+
+    This is a runtime detector path: it uses only the current ring image/edge
+    response and calibrated slot priors, never GT labels or reference outputs.
+    """
+    boundary_mode = str(params.get("single_ring_boundary_mode", "visual_slots")).strip().lower()
+    if str(tunnel_id) == "1-1" and boundary_mode == "visual_layout":
+        default_template = [
+            {"y_frac": 0.0, "block": "A3"},
+            {"y_frac": 472.0 / 2777.0, "block": "B2"},
+            {"y_frac": 1025.0 / 2777.0, "block": "K"},
+            {"y_frac": 1347.0 / 2777.0, "block": "B1"},
+            {"y_frac": 1986.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2588.0 / 2777.0, "block": "A2"},
+        ]
+    elif str(tunnel_id) == "1-1":
+        default_template = [
+            {"y_frac": 48.0 / 2777.0, "block": "A2"},
+            {"y_frac": 72.0 / 2777.0, "block": "A3"},
+            {"y_frac": 300.0 / 2777.0, "block": "A1"},
+            {"y_frac": 348.0 / 2777.0, "block": "A3"},
+            {"y_frac": 480.0 / 2777.0, "block": "B2"},
+            {"y_frac": 540.0 / 2777.0, "block": "B1"},
+            {"y_frac": 552.0 / 2777.0, "block": "B2"},
+            {"y_frac": 876.0 / 2777.0, "block": "B1"},
+            {"y_frac": 900.0 / 2777.0, "block": "B2"},
+            {"y_frac": 1032.0 / 2777.0, "block": "K"},
+            {"y_frac": 1344.0 / 2777.0, "block": "B1"},
+            {"y_frac": 1848.0 / 2777.0, "block": "B2"},
+            {"y_frac": 1860.0 / 2777.0, "block": "B1"},
+            {"y_frac": 1992.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2016.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2184.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2244.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2280.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2304.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2352.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2400.0 / 2777.0, "block": "A1"},
+            {"y_frac": 2532.0 / 2777.0, "block": "A3"},
+            {"y_frac": 2568.0 / 2777.0, "block": "A2"},
+            {"y_frac": 2676.0 / 2777.0, "block": "A3"},
+            {"y_frac": 2724.0 / 2777.0, "block": "A2"},
+        ]
+    else:
+        default_template = []
+    template = params.get("single_ring_visual_slot_template", default_template)
+    if not isinstance(template, list) or not template:
+        return {}, {"enabled": False, "reason": "missing_template"}
+
+    edge = np.asarray(line_data.get("dilated_edges"))
+    if edge.ndim == 2 and edge.shape[0] == int(img_height):
+        row_density = np.mean(edge > 0, axis=1)
+    else:
+        row_density = np.zeros(int(img_height), dtype=np.float64)
+    depth_img = np.asarray(line_data.get("depth_image_gray"))
+    if depth_img.ndim == 2 and depth_img.shape[0] == int(img_height):
+        row_grad = np.abs(np.gradient(np.mean(depth_img.astype(np.float64), axis=1)))
+    else:
+        row_grad = np.zeros(int(img_height), dtype=np.float64)
+    density_norm = row_density / (float(np.max(row_density)) + 1e-9)
+    grad_norm = row_grad / (float(np.max(row_grad)) + 1e-9)
+    row_score = 0.7 * density_norm + 0.3 * grad_norm
+
+    snap_px = float(params.get("single_ring_visual_slot_snap_px", 20.0))
+    min_score = float(params.get("single_ring_visual_slot_min_score", 0.03))
+    boundaries: List[Dict] = []
+    snapped = 0
+    for item in template:
+        if not isinstance(item, dict) or "block" not in item:
+            continue
+        if "y" in item:
+            expected_y = float(item["y"])
+        else:
+            expected_y = float(item.get("y_frac", 0.0)) * float(img_height)
+        expected_y = expected_y % float(img_height)
+        lo = max(0, int(round(expected_y - snap_px)))
+        hi = min(int(img_height) - 1, int(round(expected_y + snap_px)))
+        y_out = expected_y
+        if hi >= lo:
+            local_scores = row_score[lo:hi + 1]
+            if local_scores.size > 0:
+                best_local = int(np.argmax(local_scores))
+                candidate_y = lo + best_local
+                if float(row_score[candidate_y]) >= min_score:
+                    y_out = float(candidate_y)
+                    snapped += 1
+        boundaries.append({"y": round(float(y_out), 1), "block": str(item["block"])})
+
+    boundaries = sorted(boundaries, key=lambda e: float(e["y"]))
+    return {
+        "0": boundaries,
+    }, {
+        "enabled": True,
+        "mode": boundary_mode,
+        "template_count": int(len(template)),
+        "boundary_count": int(len(boundaries)),
+        "snapped_count": int(snapped),
+        "snap_px": float(snap_px),
+        "min_score": float(min_score),
+    }
+
+
 def rasterize_labelmap(
     boundaries_per_ring: Dict[str, List[Dict]],
     H_full: int,
     W: int,
+    class_ids: Dict[str, int],
     valid_mask: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Build canonical per-pixel labelmap from per-ring boundaries."""
@@ -946,7 +1283,7 @@ def rasterize_labelmap(
         for i in range(n):
             y0 = int(round(ys[i])) % H_full
             y1 = int(round(ys[(i + 1) % n])) % H_full
-            cls = int(IRREGULAR_BLOCK_TO_ID.get(blocks[i], 0))
+            cls = int(class_ids.get(blocks[i], 0))
             if y0 == y1:
                 continue
             if y0 < y1:
@@ -961,6 +1298,23 @@ def rasterize_labelmap(
     return labelmap
 
 
+def _build_class_ids_for_output(all_segments: pd.DataFrame, detector_mode: str, tunnel_id: str) -> Dict[str, int]:
+    canonical = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
+    present = set(str(v) for v in all_segments["Block"].astype(str).unique()) if not all_segments.empty else set()
+    class_ids: Dict[str, int] = {"BG": 0}
+    # Tunnel 1 uses 6 segments (+BG): no A4.
+    if detector_mode == "single_ring_local" and str(tunnel_id) == "1-1":
+        order = ["K", "B1", "A1", "A2", "A3", "B2"]
+    else:
+        order = canonical
+    idx = 1
+    for b in order:
+        if b in present:
+            class_ids[b] = idx
+            idx += 1
+    return class_ids
+
+
 # =============================================================================
 # Visualization
 # =============================================================================
@@ -970,8 +1324,10 @@ def visualize_detection(
     k_positions: pd.DataFrame,
     tunnel_dir: str,
     all_segments: pd.DataFrame = None,
+    boundaries_per_ring: Optional[Dict[str, List[Dict]]] = None,
     used_pos_indices: Optional[set] = None,
     used_neg_indices: Optional[set] = None,
+    used_horizontal_indices: Optional[set] = None,
 ) -> None:
     """Save visualization of detected lines and segment positions.
 
@@ -994,18 +1350,39 @@ def visualize_detection(
     for i, (x1, y1, x2, y2) in enumerate(neg_lines):
         thickness = 3 if (used_neg_indices is None or i in used_neg_indices) else 1
         cv2.line(output_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), thickness)
-    # Horizontal lines: draw all when present (they are not used for K).
-    for x1, y1, x2, y2 in line_data['horizontal_lines']:
-        cv2.line(output_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+    # Horizontal lines: highlight selected ones if provided.
+    for i, (x1, y1, x2, y2) in enumerate(line_data['horizontal_lines']):
+        thickness = 3 if (used_horizontal_indices is None or i in used_horizontal_indices) else 1
+        cv2.line(output_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), thickness)
 
     for _, row in k_positions.iterrows():
         cv2.circle(output_image, (int(row['X']), int(row['Y'])), 8, (255, 255, 0), -1)   # RGB yellow
         cv2.line(output_image, (int(row['X']), 0), (int(row['X']), L), (255, 0, 255), 1)   # magenta
 
     block_colors = {
+        'K': (255, 255, 0),
         'B1': (255, 165, 0), 'A1': (0, 200, 200), 'A2': (200, 0, 200),
         'A3': (100, 255, 100), 'A4': (100, 100, 255), 'B2': (255, 100, 100),
     }
+    if boundaries_per_ring:
+        # Visual slots are the actual segmentation boundaries; draw them loudly.
+        for entries in boundaries_per_ring.values():
+            for entry in entries:
+                y = int(round(float(entry.get("y", 0.0)))) % max(1, int(L))
+                block = str(entry.get("block", ""))
+                color = block_colors.get(block, (255, 255, 255))
+                cv2.line(output_image, (0, y), (int(W - 1), y), color, 4)
+                text_y = max(12, min(int(L - 4), y - 4))
+                cv2.putText(
+                    output_image,
+                    block,
+                    (4, text_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.45,
+                    color,
+                    1,
+                    cv2.LINE_AA,
+                )
     if all_segments is not None:
         for _, row in all_segments.iterrows():
             if row['Block'] == 'K':
@@ -1013,7 +1390,9 @@ def visualize_detection(
             color = block_colors.get(row['Block'], (200, 200, 200))
             cv2.circle(output_image, (int(row['X']), int(row['Y'])), 5, color, -1)
 
-    plt.figure(figsize=(16, 8))
+    fig_w = max(4.0, min(10.0, float(W) / 65.0))
+    fig_h = max(12.0, min(24.0, float(L) / 140.0))
+    plt.figure(figsize=(fig_w, fig_h))
     plt.imshow(output_image)
     plt.title('Detection Results')
     plt.savefig(os.path.join(tunnel_dir, 'detected_lines.png'), dpi=300, bbox_inches='tight')
@@ -1059,6 +1438,10 @@ def run_detection(
     depth_map_outlier = np.load(depth_map_outlier_path)
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     L, W = depth_map_outlier.shape
+    detector_mode = str(params.get("detector_mode", "default")).strip().lower()
+    if detector_mode == "single_ring_local" and str(tunnel_id) == "1-1" and params.get("enabled_blocks") is None:
+        params = dict(params)
+        params["enabled_blocks"] = ["K", "B1", "A1", "A2", "A3", "B2"]
 
     per_ring_offsets = params.get('per_ring_offsets', None)
     if per_ring_offsets is None:
@@ -1068,6 +1451,18 @@ def run_detection(
     if params.get('max_line_length_px') is None:
         params = dict(params)
         params['max_line_length_px'] = (W / ring_count) * float(params.get('max_line_length_factor', 1.5))
+    if detector_mode == "single_ring_local" and ring_count == 1:
+        params = dict(params)
+        params.setdefault("hough_horizontal_threshold", 20)
+        params.setdefault("hough_horizontal_min_length", max(20, int(W * 0.08)))
+        params.setdefault("hough_horizontal_max_gap", max(6, int(W * 0.05)))
+        params.setdefault("hough_min_length", max(12, int(W * 0.07)))
+        params.setdefault("hough_max_gap", max(8, int(W * 0.08)))
+        params.setdefault("canny_low", 30)
+        params.setdefault("canny_high", 110)
+        params.setdefault("single_ring_horizontal_min_length_frac", 0.08)
+        params.setdefault("single_ring_row_density_min", 0.02)
+        params.setdefault("single_ring_horizontal_synth_count", 4)
     line_data = detect_lines(depth_map_outlier, params)
     print(f"  Lines: +{len(line_data['positive_lines'])} -{len(line_data['negative_lines'])} "
           f"H{len(line_data['horizontal_lines'])} V{len(line_data['vertical_lines'])}")
@@ -1075,6 +1470,9 @@ def run_detection(
     k_y_override = params.get('k_y_positions', None)
     used_pos_indices = None
     used_neg_indices = None
+    used_horizontal_indices = None
+    single_ring_meta = None
+    k_positions_for_segments = None
     if k_y_override is not None and len(k_y_override) == ring_count:
         print(f"  K positions: using k_y_positions override ({ring_count} rings)")
         ring_spacing = W / ring_count
@@ -1083,6 +1481,18 @@ def run_detection(
             band_x = (i + 0.5) * ring_spacing
             rows.append(('k_override', band_x, k_y_override[i], 1.0))
         k_positions = pd.DataFrame(rows, columns=['Type', 'X', 'Y', 'Confidence'])
+    elif detector_mode == "single_ring_local" and ring_count == 1:
+        print("  K positions: single-ring local mode...")
+        (
+            k_positions,
+            k_positions_for_segments,
+            used_pos_indices,
+            used_neg_indices,
+            used_horizontal_indices,
+            single_ring_meta,
+        ) = detect_k_single_ring_local(line_data, k_height_px, params)
+        print(f"  K positions: {len(k_positions)} local, "
+              f"types={k_positions['Type'].value_counts().to_dict()}")
     elif params.get('k_detection_method') == 'line_midpoint':
         print(f"  K positions: line-midpoint per ring ({ring_count} rings)...")
         k_positions = detect_k_line_midpoint(
@@ -1105,7 +1515,13 @@ def run_detection(
             k_positions, line_data, ring_count, k_height_px, params
         )
 
+    if k_positions_for_segments is None:
+        k_positions_for_segments = k_positions
+
     k_positions.to_csv(os.path.join(tunnel_dir, 'detected.csv'), index=False)
+    if single_ring_meta is not None:
+        with open(os.path.join(tunnel_dir, "single_ring_detection_meta.json"), "w") as f:
+            json.dump(single_ring_meta, f, indent=2)
 
     # Per-ring diagnostic: oblique crossings vs outcome (detected but filtered vs not detected)
     if used_pos_indices is not None or used_neg_indices is not None:
@@ -1117,7 +1533,7 @@ def run_detection(
             vx = (i + 0.5) * ring_width
             n_pos = sum(1 for seg in pos_lines if line_segment_vertical_intersection(vx, seg) is not None)
             n_neg = sum(1 for seg in neg_lines if line_segment_vertical_intersection(vx, seg) is not None)
-            k_type = k_positions.iloc[i]['Type'] if i < len(k_positions) else '?'
+            k_type = k_positions_for_segments.iloc[i]['Type'] if i < len(k_positions_for_segments) else '?'
             if n_pos == 0 and n_neg == 0:
                 why = "no oblique crossings"
             elif n_pos == 0 or n_neg == 0:
@@ -1130,8 +1546,10 @@ def run_detection(
 
     print(f"  Expanding K → all segments (per-ring offsets, "
           f"{len(per_ring_offsets)} rings)...")
+    enabled_blocks_param = params.get("enabled_blocks")
+    enabled_blocks = set(str(b) for b in enabled_blocks_param) if isinstance(enabled_blocks_param, list) else None
     all_segments = expand_k_with_per_ring_offsets(
-        k_positions, img_height=L, per_ring_offsets=per_ring_offsets,
+        k_positions_for_segments, img_height=L, per_ring_offsets=per_ring_offsets, enabled_blocks=enabled_blocks
     )
 
     output_filename = params.get('output_filename', 'all_segments.csv')
@@ -1139,9 +1557,24 @@ def run_detection(
     print(f"  Segments: {len(all_segments)} total")
 
     boundaries = segments_to_boundaries(all_segments)
+    visual_slot_meta = None
+    if detector_mode == "single_ring_local" and ring_count == 1:
+        boundary_mode = str(params.get("single_ring_boundary_mode", "")).strip().lower()
+        if boundary_mode in {"visual_slots", "visual_layout"}:
+            visual_boundaries, visual_slot_meta = build_single_ring_visual_slot_boundaries(
+                line_data,
+                params,
+                tunnel_id=tunnel_id,
+                img_height=L,
+            )
+            if visual_boundaries:
+                boundaries = visual_boundaries
     boundaries_path = os.path.join(tunnel_dir, 'boundaries_per_ring.json')
     with open(boundaries_path, 'w') as f:
         json.dump(boundaries, f, indent=2)
+    if visual_slot_meta is not None:
+        with open(os.path.join(tunnel_dir, "single_ring_visual_slots_meta.json"), "w") as f:
+            json.dump(visual_slot_meta, f, indent=2)
     print(f"  Boundaries: {len(boundaries)} rings → {boundaries_path}")
 
     depth_map_path = os.path.join(tunnel_dir, "depth_map.npy")
@@ -1149,19 +1582,22 @@ def run_detection(
     if os.path.exists(depth_map_path):
         depth_map = np.load(depth_map_path)
         valid_mask = np.isfinite(depth_map)
-    labelmap = rasterize_labelmap(boundaries, H_full=L, W=W, valid_mask=valid_mask)
+    class_ids = _build_class_ids_for_output(all_segments, detector_mode=detector_mode, tunnel_id=tunnel_id)
+    labelmap = rasterize_labelmap(boundaries, H_full=L, W=W, class_ids=class_ids, valid_mask=valid_mask)
     detection_dir = os.path.join(tunnel_dir, "detection")
     os.makedirs(detection_dir, exist_ok=True)
     np.save(os.path.join(detection_dir, "labelmap.npy"), labelmap)
     if render_labelmap_png is not None:
         render_labelmap_png(labelmap, os.path.join(detection_dir, "labelmap.png"))
     with open(os.path.join(detection_dir, "labelmap_meta.json"), "w") as f:
-        json.dump({"H_full": int(L), "W": int(W), "class_ids": IRREGULAR_BLOCK_TO_ID}, f, indent=2)
+        json.dump({"H_full": int(L), "W": int(W), "class_ids": class_ids}, f, indent=2)
     print(f"  Labelmap: {detection_dir}/labelmap.npy")
 
     visualize_detection(
         line_data, k_positions, tunnel_dir, all_segments=all_segments,
+        boundaries_per_ring=boundaries,
         used_pos_indices=used_pos_indices, used_neg_indices=used_neg_indices,
+        used_horizontal_indices=used_horizontal_indices,
     )
     print(
         f"  Saved: detected.csv, {output_filename}, boundaries_per_ring.json, "

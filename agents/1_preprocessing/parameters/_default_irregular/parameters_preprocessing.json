@@ -2,6 +2,10 @@
   "ring_spacing": 1.816,
   "tunnel_diameter": 7.5,
   "depth_map_resolution": 0.005,
+  "gravity_anchor": {
+    "enabled": true,
+    "n_bins": 360
+  },
   "radius_min": 3.0,
   "radius_max": 4.2,
   "gradient_threshold": 10.0,

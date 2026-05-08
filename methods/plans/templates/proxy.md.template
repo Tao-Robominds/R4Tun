@@ -1,43 +1,40 @@
 # Proxy — {tunnel_id}
 
-## Model
-- **Type:** ridge regression (default) from intrinsic vector **x** to **mIoU**.
-- **Target:** scalar mIoU (GT, design-time / calibration only).
+## Purpose
+- Fixed intrinsic proxies used as deployment-time reflection triggers.
+- These scores are not trained mIoU predictors.
 
-## Training / validation splits
-- **Training:** (list trial IDs or rule)
-- **Regression holdout:** (list or rule) — MAE, RMSE reported below
-- **Calibration holdout:** (list or rule) — used only for Platt; disjoint from training when possible
+## Score definitions
+- **S_depth = S_coverage * S_empty**
+- **S_boundary = S_continuity * S_K * S_spacing * S_layout**
 
-## Regression metrics (holdout)
-- MAE: 
-- RMSE: 
+All components are normalized to **[0, 1]**, where higher is better.
 
-## Success event and threshold
-- **τ** (target mIoU): e.g. 0.60
-- **G = 1[mIoU ≥ τ]** on calibration set
+## Validation split
+- **Threshold-selection trials:** (list trial IDs or rule)
+- **Held-out trials:** (list or rule; not used for threshold choice)
 
-## Platt calibration
-- **Score:** **s = ŷ − τ** (proxy margin)
-- **Fitted:** **P(G=1|s) = σ(a·s + c)**
-- **a:** 
-- **c:** 
-- **Calibration sample size (n):** 
-- **Brier score:** 
-- **ECE (optional):** 
+## Spearman sanity check
+- **S_depth vs final mIoU:** 
+- **S_boundary vs final mIoU:** 
 
-## p_good (operational)
-- For a new configuration with proxy **ŷ**: **s = ŷ − τ**, **p_good = σ(a·s + c)**.
+## Failure event and thresholds
+- **tau** (bad final result threshold): e.g. `mIoU < 0.60`
+- **T_depth:** 
+- **T_boundary:** 
 
-## Acceptance rule
-- Require **ŷ ≥ τ** **and** **p_good ≥ p_min** (state **p_min**).
-- Rationale: point prediction alone is insufficient without calibrated pass probability.
+## Trigger validation
+- **Bad-case recall:** 
+- **Trigger precision:** 
+- **False-negative rate:** 
+- **Accepted-case mIoU:** 
 
-## Uncertainty
-- (Ensemble variance, CV, or posterior — if used alongside Platt.)
+## Deployment rule
+- Trigger preprocessing reflection when **S_depth < T_depth**.
+- Trigger detection/boundary reflection when **S_boundary < T_boundary**.
+- Accept when neither trigger fires.
 
-## Confidence bank
-- See `confidence_bank.json` (tau, platt_a, platt_c, p_min, trust fields).
-
-## Trust rule
-- (When to trust proxy vs fallback; tie to step 09 reflection.)
+## Optional appendix only
+- Leave-one-out ablation:
+- Ridge regression:
+- Logistic/Platt calibration:

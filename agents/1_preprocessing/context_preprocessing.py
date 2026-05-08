@@ -93,13 +93,14 @@ def load_context_unwrapped_global(tunnel_id: str, context_rings: List[int]) -> T
         if not need.issubset(set(df.columns)):
             raise ValueError(f"{r4tun_unwrapped} missing required columns")
         sub = df[df["ring"].astype(int).isin(context_rings)].copy().reset_index(drop=True)
-        if len(sub) == 0:
-            raise ValueError(f"No matching rings found in {r4tun_unwrapped} for {context_rings}")
-        return sub, "r4tun/data/ablation_rules global unwrapped"
+        if len(sub) > 0:
+            return sub, "r4tun/data/ablation_rules global unwrapped"
 
     per_ring: List[pd.DataFrame] = []
     for rid in context_rings:
         p = REPO_ROOT / "data" / tunnel_id / f"r{rid}" / "unwrapped.csv"
+        if not p.is_file():
+            p = REPO_ROOT / "data" / "ablation" / "baseline" / tunnel_id / f"r{rid}" / "unwrapped.csv"
         if not p.is_file():
             raise FileNotFoundError(
                 "No r4tun global unwrapped found and fallback per-ring unwrapped missing: "
@@ -262,8 +263,6 @@ def write_trial_outputs(
     target_joint = df_enhance_joint[df_enhance_joint["ring"].astype(int) == int(target_ring)].copy()
     if len(target_seg) == 0:
         raise ValueError(f"No target-ring segment points after enhancing for r{target_ring}")
-    if len(target_joint) == 0:
-        raise ValueError(f"No target-ring joint points after enhancing for r{target_ring}")
 
     t_data_segment = {
         "index": target_seg.index,

@@ -3,8 +3,9 @@
 ## Metadata
 - Tunnel: {tunnel_id}
 - Run: {run_id}
-- Stage: (preprocessing | detection | sam | …)
-- Objective: (e.g. mIoU, composite score)
+- Ring: {ring_id}
+- Stage: (preprocessing | detection_boundary)
+- Objective: (stage reward; final mIoU logged for validation)
 
 ## Search space
 - Params: (list from warm_start / critical_params)
@@ -13,10 +14,11 @@
 
 ## Logging contract
 - Per eval: run.json, stage_manifest.json, reflection_log.json
-- Path: data/{tunnel_id}/workflow/{run_id}/08_bo_runs/
+- Sandbox path: logs/{run_id}/{tunnel_id}/r{ring_id}/02_bo_calibration/
 
 ## Stop rule
 - (e.g. max trials, convergence, time)
 
-## Feature bank
-- (Intrinsic metrics logged per trial for proxy training.)
+## Intrinsic proxy diagnostics
+- Log the raw components needed for `S_depth` or `S_boundary`.
+- Fixed proxy thresholds are selected later; BO should not fit a proxy model here.

@@ -1,13 +1,22 @@
 {
   "stage": "",
+  "combined_proxy": "",
   "metrics": [
     {
       "name": "",
       "formula_or_description": "",
       "range": [null, null],
-      "unit": ""
+      "unit": "",
+      "higher_is_better": true
     }
   ],
-  "selected": [],
-  "guardrails": {}
+  "selected_components": [],
+  "threshold": null,
+  "validation": {
+    "spearman_vs_final_miou": null,
+    "bad_case_recall": null,
+    "trigger_precision": null,
+    "false_negative_rate": null,
+    "accepted_case_miou": null
+  }
 }

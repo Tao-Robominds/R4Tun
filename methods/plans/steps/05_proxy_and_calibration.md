@@ -1,27 +1,34 @@
-# 05 Proxy and Calibration
+# 05 Spearman and Threshold Selection
 
 ## Goal
-Train a single proxy model and calibrate pass probability for reflection/acceptance.
+Validate the fixed combined proxies with a lightweight check and choose reflection thresholds. Do not fit Ridge, Platt, or logistic calibration for the main workflow.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/05_proxy_and_calibration/`
+Sandbox path: `logs/{run_id}/{tunnel_id}/r{ring_id}/05_proxy_and_calibration/`
 
 ## Inputs
-- Feature bank with labels from step 04 (`x = [x_P; x_O]`, `y = mIoU`)
-- Train/validation/calibration split definition
+- Stage proxy scores from step 04.
+- Final mIoU labels from step 03.
+- Threshold-selection split definition.
+- Target failure threshold `tau` for `G_bad = 1[mIoU < tau]`.
 
 ## Actions
-1. Train regression proxy (default ridge): `y_hat = f(x)`.
-2. Validate on holdout (MAE, RMSE, correlation).
-3. Calibrate with Platt on margin `s = y_hat - tau` to obtain `p_good = sigma(a*s + c)`.
-4. Define acceptance rule: `y_hat >= tau AND p_good >= p_min`.
-5. Record uncertainty/trust policy.
+1. Compute Spearman correlation for:
+   - `S_depth` vs final mIoU
+   - `S_boundary` vs final mIoU
+2. Interpret correlation simply:
+   - positive and reasonably strong -> useful proxy
+   - weak but separates bad failures -> usable guardrail
+   - near zero -> not reliable alone
+   - negative -> likely wrong definition or regime-dependent metric
+3. Choose `T_depth` and `T_boundary` from labelled validation data to catch low-mIoU cases.
+4. Record threshold trade-offs: bad-case recall, trigger precision, false-negative rate, accepted-case mIoU.
+5. Do not correlate every sub-metric unless the combined proxy fails.
 
 ## Outputs
-- `proxy.md`
+- `proxy_thresholds.md`
 - `proxy_eval.json`
-- `calibration.json`
-- `confidence_bank.json`
+- `thresholds.json`
 
 ## Verify Prompt
-`Are regression and calibration both documented with split sizes, metrics, and a usable acceptance rule?`
+`Are Spearman checks documented, thresholds selected on labelled validation data, and Ridge/Platt/ablation excluded from the main workflow?`

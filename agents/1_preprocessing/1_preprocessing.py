@@ -49,18 +49,25 @@ def load_parameters(
     param_file = "parameters_preprocessing.json"
     script_dir = str(SCRIPT_DIR)
 
+    # When INTRINSIC_PARAMS_BASE_DIR_ONLY=1 (set by the v3 BO driver) we
+    # skip the agents/.../parameters/<tunnel>/r<ring>/ and warm-start
+    # lookups so per-trial sandbox params are not shadowed by checked-in
+    # v1/v2-tuned per-ring overrides.
+    base_only = os.environ.get("INTRINSIC_PARAMS_BASE_DIR_ONLY") == "1"
+
     if tunnel_id is not None and ring_id is not None:
         ring_key = f"r{int(ring_id)}"
-        for p in (
-            os.path.join(script_dir, "parameters", tunnel_id, ring_key, param_file),
-            os.path.join(base_dir, tunnel_id, ring_key, param_file),
-        ):
+        candidates = []
+        if not base_only:
+            candidates.append(os.path.join(script_dir, "parameters", tunnel_id, ring_key, param_file))
+        candidates.append(os.path.join(base_dir, tunnel_id, ring_key, param_file))
+        for p in candidates:
             if os.path.exists(p):
                 print(f"Loading parameters from {p}")
                 with open(p, encoding="utf-8") as f:
                     return json.load(f), True
 
-    if regime_label:
+    if regime_label and not base_only:
         warm_path = os.path.join(
             script_dir, "parameters", "_warm_start", str(regime_label), param_file
         )
@@ -184,6 +191,10 @@ def run_preprocessing(
     df_raw = load_point_cloud(str(pc_path))
 
     vu = float(get_param(params, "vertical_filter_window", default=6.8, allow_default=allow_defaults))
+    grav = params.get("gravity_anchor", {}) if isinstance(params.get("gravity_anchor"), dict) else {}
+    grav_enabled = bool(grav.get("enabled", True))
+    grav_n_bins = int(grav.get("n_bins", 360))
+    grav_meta: Dict[str, Any] = {}
     df_u, ring_count = unfold_single_ring(
         df_raw,
         tunnel_diameter=tunnel_diameter,
@@ -198,13 +209,25 @@ def run_preprocessing(
         ransac_inlier_threshold_multiplier=float(
             get_param(params, "ransac_inlier_threshold_multiplier", default=0.8, allow_default=allow_defaults)
         ),
+        gravity_anchor_enabled=grav_enabled,
+        gravity_anchor_n_bins=grav_n_bins,
+        gravity_meta_out=grav_meta,
     )
 
     out_u = os.path.join(tunnel_dir, "unwrapped.csv")
     df_u.to_csv(out_u, index=False)
     with open(os.path.join(tunnel_dir, "ring_count.txt"), "w", encoding="utf-8") as f:
         f.write(str(ring_count))
-    print(f"  Wrote unwrapped.csv ({len(df_u)} pts), ring_count={ring_count}")
+    if grav_meta:
+        with open(os.path.join(tunnel_dir, "gravity_anchor_meta.json"), "w", encoding="utf-8") as f:
+            json.dump(grav_meta, f, indent=2)
+    print(
+        f"  Wrote unwrapped.csv ({len(df_u)} pts), ring_count={ring_count}"
+        + (
+            f", gravity_anchor enabled (theta_shift={grav_meta.get('theta_shift', float('nan')):.3f})"
+            if grav_enabled and grav_meta.get('enabled') else ", gravity_anchor disabled"
+        )
+    )
 
     mask_lo = float(get_param(params, "radius_min", default=2.37, allow_default=allow_defaults))
     mask_hi = float(get_param(params, "radius_max", default=3.8, allow_default=allow_defaults))

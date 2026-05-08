@@ -1,18 +1,17 @@
 {
   "tunnel_id": "",
-  "tau": null,
-  "p_min": null,
-  "platt_a": null,
-  "platt_c": null,
-  "p_good_example": null,
-  "calibration_n": null,
-  "metrics": {
-    "brier": null,
-    "ece": null,
-    "coverage_90": null,
-    "calibration_error": null,
-    "max_acceptable_uncertainty": null
+  "run_id": "",
+  "tau_miou": null,
+  "thresholds": {
+    "T_depth": null,
+    "T_boundary": null
+  },
+  "trigger_validation": {
+    "bad_case_recall": null,
+    "trigger_precision": null,
+    "false_negative_rate": null,
+    "accepted_case_miou": null
   },
   "trust_conditions": [],
-  "fallback_trigger": ""
+  "fallback_trigger": "reflect when S_depth < T_depth or S_boundary < T_boundary"
 }

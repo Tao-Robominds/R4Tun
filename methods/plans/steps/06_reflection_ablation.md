@@ -1,32 +1,41 @@
-# 06 Reflection Ablation (Fixed Rules)
+# 06 Reflection Trigger Validation
 
 ## Goal
-Evaluate fixed-rule reflection strategies and feature-block choices under equal budget.
+Validate the fixed intrinsic proxies as deployment-time reflection triggers. The goal is to catch bad final outputs when GT is unavailable, not to prove a full mIoU predictor.
 
 ## Runtime Path
-`data/{tunnel_id}/workflow/{run_id}/06_reflection_ablation/`
+Sandbox path: `logs/{run_id}/{tunnel_id}/r{ring_id}/06_reflection_ablation/`
 
 ## Inputs
-- Tuning memory (step 03)
-- Guardrails + feature bank (step 04)
-- Proxy + calibration (step 05)
+- Trial dataset and tuning memory (step 03).
+- Fixed proxy scores (step 04).
+- Thresholds from step 05.
+- Final mIoU labels for validation.
 
 ## Fixed reflection rules
-- poor ring boundary quality -> rerun boundary detection
-- poor oblique line quality -> adjust K-line detection
-- invalid segment count -> adjust geometry segmentation
-- high spacing irregularity -> rerun ring boundary detection
+- `if S_depth < T_depth`: trigger preprocessing reflection.
+- `if S_boundary < T_boundary`: trigger detection/boundary reflection.
+- Optional component-level reason tags explain the trigger, but routing remains fixed.
 
-## Ablation grid
-- Feature blocks: `P only`, `O only`, `P union O`
-- Trigger policy: `none`, `guardrails only`, `p_good only`, `guardrails + p_good`
+## Evaluation quantities
+- Bad-case recall: among `mIoU < tau` cases, how many did the proxy catch?
+- Trigger precision: among triggered cases, how many were actually bad?
+- False-negative rate: bad cases missed by the proxy.
+- Accepted-case mIoU: average final mIoU when the proxy says accept.
 
-All cells use the same reflection budget (e.g. one correction pass per ring).
+Bad-case recall is the primary deployment metric. False negatives are the main risk.
+
+## Actions
+1. Apply fixed thresholds to validation samples.
+2. Evaluate `S_depth` and `S_boundary` triggers separately and jointly.
+3. Report the four quantities above for each trigger.
+4. Inspect false negatives and update the proxy definition only if failures are systematic.
+5. Keep leave-one-out ablation, Ridge, and logistic calibration as optional appendix analyses only.
 
 ## Outputs
-- `ablation_runs.csv`
+- `trigger_validation.csv`
 - `reflection_traces.json`
-- `ablation_table.md`
+- `trigger_validation_report.md`
 
 ## Verify Prompt
-`Do all 12 cells use fixed routing rules, identical budget, and no LLM/RL/adaptive routing?`
+`Do low S_depth or S_boundary values catch most low-mIoU cases under fixed rules, with false negatives explicitly reported?`

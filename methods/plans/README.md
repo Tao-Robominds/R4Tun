@@ -1,15 +1,15 @@
-# Ring-wise BO + Fixed-Rule Reflection Workflow
+# Stage-wise BO + Intrinsic Reflection Workflow
 
 ## Purpose
-Primary paper methodology for ring-wise BO, consolidated proxy learning, fixed-rule reflection ablation, and held-out generalisation.
+Primary paper methodology for stage-wise BO, fixed intrinsic proxy validation, threshold-based reflection triggers, and held-out generalisation.
 
 ## Scope boundaries
-- Include: ring-wise BO, regime-based calibration, tuning memory, pipeline intrinsics + ontology features, ridge+Platt proxy, fixed-rule reflection, ablation, generalisation.
-- Exclude: LLM routing, RL routing/policy learning, adaptive backtracking, learned correction sequencing.
+- Include: preprocessing BO, detection/boundary BO, tuning memory, fixed stage proxies, Spearman sanity checks, threshold-trigger validation, generalisation.
+- Exclude: full mIoU predictor fitting, Ridge/Platt calibration, leave-one-out metric ablation, LLM routing, RL routing/policy learning, adaptive backtracking, learned correction sequencing.
 
 ## Folder map
-- `steps/`: paper-scope workflow manuals (01 to 07).
-- `output/`: canonical output stubs aligned with `steps/`.
+- `steps/`: paper-scope workflow manuals (00 to 07).
+- `output/`: canonical summary stubs aligned with `steps/`; do not use as experiment sandboxes.
 - `preparation/`: design-time reverse-engineering history retained for traceability.
 - `templates/`: reusable artifact templates.
 - `scripts/`: helper scripts (for example, detection parameter dependency graph).
@@ -17,33 +17,31 @@ Primary paper methodology for ring-wise BO, consolidated proxy learning, fixed-r
 ## Step order and dependencies
 
 Per-run runtime artifacts should be written under:
-`data/{tunnel_id}/workflow/{run_id}/{step_dir}/`
+`logs/{run_id}/{tunnel_id}/r{ring_id}/{step_dir}/`
 
 | # | Step | Depends on | Runtime artifact | Canonical output |
 |---|------|-----------|------------------|------------------|
-| 01 | Ring regime discovery | — | `01_ring_regime_discovery/` | `output/01_ring_regime_discovery_output.md` |
-| 02 | BO calibration | 01 | `02_bo_calibration/` | `output/02_bo_calibration_output.md` |
-| 03 | Tuning memory | 02 | `03_tuning_memory/` | `output/03_tuning_memory_output.md` |
-| 04 | Intrinsics and ontology | 02 | `04_intrinsics_and_ontology/` | `output/04_intrinsics_and_ontology_output.md` |
-| 05 | Proxy and calibration | 04 | `05_proxy_and_calibration/` | `output/05_proxy_and_calibration_output.md` |
-| 06 | Reflection ablation | 03, 04, 05 | `06_reflection_ablation/` | `output/06_reflection_ablation_output.md` |
+| 01 | Stage panel discovery | — | `01_ring_regime_discovery/` | `output/01_ring_regime_discovery_output.md` |
+| 02 | Stage-wise BO calibration | 01 | `02_bo_calibration/` | `output/02_bo_calibration_output.md` |
+| 03 | Trial dataset + tuning memory | 02 | `03_tuning_memory/` | `output/03_tuning_memory_output.md` |
+| 04 | Fixed intrinsic proxies | 02, 03 | `04_intrinsics_and_ontology/` | `output/04_intrinsics_and_ontology_output.md` |
+| 05 | Spearman + threshold selection | 04 | `05_proxy_and_calibration/` | `output/05_proxy_and_calibration_output.md` |
+| 06 | Reflection trigger validation | 03, 04, 05 | `06_reflection_ablation/` | `output/06_reflection_ablation_output.md` |
 | 07 | Generalisation test | 01, 03, 04, 05, 06 | `07_generalisation_test/` | `output/07_generalisation_test_output.md` |
 
-## Consolidated proxy strategy
-- Feature blocks:
-  - `x_P`: pipeline intrinsic metrics
-  - `x_O`: ontology/structural plausibility metrics
-- Model: ridge regression on `x = [x_P; x_O]` to predict mIoU.
-- Calibration: Platt scaling on `s = y_hat - tau` to compute `p_good`.
-- Acceptance: `y_hat >= tau` and `p_good >= p_min`.
+## Fixed proxy strategy
+- Preprocessing proxy: `S_depth = S_coverage * S_empty`.
+- Detection/boundary proxy: `S_boundary = S_continuity * S_K * S_spacing * S_layout`.
+- Validation: Spearman correlation between each combined proxy and final mIoU.
+- Deployment trigger: reflect when `S_depth < T_depth` or `S_boundary < T_boundary`.
+- Primary trigger metric: bad-case recall for `mIoU < tau`.
 
 ## Reflection policy (fixed only)
-- poor ring boundary quality -> rerun boundary detection
-- poor oblique line quality -> adjust K-line detection
-- invalid segment count -> adjust geometry segmentation
-- high spacing irregularity -> rerun ring boundary detection
+- low `S_depth` -> rerun preprocessing reflection.
+- low `S_boundary` -> rerun boundary/detection reflection.
+- Optional sub-reason logging maps low boundary components to continuity, K, spacing, or layout diagnostics.
 
-No template/mask action and no RL/LLM routing.
+Ridge, Platt calibration, and leave-one-out ablation are optional appendix analyses only when the fixed proxy fails or reviewers require stronger justification.
 
 ## Coding plans
 Implementation-level step-by-step coding guidance is maintained in:

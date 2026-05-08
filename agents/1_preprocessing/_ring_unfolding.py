@@ -2,12 +2,19 @@
 Ring-native unfolding: single-plane ellipse RANSAC (ported from r4tun/agents/unfolding.py).
 
 Tunnel-wide slicing / centerline polynomial fitting is intentionally omitted.
+
+Gravity-bottom anchoring (v3 default): after the per-ring PCA + RANSAC ellipse
+basis produces ``theta`` (arc length around the ring), the bin with the
+lowest median ``z`` is rolled to ``theta = 0`` so the world-frame physical
+bottom of the tunnel is always anchored at the start of the unfolded image.
+This collapses the rotational degree of freedom that previously drifted per
+ring and made calibration templates non-transferable.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -181,6 +188,52 @@ def _project_to_plane_2d(points_xyz: np.ndarray, center: np.ndarray, e1: np.ndar
     return np.column_stack((x, y))
 
 
+def _gravity_align_theta(
+    theta: np.ndarray,
+    z: np.ndarray,
+    t_range: float,
+    n_bins: int = 360,
+) -> Tuple[np.ndarray, dict]:
+    """Roll ``theta`` so the bin with minimum median ``z`` lands at ``theta=0``.
+
+    Operates on the already-computed ``theta`` (arc length) array and the
+    world-frame ``z`` of each point. Returns the shifted ``theta`` plus a
+    metadata dict for logging.
+
+    Direction is **not** flipped: that requires a per-tunnel reference
+    z-profile which we do not yet have in v3 calibration. The bottom-shift
+    alone is enough to collapse the absolute rotational phase difference
+    between rings of the same tunnel; any residual direction inconsistency
+    becomes a per-ring failure mode that BO can see (and the unanchored
+    ablation will quantify against the anchored baseline).
+    """
+    if t_range <= 0 or theta.size == 0:
+        return theta.copy(), {"theta_shift": 0.0, "theta_range": float(t_range), "bottom_bin_z": float("nan"), "n_bins": int(n_bins)}
+
+    t_min = float(theta.min())
+    bins = np.linspace(t_min, t_min + t_range, n_bins + 1)
+    idx = np.clip(((theta - t_min) / t_range * n_bins).astype(np.int64), 0, n_bins - 1)
+    z_by_bin = np.full(n_bins, np.nan, dtype=np.float64)
+    for b in range(n_bins):
+        m = idx == b
+        if m.any():
+            z_by_bin[b] = float(np.median(z[m]))
+    finite = np.isfinite(z_by_bin)
+    if not finite.any():
+        return theta.copy(), {"theta_shift": 0.0, "theta_range": float(t_range), "bottom_bin_z": float("nan"), "n_bins": int(n_bins)}
+    bot_bin = int(np.argmin(np.where(finite, z_by_bin, np.inf)))
+    t_shift = float(bins[bot_bin])
+    shifted = ((theta - t_shift) % t_range) + t_min
+    meta = {
+        "theta_shift": float(t_shift - t_min),
+        "theta_range": float(t_range),
+        "bottom_bin_z": float(z_by_bin[bot_bin]),
+        "top_bin_z": float(np.max(z_by_bin[finite])),
+        "n_bins": int(n_bins),
+    }
+    return shifted.astype(np.float64), meta
+
+
 def unfold_single_ring(
     df: pd.DataFrame,
     tunnel_diameter: float,
@@ -191,8 +244,17 @@ def unfold_single_ring(
     ransac_sample_size: int,
     ransac_initial_iterations: int,
     ransac_inlier_threshold_multiplier: float,
+    gravity_anchor_enabled: bool = True,
+    gravity_anchor_n_bins: int = 360,
+    gravity_meta_out: Optional[dict] = None,
 ) -> Tuple[pd.DataFrame, int]:
-    """Compute r, theta (arc length), h along ring normal; ring_count fixed to 1."""
+    """Compute r, theta (arc length), h along ring normal; ring_count fixed to 1.
+
+    With ``gravity_anchor_enabled=True`` (v3 default), the produced ``theta``
+    is rolled so the world-frame physical bottom of the tunnel sits at
+    ``theta = 0``. ``gravity_meta_out`` (if provided) is mutated in place
+    with metadata describing the shift; pass ``None`` to discard.
+    """
     pts = df[["x", "y", "z"]].to_numpy(dtype=np.float64)
     center = pts.mean(axis=0)
     e1, e2, normal = _ring_plane_axes(pts)
@@ -238,6 +300,20 @@ def unfold_single_ring(
     r = np.hypot(xp, yp)
     theta_deg = (np.degrees(np.arctan2(yp, xp)) + 90.0) % 360.0
     theta = theta_deg * (np.pi * float(tunnel_diameter) / 360.0)
+
+    if gravity_anchor_enabled:
+        z_world = pts[:, 2]
+        t_range = float(np.pi * float(tunnel_diameter))
+        theta_g, gmeta = _gravity_align_theta(
+            theta=theta, z=z_world, t_range=t_range, n_bins=int(gravity_anchor_n_bins),
+        )
+        theta = theta_g
+        gmeta["enabled"] = True
+    else:
+        gmeta = {"enabled": False}
+    if gravity_meta_out is not None:
+        gravity_meta_out.clear()
+        gravity_meta_out.update(gmeta)
 
     # h: thickness along ring normal (tunnel-axis proxy for a thin ring)
     h_raw = np.dot(pts - center, normal)

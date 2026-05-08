@@ -212,6 +212,11 @@ logs/context_preprocessing_v1/
 logs/preprocessing_context_bo/
 bo/logs/
 logs/preprocessing_bo/
+logs/preprocessing_bo_n10_v1/
 
 bo/results/archive/
 bo4tun/training/
+
+# Local bulk experiment trees (too large for git / GitHub)
+stages/
+logs/v3/

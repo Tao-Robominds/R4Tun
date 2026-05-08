@@ -29,9 +29,15 @@ def calculate_curvatures(points, indices, k):
 
 
 def compute_curvature(df: pd.DataFrame, k: int = 20) -> pd.DataFrame:
+    if len(df) <= 1:
+        out = df.copy()
+        out.loc[:, "curvature"] = 0.0
+        return out
     points = df[["x", "y", "z"]].values
     tree = KDTree(points)
     _, indices = tree.query(points, k=min(k + 1, len(points)))
+    if indices.ndim == 1:
+        indices = indices.reshape(-1, 1)
     curvatures = calculate_curvatures(points, indices, k)
     out = df.copy()
     out.loc[:, "curvature"] = curvatures
@@ -111,12 +117,18 @@ def enhance_segment_surface(
     num_neighbors_param: int,
 ) -> pd.DataFrame:
     start_time = time.time()
+    if len(df) <= 1:
+        return pd.DataFrame(columns=["h", "theta", "r", "curvature", "intensity", "pred"])
     points = df[["h", "theta", "r", "curvature", "intensity"]].values
     original_points = points[:, :2]
 
     original_tree = cKDTree(original_points)
     kq = min(num_neighbors_param + 1, len(points))
     distances, indices = original_tree.query(original_points, k=kq)
+    if indices.ndim == 1:
+        indices = indices.reshape(-1, 1)
+    if distances.ndim == 1:
+        distances = distances.reshape(-1, 1)
 
     all_new_points = compute_midpoints_and_filter(
         points, indices, distances, target_distance, curvature_threshold_param
@@ -195,11 +207,18 @@ def enhance_outlier_points_ring(
     x_min_ref: float,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Ring mode: if ``hd_disabled``, use single threshold (no tunnel HD band)."""
+    empty_new = pd.DataFrame(columns=["h", "theta", "r", "intensity", "pred"])
+    if len(df) <= 1:
+        return df.iloc[0:0].copy(), empty_new
     points = df[["h", "theta", "r", "intensity"]].values
     coords = points[:, :2]
     tree = cKDTree(coords)
     kq = min(num_neighbors + 1, len(points))
     distances, indices = tree.query(coords, k=kq)
+    if indices.ndim == 1:
+        indices = indices.reshape(-1, 1)
+    if distances.ndim == 1:
+        distances = distances.reshape(-1, 1)
     z_vals = df["r"].values
 
     meaningful_mask = np.zeros(len(df), dtype=bool)
@@ -271,10 +290,13 @@ def project_to_depth_map_inter(
     data1a = to_numpy_arrays(data1)
     data2a = to_numpy_arrays(data2)
 
-    x_min = min(data1a[0].min(), data2a[0].min())
-    x_max = max(data1a[0].max(), data2a[0].max())
-    y_min = min(data1a[1].min(), data2a[1].min())
-    y_max = max(data1a[1].max(), data2a[1].max())
+    nonempty = [arr for arr in (data1a, data2a) if arr.shape[1] > 0]
+    if not nonempty:
+        raise ValueError("Cannot project empty point clouds to a depth map")
+    x_min = min(arr[0].min() for arr in nonempty)
+    x_max = max(arr[0].max() for arr in nonempty)
+    y_min = min(arr[1].min() for arr in nonempty)
+    y_max = max(arr[1].max() for arr in nonempty)
 
     W = max(1, int((x_max - x_min) / resolution))
     if canonical_height_px is not None:
@@ -286,6 +308,8 @@ def project_to_depth_map_inter(
     depth_map = np.full((L, W), np.nan, dtype=np.float32)
 
     def process_data(data, index, record_mapping=False):
+        if data.shape[1] == 0:
+            return [] if record_mapping else None
         grid_x = np.clip(((data[0] - x_min) / resolution).astype(int), 0, W - 1)
         grid_y = np.clip(((data[1] - y_min) / resolution).astype(int), 0, L - 1)
 

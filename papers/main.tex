@@ -1,0 +1,448 @@
+\UseRawInputEncoding
+%% ReflectiveTun — Automation in Construction (cas-dc double-column template)
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref}
+\usepackage{placeins}
+\usepackage{caption}
+\usepackage{balance}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+
+\usepackage{soul} % for \\hl
+% Allow soul highlighting to contain common cross-reference commands
+\soulregister\ref7
+\soulregister\pageref7
+\soulregister\eqref7
+% Highlight helper that also works in math mode (e.g., $+36\%$)
+\newcommand{\hlpct}[1]{\ifmmode\mbox{\hl{#1}}\else\hl{#1}\fi}
+\usepackage[most]{tcolorbox} % for section-wide highlighting
+
+\providecommand{\printorcid}{}
+\providecommand{\printfacebook}{}
+\providecommand{\printtwitter}{}
+\providecommand{\printlinkedin}{}
+\providecommand{\printgplus}{}
+\providecommand{\printinstagram}{}
+\providecommand{\printemails}{}
+\providecommand{\printurls}{}
+\usepackage{lineno}
+%\linenumbers % (disabled)
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% ────────────────────────────── Front matter ──────────────────────────────
+
+{\shorttitle{Intrinsics4Tun: anchored intrinsic reflection for label-free tunnel-lining segmentation}
+\shortauthors{X.\ Tao et~al.}
+
+\title[mode=title]{Intrinsics4Tun: anchored intrinsic reflection for label-free tunnel-lining segmentation}
+
+\author[1]{Xinghui Tao}
+\credit{Conceptualization, Methodology, Software, Writing -- original draft}
+
+\author[1]{Guangming Wang}
+\cormark[1]
+\ead{gw462@cam.ac.uk}
+\credit{Supervision, Writing -- review \& editing}
+
+\author[2]{Jelena Nini\'{c}}
+\credit{Supervision, Writing -- review \& editing}
+
+\author[1]{Brian Sheil}
+\credit{Supervision, Funding acquisition, Project administration}
+
+\cortext[cor1]{Corresponding author}
+
+\affiliation[1]{organization={Construction Engineering, University of Cambridge},
+    addressline={Trumpington Street},
+    city={Cambridge},
+    postcode={CB2 1PZ},
+    country={United Kingdom}}
+
+\affiliation[2]{organization={Department of Engineering, Durham University},
+    addressline={Stockton Road},
+    city={Durham},
+    postcode={DH1 3LE},
+    country={United Kingdom}}
+
+% ─── Abstract ─────────────────────────────────────────────────────────────
+
+
+\begin{abstract}
+Automated segmentation of tunnel-lining components from point clouds enables segment-wise inspection measurements (e.g., joint-gap width, leakage area, deformation), but at deployment new tunnels rarely have ground-truth labels, so the system must decide on its own whether each output should be accepted, refined, or flagged. We present \textbf{Intrinsics4Tun}, a deployment-time, label-free control framework for a deterministic, projection-based ring-level segmentation pipeline. Two ideas drive the design. First, rather than hand-picking internal pipeline signals as quality proxies, we use Bayesian optimisation (BO) offline on a small labelled calibration set to jointly select sensitive parameters and the internal metrics whose values track segmentation quality; both are then frozen for label-free deployment, turning a small labelled set into assessment on an unbounded ring stream. Second, we identify a structural failure mode of intrinsic self-assessment in unfolded ring projections: the choice of starting angle rotates the entire image, and layout-regularity metrics --- spacing, continuity, mask completeness --- are invariant to this rotation, so a segmentation can score well on every internal metric while being physically misaligned. We define this rotation-ambiguous output as the bottom baseline and resolve it with a deterministic pre-reflection step: the detector localises the keystone and assigns every other block a canonical class identifier by signed offset from it, fixing the predictor's label scheme at the labelling layer before intrinsic reflection is allowed to operate. At deployment, an LLM consumes the calibrated diagnostics and proposes bounded parameter updates within validated ranges. Evaluated on 40 held-out rings drawn from 17 tunnel sections, this deterministic canonical-labelling step raises mean fixed-class mIoU from the rotation-ambiguous baseline of 0.144 to 0.255. This is the paper's stabilisation claim. The remaining dominant limitation is direction of traversal around the keystone: rings whose block sequence is reversed relative to the signed-offset table produce systematic symmetric-label swaps. The results suggest that calibrated internal metrics can support label-free self-refinement only after rotational ambiguity has first been made explicit and collapsed by a deterministic labelling step.
+\end{abstract}
+
+
+% ─── Highlights ───────────────────────────────────────────────────────────
+
+\begin{highlights}
+\item Frame deployment-time tunnel-lining quality control as a label-free intrinsic-reflection loop driven by calibrated internal metrics.
+\item Use BO offline as a design-time metric selector --- not a hyperparameter optimiser --- to identify which pipeline-internal signals track segmentation quality, then freeze them for deployment.
+\item Identify a structural failure mode of intrinsic self-assessment in unfolded ring projections: rotational ambiguity is invisible to layout-regularity metrics.
+\item Show that keystone-anchored canonical labelling is the deterministic pre-reflection stabilisation step, raising mean mIoU from the rotation-ambiguous baseline of 0.144 to 0.255 on 40 held-out rings.
+\item Distinguish this contribution from SAM4Tun-style segmentation: existing pipelines assume a consistent tunnel direction, whereas we explicitly quantify the rotation-ambiguity baseline and stabilise labels before intrinsic reflection.
+\end{highlights}
+
+% ─── Keywords ─────────────────────────────────────────────────────────────
+
+\begin{keywords}
+Tunnel-lining segmentation \sep Point-cloud segmentation \sep Depth-map segmentation \sep Deployment-time self-refinement \sep Intrinsic reflection \sep Bayesian optimisation \sep Large language models
+\end{keywords}
+
+\maketitle
+
+\smallskip
+% ─────────────────────────────────────────────────────────────────────────
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Introduction}\label{sec:intro}
+% ══════════════════════════════════════════════════════════════════════════
+
+Segmental tunnel linings are modular, repeating structures. A typical Tunnel Boring Machine (TBM) lining ring is assembled from a fixed set of concrete segments: a keystone, the two adjacent segments that flank it, and the remaining base segments. For inspection and asset management, this regularity is valuable: downstream measurements such as joint-gap width, leakage area, radial deviation, and segment-wise deformation become meaningful only after each predicted segment is assigned to its corresponding physical lining component~\cite{montero2015roboticTunnelInspection,attard2018tunnelInspectionReview,sjolander2023automatedTunnelInspections}. A central observation of this paper is that this assignment is fragile in a way that visual segmentation quality does not reveal: an output can partition a ring into clean, segment-shaped regions and still be physically incorrect, because the regions are anchored to the wrong segment identities.
+
+At deployment, a tunnel-lining segmentation system must generalise across many tunnels without per-site retuning, and decide whether each output should be accepted, refined, or flagged --- without ground-truth labels for the current ring. Existing approaches do not address this requirement directly. Expert-designed pipelines~\cite{attard2018tunnelInspectionReview,montero2015roboticTunnelInspection} are interpretable but their performance depends on parameters tied to point density, projection quality, boundary contrast, ring layout, and keystone cues~\cite{huang2021bimMlUnderground,sjolander2023automatedTunnelInspections}. Supervised deep-learning segmenters~\cite{hu2020randlanet,thomas2019kpconv,zhang2022unrollingnet,ji2023spcnet,zhou2023aspcnet,lin2024seg2tunnel} can perform strongly when training data match deployment conditions, but produce miscalibrated labels under distribution shift without an explanation of the failure. Label-free quality-estimation methods studied in medical imaging and broader vision~\cite{kohlberger2012segmentationError,valindria2017rca,robinson2018segmentationQuality} typically assume learned probabilistic segmenters or labelled reference cases retained at deployment --- assumptions that a deterministic, projection-based tunnel pipeline does not satisfy.
+
+We study deployment-time, label-free control for such pipelines through \emph{intrinsic reflection}: an LLM-driven closed loop that scores each candidate segmentation using internal pipeline signals and iteratively updates a bounded subset of parameters until the score plateaus~\cite{madaan2023selfrefine,shinn2023reflexion}. For our experiments we develop a parameterised ring-level pipeline in which each ring is projected to a depth map, segment boundaries are detected in image space, and the resulting \emph{boundary-defined segments} are reprojected to the point cloud~\cite{ye2025sam4tun}. Two design observations shape the framework. First, the natural source of evidence at deployment is not external; it is the pipeline's own intermediate artefacts (depth-map projections, boundary detections, mask completions, layout statistics), which are produced for every ring without labels. Second, choosing which of these signals to trust as quality indicators cannot be done reliably from intuition: a metric that rewards visual regularity may be fully satisfied by a physically wrong segmentation. We therefore treat metric selection as a design-time problem, not a deployment-time one.
+
+\paragraph{Calibrated diagnostics, not hand-picked heuristics.}
+Rather than fixing internal metrics from domain priors, we run Bayesian optimisation \emph{offline} on a small set of labelled calibration rings spanning distinct point-density, spatial-distribution, and keystone configurations~\cite{jones1998ego,shahriari2016reviewBO}. BO is used here not as a hyperparameter optimiser whose output is a single high-performing configuration, but as a \emph{metric selector}: by recording the full parameter--quality trajectory, BO simultaneously identifies the parameters that materially affect segmentation quality and the internal signals whose values track that quality across the calibration set. The selected parameters and metrics are then frozen. At deployment, the same metrics drive label-free assess-and-refine updates on new rings, and BO is not rerun. This separation lets a small labelled set support label-free decisions on an unbounded deployment stream.
+
+\paragraph{A structural failure mode of intrinsic self-assessment.}
+The same ring-level experiments that validated the assess-and-refine loop also exposed a limitation of intrinsic reflection that, to our knowledge, has not been characterised before. Unfolding a ring to a panoramic depth map requires choosing a starting angle, and that choice rotates the entire projection. Layout-regularity metrics --- spacing uniformity, boundary continuity, mask completeness --- are invariant to this rotation. As a consequence, a segmentation can score well on every internal metric, look visually clean, and still be off by one or more segment positions in physical identity. Layout regularity rewards orderly patterns; it does not constrain physical identity. We therefore treat the rotation-ambiguous output as the bottom baseline, regardless of its absolute numerical value. The corrective step is deterministic and occurs before reflection: localise the keystone, then assign canonical class identifiers to the remaining blocks by signed offset from the keystone. This makes the predictor's label scheme invariant to the per-ring starting angle at the labelling layer. On 40 held-out rings, this step raises mean fixed-class mIoU from 0.144 to 0.255.
+
+The two findings are connected. Without a deterministic stabilisation step, intrinsic reflection optimises a self-assessment objective that is satisfied by an entire orbit of physically distinct segmentations; the rotational ambiguity is invisible to internal metrics. With keystone-anchored canonical labelling at detection time, the predictor's label scheme is fixed with respect to the per-ring starting angle, and the same metrics become diagnostic of physical alignment rather than of orbit-equivalent rotations. This is the scientific contribution relative to SAM4Tun-style projection-and-prompt segmentation~\cite{ye2025sam4tun}: prior pipelines require a consistent tunnel direction or user-provided direction convention, but do not explicitly formulate the rotation-ambiguity baseline or test the deterministic stabilisation that must precede label-free reflection.
+
+
+% ─── Figure 1: Rotational ambiguity and K-anchored canonical labelling ───
+% Requires in the document preamble:
+%   \usepackage{tikz}
+%   \usetikzlibrary{arrows.meta}
+\begin{figure*}[!t]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  segK/.style={draw, fill=red!75, text=white, font=\bfseries\scriptsize,
+               minimum width=6mm, minimum height=6mm, inner sep=0pt},
+  segA/.style={draw, fill=orange!55, font=\scriptsize,
+               minimum width=6mm, minimum height=6mm, inner sep=0pt},
+  segB/.style={draw, fill=blue!30, font=\scriptsize,
+               minimum width=6mm, minimum height=6mm, inner sep=0pt},
+  scorebox/.style={draw=gray!50, rounded corners=2pt, fill=gray!8,
+                   inner sep=3pt, font=\scriptsize, align=left},
+  ptitle/.style={font=\small\bfseries, anchor=south west},
+  verdict/.style={font=\scriptsize, anchor=north west},
+  good/.style={text=green!50!black},
+  warn/.style={text=orange!70!black},
+]
+
+  % ===== Row 1: three rotated unfolds (no anchor) =====
+  % ---- (a) start angle theta_a ----
+  \node[ptitle] at (0.0, 0.55) {(a) start angle $\theta_a$};
+  \node[segK] at (0.35,0) {K};   \node[segA] at (1.05,0) {A2};
+  \node[segB] at (1.75,0) {B3};  \node[segB] at (2.45,0) {B2};
+  \node[segB] at (3.15,0) {B1};  \node[segB] at (3.85,0) {B4};
+  \node[segA] at (4.55,0) {A1};
+  \node[scorebox, anchor=north west] at (0.0,-0.45) {%
+    \textcolor{green!50!black}{\checkmark}\,spacing\quad
+    \textcolor{green!50!black}{\checkmark}\,continuity\\
+    \textcolor{green!50!black}{\checkmark}\,completeness\quad
+    \textcolor{green!50!black}{\checkmark}\,single keystone};
+  \node[verdict, warn] at (0.0,-1.40) {physical identity \textbf{undetermined}};
+
+  % ---- (b) start angle theta_b ----
+  \node[ptitle] at (5.0, 0.55) {(b) start angle $\theta_b$};
+  \node[segA] at (5.35,0) {A1};  \node[segK] at (6.05,0) {K};
+  \node[segA] at (6.75,0) {A2};  \node[segB] at (7.45,0) {B3};
+  \node[segB] at (8.15,0) {B2};  \node[segB] at (8.85,0) {B1};
+  \node[segB] at (9.55,0) {B4};
+  \node[scorebox, anchor=north west] at (5.0,-0.45) {%
+    \textcolor{green!50!black}{\checkmark}\,spacing\quad
+    \textcolor{green!50!black}{\checkmark}\,continuity\\
+    \textcolor{green!50!black}{\checkmark}\,completeness\quad
+    \textcolor{green!50!black}{\checkmark}\,single keystone};
+  \node[verdict, warn] at (5.0,-1.40) {physical identity \textbf{undetermined}};
+
+  % ---- (c) start angle theta_c ----
+  \node[ptitle] at (10.0, 0.55) {(c) start angle $\theta_c$};
+  \node[segB] at (10.35,0) {B4}; \node[segA] at (11.05,0) {A1};
+  \node[segK] at (11.75,0) {K};  \node[segA] at (12.45,0) {A2};
+  \node[segB] at (13.15,0) {B3}; \node[segB] at (13.85,0) {B2};
+  \node[segB] at (14.55,0) {B1};
+  \node[scorebox, anchor=north west] at (10.0,-0.45) {%
+    \textcolor{green!50!black}{\checkmark}\,spacing\quad
+    \textcolor{green!50!black}{\checkmark}\,continuity\\
+    \textcolor{green!50!black}{\checkmark}\,completeness\quad
+    \textcolor{green!50!black}{\checkmark}\,single keystone};
+  \node[verdict, warn] at (10.0,-1.40) {physical identity \textbf{undetermined}};
+
+  % % ---- Inter-row caption + arrow ----
+  % \node[font=\itshape, align=center, text width=15cm] at (7.45,-2.05)
+  %   {Same physical ring, three different start angles.
+  %    Internal metrics are invariant to rotation;\\
+  %    the mapping from image columns to physical IDs is therefore not uniquely fixed.};
+  % \draw[-{Stealth[length=4mm]}, line width=1.4pt] (7.45,-2.65) -- (7.45,-3.40);
+  % \node[anchor=west, font=\small\bfseries] at (7.55,-3.02)
+  %   {K-anchored canonical labelling};
+
+  % ===== Row 2: K-anchored labelling =====
+  \node[ptitle] at (5.0,-3.50) {(d) stabilised: labels fixed by K};
+  \node[segB] at (5.35,-3.95) {B1}; \node[segB] at (6.05,-3.95) {B4};
+  \node[segA] at (6.75,-3.95) {A1}; \node[segK] at (7.45,-3.95) {K};
+  \node[segA] at (8.15,-3.95) {A2}; \node[segB] at (8.85,-3.95) {B3};
+  \node[segB] at (9.55,-3.95) {B2};
+  \node[scorebox, anchor=north west] at (5.0,-4.95) {%
+    \textcolor{green!50!black}{\checkmark}\,spacing\quad
+    \textcolor{green!50!black}{\checkmark}\,continuity\\
+    \textcolor{green!50!black}{\checkmark}\,completeness\quad
+    \textcolor{green!50!black}{\checkmark}\,single keystone};
+  \node[verdict, good] at (5.0,-5.90)
+    {\checkmark\ physical identity uniquely fixed};
+\end{tikzpicture}
+\caption{\textbf{Rotational ambiguity in unfolded ring projections is invisible to layout-regularity self-assessment.}
+(a)--(c)~The same physical ring, unfolded with three different starting angles $\theta$. All three projections
+satisfy every internal metric (spacing uniformity, boundary continuity, mask completeness, single-keystone presence)
+and produce visually clean segmentations, but the mapping from image columns to physical lining components depends on
+$\theta$, which is not directly observable from the image. (d)~Intrinsics4Tun resolves this ambiguity at the
+\emph{labelling} layer: the keystone is localised first, then all remaining blocks receive canonical class identifiers
+by signed offset from the keystone. This deterministic step precedes intrinsic reflection and collapses the rotation
+orbit to a single physical labelling convention. Cell colours and labels are illustrative schematics, not actual
+depth-map renders.}
+\label{fig:rotation}
+\end{figure*}
+
+\paragraph{Contributions.} We introduce \textbf{Intrinsics4Tun}, a ring-level framework for deployment-time, label-free segmentation of segmental tunnel linings. The paper makes three contributions.
+\begin{enumerate}
+\item \textbf{BO as a design-time metric selector for label-free control.} We use Bayesian optimisation offline on a small labelled calibration set to jointly identify sensitive pipeline parameters and the internal signals that track segmentation quality, and freeze both for deployment-time intrinsic reflection.
+\item \textbf{A structural failure mode of intrinsic self-assessment, and a deterministic pre-reflection stabiliser.} We show that rotational ambiguity in the unfolded projection frame is invisible to layout-regularity metrics, so visually clean segmentations can be physically misaligned (Figure~\ref{fig:rotation}). We resolve the labelling component with keystone-anchored canonical labelling at detection time --- a deterministic step that fixes the predictor's label scheme regardless of the per-ring starting angle. On 40 held-out rings, this raises mean mIoU from the rotation-ambiguous bottom baseline of 0.144 to 0.255. This explicit ambiguity-baseline-and-stabiliser evaluation is not covered by SAM4Tun, which assumes a consistent tunnel direction for its projection and prompt construction.
+\item \textbf{An end-to-end, auditable framework} in which an LLM consumes the calibrated diagnostics to propose bounded parameter updates within validated ranges and produces accept/refine/flag decisions without per-ring labels. The deployment-time loop is evaluated only after the deterministic rotation stabiliser is applied, because intrinsic reflection is not meaningful while the label identity remains rotation-ambiguous.
+\end{enumerate}
+
+The rest of this paper is organised as follows. Section~\ref{sec:related} reviews related work. Section~\ref{sec:methods} presents the Intrinsics4Tun framework, dataset, and evaluation protocol. Section~\ref{sec:results} reports results and ablations. Section~\ref{sec:discussion} discusses findings, implications, and limitations. Section~\ref{sec:conclusions} concludes.
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Related work}\label{sec:related}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Deployment-time quality control for tunnel-lining segmentation}
+
+Tunnel-lining segmentation is conventionally evaluated offline against labelled ground truth using metrics such as overall accuracy (OA) or mean intersection-over-union (mIoU)~\cite{lin2024seg2tunnel}. At deployment, however, new tunnels rarely have ground-truth labels, so accept/refine/flag decisions must be made from evidence the pipeline produces itself.
+
+Existing approaches form two families. The first is expert-designed pipelines (e.g., geometric, projection-based, and template-based), whose assumptions and intermediate artefacts can be inspected~\cite{attard2018tunnelInspectionReview,montero2015roboticTunnelInspection}. Their main limitation is brittleness: performance depends on preprocessing parameters tied to point density, projection quality, boundary contrast, ring layout, and keystone cues, so engineers must diagnose failures and retune the pipeline whenever conditions shift~\cite{huang2021bimMlUnderground,sjolander2023automatedTunnelInspections}. The second is supervised deep-learning segmenters, including point-cloud networks and tunnel-specific architectures~\cite{hu2020randlanet,thomas2019kpconv,zhang2022unrollingnet,ji2023spcnet,zhou2023aspcnet}, which can perform well when training data match deployment conditions, but offer no explanation when out-of-distribution geometry, scanning settings, or tunnel layout produce mislabelled segments. Neither family provides an explicit deployment-time mechanism that decides whether an output is plausible enough to accept, fixable enough to refine, or unreliable enough to flag.
+
+\subsection{Label-free segmentation quality estimation}
+
+In medical imaging and broader vision, label-free (or test-time) quality estimation infers segmentation reliability without ground-truth labels for the current case~\cite{kohlberger2012segmentationError,valindria2017rca}. Representative strategies include learned error or quality predictors~\cite{robinson2018segmentationQuality,fournel2021segmentationQC,zaman2023erroneousSurfaceRegions}; reverse classification accuracy, which reuses labelled reference cases at assessment time~\cite{valindria2017rca,cosarinsky2025inContextRCA}; uncertainty calibration for probabilistic segmenters via Bayesian approximations, MC dropout, or deep ensembles~\cite{guo2017calibration,gal2016dropout,kendall2017uncertainties,lakshminarayanan2017deepEnsembles}; and disagreement-based failure detection using multiple models or auxiliary streams~\cite{bogdoll2025lidarFailureDetection}. These methods are effective in their native settings, but each assumes resources that a deterministic, projection-based tunnel pipeline does not provide: a learned probabilistic segmenter, a labelled reference set retained at deployment, or multiple model streams. The gap is therefore not the absence of label-free quality estimation in general, but the absence of a label-free assessment mechanism for deterministic pipelines whose only evidence consists of intermediate artefacts.
+
+For such pipelines, the available evidence is \emph{pipeline-internal}: signals derived from depth-map projection usability, boundary-defined segment completeness, ring-layout validity, single-keystone presence, assignment stability, and sensitivity to local parameter perturbations~\cite{sjolander2023automatedTunnelInspections,huang2021bimMlUnderground}. We refer to these measurable signals as \emph{internal metrics}; when a calibrated subset of them is used at deployment to support accept/refine/flag decisions, we refer to their role as \emph{diagnostics}. Internal metrics cannot replace ground-truth mIoU, but they are the only consistent source of label-free evidence in this regime. The open question is which internal metrics genuinely track segmentation quality, and how that question can be answered with the small labelled budget realistic for tunnel projects.
+
+\subsection{Bayesian optimisation as a design-time metric selector}
+
+Bayesian optimisation is the standard tool when the objective is expensive, noisy, or unavailable in closed form~\cite{mockus1978bayesian,jones1998ego}. It builds a probabilistic surrogate of the parameter--performance map, typically with a Gaussian process~\cite{rasmussen2006gpml}, and an acquisition function trades exploitation against exploration~\cite{shahriari2016reviewBO}. BO is widely applied to parameterised engineering pipelines whose runs are costly and whose parameters interact non-locally; in tunnel segmentation, for example, unfolding and denoising settings affect depth-map coverage and boundary contrast, which propagate into downstream boundary detection and mask prompting~\cite{ye2025sam4tun}.
+
+Most uses of BO in segmentation pipelines treat it as a hyperparameter optimiser whose output is a single high-performing configuration. We use BO differently. By recording the parameter--quality trajectory across a small labelled calibration set, BO produces two artefacts that are usually discarded: a sensitivity profile over parameters, and a correlation profile between candidate internal metrics and ground-truth quality. In our framework these are the primary outputs --- the parameter set to expose to deployment-time refinement, and the metric set to use as diagnostics. Once selected, both are frozen; deployment is label-free and BO is not rerun.
+
+\subsection{LLM-guided self-refinement and where intrinsic reflection differs}
+
+Once diagnostics are available, the system needs a mechanism for responding to them. Recent work on LLM self-refinement shows that language models can revise an initial output using external feedback, self-generated critique, or stored experience from past attempts~\cite{madaan2023selfrefine,shinn2023reflexion}. Related agent frameworks separate action, evaluation, and revision, casting the LLM as a reasoning layer around an existing process rather than the prediction model itself~\cite{yao2023react,yao2023treeOfThoughts}.
+
+These frameworks supply the structural template we use, but they do not specify what an LLM should optimise when no ground-truth signal is available, nor how its proposals should be constrained inside a physical pipeline. In this paper, \emph{intrinsic reflection} is the specific instance in which: (i) the feedback signal is a fixed, design-time-calibrated set of internal metrics rather than free-form critique; (ii) the action space is a bounded set of pipeline parameters within validated ranges, not free regeneration; and (iii) acceptance of an LLM-proposed update is gated by structural plausibility checks and a stopping rule on score improvement. The LLM contributes structured proposal and rejection reasoning over a constrained action set; the calibrated diagnostics and geometric guardrails define what a valid refinement is allowed to look like. This is the bridge between general LLM self-refinement and a deterministic, physically anchored deployment loop.
+
+\paragraph{Positioning.} This paper studies deployment-time, label-free control for deterministic, projection-based tunnel-lining segmentation. From the literature above we inherit the family of label-free quality-estimation \emph{ideas} but not its assumptions on probabilistic segmenters or labelled reference cases; we use BO not as a deployment-time optimiser but as a design-time selector of parameters and diagnostic metrics; and we use LLM self-refinement only inside a bounded, calibrated, physically stabilised loop. The contribution is twofold. \emph{Methodologically}, we show that internal metrics can be selected by BO rather than hand-picked, turning a small labelled calibration set into label-free assessment on an unbounded deployment stream. \emph{Empirically}, we identify a structural failure mode of intrinsic self-assessment in unfolded projections --- rotational ambiguity is invisible to layout-regularity metrics --- and show that keystone-anchored canonical labelling at detection time is the deterministic stabilisation step that makes the loop physically meaningful. This differs from SAM4Tun-style segmentation, where the pipeline depends on a consistent direction convention but does not explicitly define the rotation-ambiguous bottom baseline or evaluate a pre-reflection labelling stabiliser. Section~\ref{sec:methods} presents Intrinsics4Tun as the concrete realisation.
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Methodology}\label{sec:methods}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Methodological overview}
+
+
+
+\subsection{Task definition}\label{sec:problem-def}
+
+
+
+\subsection{Intrinsics4Tun}\label{sec:method}
+
+Intrinsics4Tun is a ring-level framework for deployment-time, label-free tunnel lining segmentation control. It is built around a parameterised projection-based segmentation pipeline, but adds three layers that are not available in a conventional static pipeline: design-time calibration of internal metrics (used as diagnostics within intrinsic reflection), deterministic keystone-anchored canonical labelling before reflection, and deployment-time assess-and-refine control.
+
+The framework has two phases. The first phase is design-time calibration. A small set of labelled calibration rings is used to run Bayesian optimisation over the parameterised segmentation pipeline. These calibration experiments generate a tuning history that links parameter settings, intermediate pipeline artefacts, and ground-truth segmentation quality. The tuning history is then analysed to identify sensitive parameters and select internal metrics that are informative of segmentation quality. After this step, the selected parameters, internal metrics, and guardrail criteria are frozen.
+
+The second phase is deployment-time assessment and refinement. New rings are processed without ground-truth labels. Each ring is first projected to a depth map and passed through the deterministic stabiliser: the keystone is localised, and the remaining blocks are assigned canonical class identifiers by signed offset from the keystone. The segmentation pipeline then produces candidate boundary-defined segments and computes internal metrics from visible pipeline artefacts, including projection usability, boundary structure, layout validity, keystone presence, assignment stability, and local perturbation behaviour.
+
+These internal metrics are used to decide whether the candidate output should be accepted, refined, or flagged. If the metrics indicate a structurally plausible output, the segmentation is accepted. If they indicate that local improvement is possible, an LLM-guided assess-and-refine loop proposes bounded updates to selected pipeline parameters and reruns the segmentation. Candidate updates are accepted only when the frozen internal metrics improve while satisfying structural guardrails. If the projection, layout, or assignment remains unreliable, the ring is flagged for review rather than blindly accepted.
+
+
+\subsection{Experimental setup}\label{sec:exp-setup}
+
+\subsubsection{Dataset}\label{sec:dataset}
+
+All rings used in this paper are drawn from the Seg2Tunnel benchmark~\cite{ye2025sam4tun}. The unit of analysis is a single ring, labelled at the point level (background, K-block, base blocks, adjacent blocks). The scope of this paper is restricted to K-bearing segmental linings; non-segmental tunnel sections are out of scope. Ground-truth labels are used only at design time --- to drive Bayesian optimisation on the calibration panel and to score rings on the held-out panel --- and are never supplied to the deployment-time loop. We define two non-overlapping panels (Table~\ref{tab:datasets}): a small calibration panel that BO sees during design, and a larger held-out panel reserved for evaluation under frozen parameters and metrics.
+
+\textbf{BO calibration panel.} The calibration panel contains 6 rings drawn from six distinct tunnel sections, with four rings from the larger-diameter family (4-x sections) and two from the seven-segment family (5-x sections). The panel is intentionally minimal. Rings are not chosen for coverage but for non-redundant learning value: each ring is selected to expose BO to a different parameter-relevant axis --- a dense full-coverage prototype, a density gradient through medium and low tiers, a sparse failure boundary at wide K-span, a narrow K-span case at fixed dense density, and a partial-coverage stress case. Because keystone-anchored canonical labelling at detection time fixes the predictor's label scheme regardless of the per-ring starting angle (Section~\ref{sec:method}), the keystone-quadrant axis carries no additional information for BO; calibration therefore prioritises density, K-span, joint-pattern, and coverage instead. The parameters and internal metrics that BO surfaces on this panel are frozen and reused at deployment without further tuning.
+
+\textbf{Held-out evaluation panel.} Generalisation is evaluated on a held-out panel of 40 rings drawn from 17 sections, stratified into 22 \emph{cross-section} rings (from sections never touched by BO) and 18 \emph{within-section} rings (from sections that contributed a calibration ring, but in regimes the BO ring did not represent). The two splits answer different transfer questions: cross-section measures whether frozen parameters and diagnostics transfer to entirely unseen sections, while within-section measures whether they transfer across regime shifts (e.g., partial coverage, narrow K-span, sparse density) at the same site. The panel has zero overlap with the calibration set, intentionally retains stress cases (degraded depth maps, sparse density, partial coverage) so that flag-rate behaviour can be measured rather than assumed, and excludes two rings for which the upstream preprocessing fails to produce a usable depth map. At deployment, frozen parameters and diagnostics are applied to each ring without per-ring labels; ground truth is read only afterwards to compute mIoU for reporting.
+
+\begin{table}[!t]
+\caption{Composition of the BO calibration and held-out evaluation panels (K-bearing segmental rings from the Seg2Tunnel benchmark~\cite{ye2025sam4tun}; the two panels do not overlap).}
+\label{tab:datasets}
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+ & BO calibration & Held-out \\
+\midrule
+Rings                              & 6        & 40        \\
+Tunnel sections                    & 6        & 17        \\
+Family 4 / Family 5                & 4 / 2    & 24 / 16   \\
+Density (dense/med./low/sparse)    & 3/1/1/1  & 17/13/9/1 \\
+Coverage (full / partial)          & 5 / 1    & 38 / 2    \\
+K-span (narrow/normal/wide)        & 1/4/1    & 9/20/11   \\
+Joint pattern (canon. / rev.)      & 3 / 3    & 20 / 20   \\
+Role of GT                         & BO objective & scoring only \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsubsection{Experimental design}\label{sec:comparators}
+
+T
+
+\subsubsection{Evaluation metrics}\label{sec:metrics}
+
+S
+
+\subsubsection{Sensitivity analysis}\label{sec:sensitivity-method}
+
+We use Bayesian optimisation as a design-time metric selector rather than as a deployment-time hyperparameter optimiser. For each of the six calibration rings we run 30 BO trials over the 13-parameter preprocessing space and 30 trials over the 21-parameter detection space; each trial executes the full pipeline (Section~\ref{sec:method}) and is scored by fixed-class canonical mIoU against ground truth. Across the panel this yields 180 successful preprocessing trials and 180 successful detection trials, with three preprocessing trials (1.6\%) failing with run-time exceptions and excluded from the surrogate model and from all correlations.
+
+Two artefacts of the trial trajectory drive the calibration. First, the pooled Spearman correlation $\rho_{\mathrm{Spearman}}$ between each parameter (or each internal metric) and canonical mIoU, computed across all 360 successful trials. Spearman is preferred to Pearson because parameter--mIoU relationships are monotone but not necessarily linear over the BO range. Second, the empirical envelope $[p_{25}, p_{75}]$ of each parameter over the upper-quartile-mIoU regime --- the operational range in which segmentation quality is consistent across rings. We apply explicit selection rules so that the choice of tunable parameters and diagnostic metrics is reproducible from the calibration corpus and not retrospectively tuned. A parameter is exposed to deployment-time tuning if its pooled $|\rho_{\mathrm{Spearman}}|$ is at least 0.20 and its parameter-range evidence is present in at least three of six rings; an internal metric becomes a deployment-time diagnostic if its pooled $\rho_{\mathrm{Spearman}}$ on the preprocessing-stage corpus is at least 0.50 and the metric is non-null in at least 90\% of successful trials. Guardrail thresholds are calibrated to the upper-quartile-mIoU regime: for each diagnostic, the strict cut is the regime $p_{25}$ and the permissive cut is the regime minimum; for the permutation-vs-fixed mIoU gap that motivates anchored unfolding, the strict and operational cuts are the corpus median and $p_{75}$ respectively. The thresholds are calibration-specific and should be re-derived if the calibration panel is replaced.
+
+We then report two complementary forms of evidence for each retained effect. The pooled $\rho$ across 360 trials is the primary point estimate; the per-ring $\rho$ across the six rings is reported as a six-point spread that exposes the sensitivity of each claim to the choice of calibration ring. We treat an effect as high-confidence only when its sign is stable across all six rings; effects whose sign flips on at least one ring are reported as moderate-confidence and discussed as such (Section~\ref{sec:sensitivity}). Selection rules and threshold derivations were fixed before the held-out panel (Section~\ref{sec:dataset}) was scored.
+
+
+
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Results}\label{sec:results}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Overall performance}\label{sec:main-results}
+
+
+
+
+
+\subsection{Ablation analysis}\label{sec:ablation}
+
+
+\subsection{Cross-model consistency}\label{sec:consistency}
+
+
+
+\subsection{Parameter sensitivity}\label{sec:sensitivity}
+
+This subsection reports the calibration outputs that were frozen for the deployment-time loop: the bounded set of tunable parameters, the diagnostic intrinsics that the LLM consumes, and the guardrail bundles that gate accept/refine/flag decisions. The evidence base is the 360-trial calibration corpus (180 preprocessing + 180 detection successful trials) on the six-ring panel of Section~\ref{sec:dataset}. We report estimates with a measure of spread (per-ring $\rho$ range over six rings) rather than averages alone, name the limitations that bound each claim, and assign a confidence level to each retained effect.
+
+\input{calibration_tables}
+
+\textbf{Five preprocessing parameters carry the bulk of segmentation-quality variance, and detection knobs carry effectively none.} Of the 13 preprocessing knobs, five clear the $|\rho| \geq 0.20$ threshold versus canonical mIoU (Table~\ref{tab:cal-sensitive-params}). Two are strong positive sensitivities --- the radius gate ceiling \texttt{radius\_max} (pooled $\rho = +0.66$, per-ring $\rho \in [+0.60, +0.71]$) and the second up-sampling target distance \texttt{target\_distance\_2} ($+0.62$, per-ring $[+0.37, +0.72]$) --- and three are weaker negative sensitivities (\texttt{outlier\_neighbors} $-0.26$, \texttt{target\_distance\_1} $-0.24$, \texttt{interpolation\_window} $-0.20$). The same selection rule applied to detection trials produces an empty set: the largest detection-stage $|\rho|$ is 0.138 (\texttt{offset\_A4}). Sensitivity is therefore not a global property of the pipeline but is concentrated in early-stage preprocessing; the five surviving knobs are the parameter set the deployment-time LLM is allowed to adjust, while the remaining 8 preprocessing knobs and all 21 detection knobs are pinned to the R4Tun-seed values (Section~\ref{sec:method}). \textit{Sensitivity:} the sign of \texttt{radius\_max}, \texttt{target\_distance\_2} and \texttt{outlier\_neighbors} is stable across all six rings, and we report these as high-confidence effects; \texttt{target\_distance\_1} and \texttt{interpolation\_window} each have one ring whose per-ring $\rho$ flips sign (per-ring ranges $[-0.44, +0.12]$ and $[-0.42, +0.34]$ respectively), and we report these as moderate-confidence effects whose direction holds in pooled aggregate but is not invariant to the calibration ring choice. \textit{Limitations:} the panel is six rings, so per-ring effects between $|\rho| = 0.2$ and $0.3$ should be read as evidence of direction rather than precise magnitude. The R4Tun-seed value of \texttt{radius\_max} ($4.5$) sits above the BO ceiling ($4.4$) and is clipped to the ceiling at deployment; the deployable default is therefore the tighter value, not the seed.
+
+\textbf{Six internal metrics span three failure modes; one carries a structural caveat.} Six internal metrics survive the $\rho \geq 0.5$ + $\geq 90\%$ non-null filter on the 360-trial pooled corpus (Table~\ref{tab:cal-diag-intrinsics}): three segmentation-stage metrics (\texttt{seg\_segment\_type\_completeness}, \texttt{seg\_ring\_completeness\_avg}, \texttt{seg\_mask\_coverage\_pct}), two preprocessing-stage metrics (\texttt{pre\_valid\_ratio}, \texttt{pre\_depth\_shape\_w}), and one detection-stage metric (\texttt{det\_k\_confidence\_avg}). All six are 100\% non-null on the corpus, and all six have positive per-ring $\rho$ on every calibration ring; the weakest ring-level signal is \texttt{det\_k\_confidence\_avg} on ring 4-8/r336 ($+0.13$). \textit{Sensitivity:} the three segmentation-stage and two preprocessing-stage metrics are sign-stable across all six rings, and we report these as high-confidence diagnostics; \texttt{det\_k\_confidence\_avg} is reported as moderate-confidence because its per-ring $\rho$ falls below 0.20 on one ring, which limits how strongly it should be weighted at deployment. \textit{Limitations:} although \texttt{pre\_depth\_shape\_w} clears the correlation cut, its upper-quartile-mIoU range is narrow ($[366, 376]$ pixels, Tab.~\ref{tab:cal-diag-intrinsics}), so it should be read as a structural-failure flag rather than as a continuous quality signal; the deployment loop uses it only inside $G_{\mathrm{pre}}$ as part of an all-of-min rule (Tab.~\ref{tab:cal-guardrails}). The boolean-flavoured \texttt{seg\_ready\_for\_evaluation}, present in the broader correlation profile, drops out under the $\rho \geq 0.5$ rule and is not part of the deployment-time loop.
+
+\textbf{The three guardrail bundles operationalise these diagnostics into accept/refine/flag thresholds.} $G_{\mathrm{pre}}$ tests projection usability via \texttt{pre\_valid\_ratio} (strict cut $\geq 1.3 \times 10^{-3}$, permissive $\geq 4.8 \times 10^{-4}$) and \texttt{pre\_depth\_shape\_w} ($\geq 369$ / $\geq 366$ pixels). $G_{\mathrm{layout}}$ tests structural completeness of the segmentation via the three segmentation metrics under an all-of-min rule. $G_{\mathrm{stability}}$ tests canonical-anchoring residual: across all 360 successful trials, the pooled distribution of permutation-invariant-minus-fixed-class mIoU has median 0.176, $p_{75} = 0.295$, and $p_{90} = 0.389$. The non-zero median is the calibration corpus's empirical evidence that anchoring failures continue to appear under tuning even on the calibration rings, and motivates $G_{\mathrm{stability}}$ as a deployment-time monitor with strict cut at the corpus median (0.176) and operational cut at $p_{75}$ (0.295). \textit{Sensitivity:} the bundle thresholds are upper-quartile-mIoU regime statistics --- a 75th-percentile criterion that is stable to the removal of any single trial because each percentile is supported by at least 90 trials. They are not stable, however, to the removal of a calibration ring: shrinking the panel below six rings would lose at least one regime-distinct ring and shift the upper-quartile boundary. \textit{Limitations:} thresholds are calibration-specific by construction; they would require re-derivation if the calibration panel is replaced or extended. False-flag and missed-flag rates of $G_{\mathrm{pre}}$, $G_{\mathrm{layout}}$ and $G_{\mathrm{stability}}$ on rings the calibration did not see are reported in the deployment evaluation (Section~\ref{sec:main-results}); the calibration evidence here establishes only the threshold values, not their deployment-time behaviour.
+
+\textbf{Per-ring calibration mIoU is variable; calibration value is in the sensitivity profile, not in best-of-trial mIoU.} The per-ring scoreboard (Table~\ref{tab:cal-scoreboard}) shows that BO improves fixed-class mIoU above the R4Tun-seed baseline on five of six rings under preprocessing tuning and on four of six under detection tuning, with one ring (5-7/r323) lifted from 0.07 to 0.78 by preprocessing tuning. The remaining variance reflects the panel's deliberate stress design: rings were chosen for non-redundant learning value rather than for ease (Section~\ref{sec:dataset}), so the per-ring numbers should not be read as expected deployment-time mIoU. The scoreboard's purpose in the calibration record is twofold: first, it is the empirical justification for selecting preprocessing rather than detection as the LLM-tunable stage (preprocessing produces both the largest single improvement, $+0.71$ on 5-7/r323, and improvements on the most rings); second, it is the audit trail that lets a future reader reproduce the calibration outputs from intermediate logs. The deployment-time mIoU evidence is reported in Section~\ref{sec:main-results} on the held-out panel.
+
+\textbf{Evidence quality and confidence summary.} The five sensitive parameters and six diagnostic intrinsics are derived from a calibration corpus of 360 successful trials supervised by ground truth on six rings spanning four density tiers, three K-spans, two coverage levels, and two joint patterns; each retained effect has 6/6-ring evidence support and survives explicit, pre-registered selection rules. The strongest claims --- the absence of LLM-tunable detection knobs, the dominance of \texttt{radius\_max} and \texttt{target\_distance\_2}, the joint structure of the diagnostic bundle, and the existence of a non-zero canonical-anchoring residual --- are sign-stable across all six rings and are reported as high-confidence. The weaker per-parameter claims (\texttt{target\_distance\_1}, \texttt{interpolation\_window}, and the detection-stage diagnostic \texttt{det\_k\_confidence\_avg}) are each contradicted by exactly one ring and are reported as moderate-confidence; we deliberately keep them in the deployment loop because their pooled signal is consistent with the dominant preprocessing knobs, but their thresholds and ranges should be re-examined if the calibration panel changes. The numerical values of the guardrail thresholds are calibration-specific and will be revisited in the discussion of held-out behaviour (Section~\ref{sec:limitations}).
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Discussion}\label{sec:discussion}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Key findings}
+
+
+
+
+In practice, 
+
+\subsection{Limitations}\label{sec:limitations}
+
+\textbf{Direction of the block sequence around the ring.} The deterministic stabilisation in Intrinsics4Tun fixes the per-ring starting angle by anchoring labels to the keystone, but it does not fix the \emph{direction} in which the surrounding block sequence is traversed. The detection module assigns canonical class identifiers using a signed-offset table that places B1, A1, A2, A3, A4, B2 in a fixed direction relative to the keystone, and this direction is not estimated per ring. On the held-out panel, 20 of 40 rings have an intrinsic block sequence that runs in the labelling-table direction (\emph{canonical pattern}) and 20 run in the opposite direction (\emph{reversed-canonical pattern}). The reversed-pattern rings systematically swap symmetric labels (e.g., B1$\leftrightarrow$B2, A1$\leftrightarrow$A4) and account for most of the residual error on the panel. We report the bimodality explicitly rather than masking it with a panel-aggregate mean, and we name per-ring direction estimation as the next stabilisation problem. Building such an estimator from internal evidence is left to a follow-on study and is intentionally out of scope for the present paper, which focuses on the deterministic-stabilisation-then-reflection control structure.
+
+\textbf{Calibration coverage.} The Bayesian-optimisation calibration panel contains six rings drawn from six tunnel sections (4-1, 4-7, 4-8, 4-9, 5-5, 5-7). The held-out panel spans 17 sections, of which six overlap with the calibrated set; sensitive parameters and diagnostic intrinsics are therefore frozen on a six-section base and applied to eleven additional sections at deployment. The calibration evidence base is 360 successful trials (180 preprocessing + 180 detection) and the selection rules are pre-registered (Section~\ref{sec:sensitivity-method}); however, the strongest claims from this corpus (e.g., the dominance of preprocessing over detection knobs) should be re-examined if the calibration panel composition changes. Per-ring effects between $|\rho|=0.2$ and $0.3$ are reported as moderate-confidence with the explicit caveat that a six-ring panel cannot resolve the magnitude of weak effects precisely.
+
+\textbf{Held-out panel scope.} The 40-ring held-out panel is restricted to K-bearing segmental linings from the Seg2Tunnel benchmark and excludes two preprocessing-broken rings (\texttt{5-1/r110}, \texttt{5-1/r111}). It deliberately retains stress cases (degraded depth maps, sparse density, partial coverage). Generalisation to non-K-bearing segmental tunnels, to non-segmental linings, and to point clouds outside the Seg2Tunnel data distribution is not evaluated and is not claimed.
+
+\textbf{Reflection loop sample size.} The deployment-time assess-and-refine loop is reported as feasibility-stage evidence on a subset of the held-out panel. The full forty-ring evaluation under the loop is left to a follow-on study because the loop's run-time per ring is dominated by LLM-driven refinement, and a fully-powered claim about its mean lift would require both a larger sample and a direction-resolved subset (the loop's value is hardest to interpret on reversed-pattern rings where the underlying labelling residual dominates the metric).
+
+\textbf{Metric scope.} We report fixed-class canonical mIoU as the primary deployment metric and Hungarian-permutation mIoU as a secondary diagnostic. We do not report per-tunnel canonical relabelling at evaluation time --- a step that earlier work in our lineage used to make naive cross-ring mIoU well-formed under arbitrary GT segment-id schemes. In the present framework that step is unnecessary because the detector emits canonical class identifiers directly, but the consequence is that absolute mIoU values reported here are not directly comparable to numbers reported in our earlier work that used per-tunnel canonicalisation at evaluation.
+
+\textbf{Confidence summary for the headline claims.} The high-confidence claims in this paper are those backed by either the full 360-trial calibration corpus with sign-stable per-ring evidence (the sensitivity profile, the diagnostic intrinsics, the guardrail thresholds) or by the full 40-ring held-out panel under the prefrozen pipeline (the 0.144 rotation-ambiguous baseline, the 0.255 deterministic-stabilised result, and the bimodal pattern across the canonical/reversed split). The moderate-confidence claims are those whose magnitude is panel-dependent (per-ring sensitivities with sign flips and reflection-loop behaviour on small subsets). The reflection-loop result is reported as feasibility-stage evidence and is the principal locus where additional sample size would change the strength of the claim.
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Conclusions}\label{sec:conclusions}
+% ══════════════════════════════════════════════════════════════════════════
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% Data availability, declarations, etc.
+% ══════════════════════════════════════════════════════════════════════════
+
+\section*{Data availability}
+
+The source code, adapted parameters, and evaluation scripts are available at \url{https://github.com/Tao-Robominds/R4Tun}. The Seg2Tunnel dataset is publicly available.
+
+\section*{Declaration of competing interest}
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Declaration of generative AI use}
+
+During this study, the authors evaluated large language models (Opus-4.6, GPT-5.4, and Gemini-3-Flash) as the main experimental systems. The LLMs were also used for language editing and for improving manuscript structure. The authors reviewed and edited all content and take full responsibility for the content of the publication.
+
+%\printcredits  % Uncomment if cas-dc supports it in your version
+
+% ══════════════════════════════════════════════════════════════════════════
+% Appendices
+% ══════════════════════════════════════════════════════════════════════════
+
+% \clearpage
+\section*{Appendices}
+
+% \input{appendices}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% Bibliography
+% ══════════════════════════════════════════════════════════════════════════
+
+% \clearpage % start Biography on a new page
+% \section*{Biography}
+% TODO: add biography text here
+
+% Natbib requires a BibTeX style; without it, citations stay as “?”
+\balance
+\bibliographystyle{model1-num-names}
+\bibliography{references}
+
+\end{document}

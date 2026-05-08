@@ -1,12 +1,22 @@
 {
   "tunnel_id": "",
   "run_id": "",
-  "tau": null,
-  "platt_a": null,
-  "platt_c": null,
-  "calibration_n": null,
-  "brier": null,
-  "ece": null,
-  "score_definition": "s = proxy_pred - tau",
+  "tau_miou": null,
+  "threshold_selection_n": null,
+  "thresholds": {
+    "T_depth": null,
+    "T_boundary": null
+  },
+  "selection_objective": "maximize bad-case recall for mIoU < tau while tracking trigger precision",
+  "score_definitions": {
+    "S_depth": "S_coverage * S_empty",
+    "S_boundary": "S_continuity * S_K * S_spacing * S_layout"
+  },
+  "metrics": {
+    "bad_case_recall": null,
+    "trigger_precision": null,
+    "false_negative_rate": null,
+    "accepted_case_miou": null
+  },
   "timestamp": ""
 }
