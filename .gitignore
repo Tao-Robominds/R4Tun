@@ -220,3 +220,7 @@ bo4tun/training/
 # Local bulk experiment trees (too large for git / GitHub)
 stages/
 logs/v3/
+logs/v3_arm_c_reflection_pilot_smoke/
+logs/v3_arm_c_reflection_pilot_v1/**/iter_*/
+logs/v3_arm_c_reflection_pilot_v1/**/reflection_packets/
+logs/v3_arm_c_reflection_pilot_v1/proxy_model/
