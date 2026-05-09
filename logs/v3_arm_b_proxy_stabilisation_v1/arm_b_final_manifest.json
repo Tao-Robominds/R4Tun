@@ -1,0 +1,15 @@
+{
+  "created_at_utc": "2026-05-09T03:17:32.369958+00:00",
+  "script": "/home/boringtao/Projects/Intrinsic/bo/v3/finalize_arm_b_proxy_stabilisation.py",
+  "source_files": {
+    "scoreboard": "/home/boringtao/Projects/Intrinsic/logs/v3_direction_stabilisation_v1/scoreboard.csv",
+    "proxy_predictions": "/home/boringtao/Projects/Intrinsic/logs/v3_binary_order_bo_r4tun_v1/proxy/proxy_loso_predictions.csv"
+  },
+  "output_files": [
+    "arm_b_final_scoreboard.csv",
+    "arm_b_final_summary.json",
+    "arm_b_final_failures.csv",
+    "arm_b_final_manifest.json"
+  ],
+  "method_name": "arm_b_k_anchor_plus_proxy_rf_binary_switch"
+}
