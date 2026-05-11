@@ -38,6 +38,12 @@ alwaysApply: true
 7. **Match existing style:** Journals follow `methods/journals/`; plan outputs follow `methods/plans/output/`.
 8. **GT at design time only:** Keep runtime pipeline GT-free; use GT only for reverse-engineering or baselines.
 9. **One deliverable per ask:** Produce only what was requested.
+10. **Arm B safety-floor invariant (Arm C+ reflection):**
+   - Arm B selected output is the frozen stabilization baseline and safety floor.
+   - Any Arm C+ plan touching reflection/adaptation must explicitly state: "select reflected candidate only if intrinsically better than Arm B; otherwise abstain to Arm B."
+   - Candidate `0` must be the canonical Arm B selection from `logs/v3_arm_b_proxy_stabilisation_v1/arm_b_final_scoreboard.csv`, not a locally rerun baseline unless bit-equivalence to Arm B is proven and logged.
+   - Offline audits must report lift against Arm B (`lift_vs_arm_b`), not only against local iteration 0.
+   - If any selected Arm C+ result is below Arm B in offline audit, mark the run as selector failure and block rollout until fixed.
 
 ## Project structure
 

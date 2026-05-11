@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 from typing import Tuple, List, Dict, Optional, Set
 from sklearn.cluster import DBSCAN, AgglomerativeClustering
 EXPECTED_7_BLOCKS = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
+EXPECTED_6_BLOCKS = ["K", "B1", "A1", "A2", "A3", "B2"]
 REVERSE_CANONICAL_MAP = {
     "K": "K",
     "B1": "B2",
@@ -34,6 +35,33 @@ REVERSE_CANONICAL_MAP = {
     "A4": "A1",
     "B2": "B1",
 }
+REVERSE_CANONICAL_MAP_6 = {
+    "K": "K",
+    "B1": "B2",
+    "A1": "A3",
+    "A2": "A2",
+    "A3": "A1",
+    "B2": "B1",
+}
+
+
+def _resolve_expected_blocks(
+    *,
+    segment_count: int | None,
+    enabled_blocks: Optional[set],
+) -> list[str]:
+    if enabled_blocks is not None and len(enabled_blocks) > 0:
+        order = EXPECTED_7_BLOCKS if (segment_count or 7) == 7 else EXPECTED_6_BLOCKS
+        return [b for b in order if b in enabled_blocks]
+    if int(segment_count or 7) == 6:
+        return list(EXPECTED_6_BLOCKS)
+    return list(EXPECTED_7_BLOCKS)
+
+
+def _resolve_reverse_map(expected_blocks: list[str]) -> Dict[str, str]:
+    if set(expected_blocks) == set(EXPECTED_6_BLOCKS):
+        return dict(REVERSE_CANONICAL_MAP_6)
+    return dict(REVERSE_CANONICAL_MAP)
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -909,6 +937,79 @@ def _cluster_y_values(values: List[float], tol_px: float) -> List[Dict[str, floa
     ]
 
 
+def _circular_midpoint_y(y1: float, y2: float, height: float) -> float:
+    """Midpoint on a circular y-axis."""
+    a = float(y1) % float(height)
+    b = float(y2) % float(height)
+    d = b - a
+    if d > height / 2.0:
+        d -= height
+    elif d < -height / 2.0:
+        d += height
+    return float((a + 0.5 * d) % float(height))
+
+
+def _horizontal_pattern_k_y(
+    y_values: List[float],
+    *,
+    k_height_px: float,
+    image_height: float,
+    tolerance_px: float,
+) -> float | None:
+    """Port r4tun horizontal-pair fallback for single-ring K-y recovery."""
+    vals = [float(v) % float(image_height) for v in y_values]
+    if len(vals) < 2:
+        return None
+    # In the original r4tun detector, horizontal candidates are accepted when
+    # their spacing follows K + n*AB, n in {2, 4}, with AB ~= 3K.
+    targets = [float(k_height_px) * 7.0, float(k_height_px) * 13.0]
+    for i in range(len(vals) - 1):
+        for j in range(i + 1, len(vals)):
+            gap = abs(vals[j] - vals[i])
+            gap = min(gap, float(image_height) - gap)
+            if any(abs(gap - target) <= float(tolerance_px) for target in targets):
+                return _circular_midpoint_y(vals[i], vals[j], float(image_height))
+    return None
+
+
+def _circular_distance(a: float, b: float, height: float) -> float:
+    d = abs(float(a) - float(b))
+    return min(d, float(height) - d)
+
+
+def _consensus_circular_y(
+    candidates: List[Tuple[float, float]],
+    *,
+    image_height: float,
+    tol_px: float,
+) -> float | None:
+    """Weighted circular consensus of candidate y values."""
+    if not candidates:
+        return None
+    h = float(image_height)
+    tol = max(1.0, float(tol_px))
+    ys = [float(y) % h for y, _ in candidates]
+    ws = [max(0.01, float(w)) for _, w in candidates]
+    best_idxs: List[int] = []
+    best_weight = -1.0
+    for i, yi in enumerate(ys):
+        idxs = [j for j, yj in enumerate(ys) if _circular_distance(yi, yj, h) <= tol]
+        wsum = float(sum(ws[j] for j in idxs))
+        if wsum > best_weight:
+            best_weight = wsum
+            best_idxs = idxs
+    if not best_idxs:
+        return None
+    ang = [2.0 * np.pi * ys[j] / h for j in best_idxs]
+    w = np.array([ws[j] for j in best_idxs], dtype=float)
+    c = float(np.sum(np.cos(ang) * w))
+    s = float(np.sum(np.sin(ang) * w))
+    theta = float(np.arctan2(s, c))
+    if theta < 0.0:
+        theta += 2.0 * np.pi
+    return float((theta / (2.0 * np.pi)) * h)
+
+
 def detect_k_single_ring_local(
     line_data: Dict,
     k_height_px: float,
@@ -992,7 +1093,13 @@ def detect_k_single_ring_local(
             oblique_pool.append((float(length), (float(y1) + float(y2)) / 2.0, False, j))
         oblique_pool.sort(key=lambda x: x[0], reverse=True)
         if oblique_pool:
-            _, k_y, is_pos, idx = oblique_pool[0]
+            _, y_mid, is_pos, idx = oblique_pool[0]
+            if bool(params.get("single_ring_apply_r4tun_single_oblique_shift", False)):
+                # r4tun uses a single oblique intersection as one edge of K and
+                # shifts by half K height to estimate the K center.
+                k_y = y_mid - 0.5 * float(k_height_px) if is_pos else y_mid + 0.5 * float(k_height_px)
+            else:
+                k_y = y_mid
             if is_pos:
                 used_pos_indices.add(int(idx))
             else:
@@ -1010,9 +1117,21 @@ def detect_k_single_ring_local(
             for _, j, ymid in h_rows[: max(1, h_keep_n)]:
                 used_h_indices.add(int(j))
             if h_rows:
-                k_y = float(np.median([row[2] for row in h_rows[: max(1, h_keep_n)]]))
-                k_type = "local_horizontal_anchor"
-                k_conf = 0.55
+                kept_h = [float(row[2]) for row in h_rows[: max(1, h_keep_n)]]
+                pattern_y = _horizontal_pattern_k_y(
+                    kept_h,
+                    k_height_px=float(k_height_px),
+                    image_height=float(L),
+                    tolerance_px=float(params.get("single_ring_horizontal_pattern_tolerance_px", 50.0)),
+                )
+                if pattern_y is not None:
+                    k_y = float(pattern_y)
+                    k_type = "local_horizontal_pattern"
+                    k_conf = 0.65
+                else:
+                    k_y = float(np.median(kept_h))
+                    k_type = "local_horizontal_anchor"
+                    k_conf = 0.55
 
     h_y_all: List[float] = []
     h_selected = 0
@@ -1050,7 +1169,7 @@ def detect_k_single_ring_local(
 
     k_y = max(0.0, min(float(L) - 1e-6, float(k_y)))
     anchor_type = "midpoint"
-    if k_type == "local_horizontal_anchor":
+    if k_type in {"local_horizontal_anchor", "local_horizontal_pattern"}:
         anchor_type = "assume"
     elif k_type == "local_oblique_single":
         if len(used_pos_indices) > 0 and len(used_neg_indices) == 0:
@@ -1100,6 +1219,203 @@ def detect_k_single_ring_local(
     return k_positions, anchor_positions, used_pos_indices, used_neg_indices, used_h_indices, meta
 
 
+def detect_k_single_ring_r4tun_contract(
+    line_data: Dict,
+    k_height_px: float,
+    params: Dict,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Set[int], Set[int], Set[int], Dict]:
+    """Opt-in r4tun-style candidate consensus for single-ring K detection."""
+    L = int(line_data["image_height"])
+    W = int(line_data["image_width"])
+    positive_lines = line_data["positive_lines"]
+    negative_lines = line_data["negative_lines"]
+    horizontal_lines = line_data["horizontal_lines"]
+    lane_fracs = params.get("lane_x_fracs")
+    if isinstance(lane_fracs, list) and lane_fracs:
+        lane_xs = [max(0.05, min(0.95, float(v))) * float(W) for v in lane_fracs]
+    else:
+        lane_xs = [0.25 * float(W), 0.5 * float(W), 0.75 * float(W)]
+
+    used_pos_indices: Set[int] = set()
+    used_neg_indices: Set[int] = set()
+    used_h_indices: Set[int] = set()
+    candidate_list: List[Dict[str, float | str]] = []
+    weighted_y: List[Tuple[float, float]] = []
+    pair_gap_target = float(params.get("reg_target_gap_frac", 0.5)) * float(k_height_px)
+    pair_gap_tol = max(30.0, float(params.get("single_ring_gap_tolerance_frac", 0.7)) * pair_gap_target)
+    pattern_tol = float(params.get("single_ring_horizontal_pattern_tolerance_px", 50.0))
+    h_keep_n = max(1, int(params.get("single_ring_horizontal_keep_n", 8)))
+
+    for vx in lane_xs:
+        pos_hits: List[Tuple[float, int, float]] = []
+        neg_hits: List[Tuple[float, int, float]] = []
+        h_hits: List[Tuple[float, int, float]] = []
+        for j, seg in enumerate(positive_lines):
+            yv = line_segment_vertical_intersection(vx, seg)
+            if yv is not None:
+                length, _ = _segment_length_and_angle(seg)
+                pos_hits.append((float(yv), int(j), float(length)))
+        for j, seg in enumerate(negative_lines):
+            yv = line_segment_vertical_intersection(vx, seg)
+            if yv is not None:
+                length, _ = _segment_length_and_angle(seg)
+                neg_hits.append((float(yv), int(j), float(length)))
+        for j, seg in enumerate(horizontal_lines):
+            yv = line_segment_vertical_intersection(vx, seg)
+            if yv is not None:
+                length, _ = _segment_length_and_angle(seg)
+                h_hits.append((float(yv), int(j), float(length)))
+
+        pair_cands: List[Tuple[float, float, int, int]] = []
+        for py, pj, plen in pos_hits:
+            for ny, nj, nlen in neg_hits:
+                gap = _circular_distance(py, ny, float(L))
+                if abs(gap - pair_gap_target) > pair_gap_tol:
+                    continue
+                mid = _circular_midpoint_y(py, ny, float(L))
+                score = abs(gap - pair_gap_target) - 0.01 * (plen + nlen)
+                pair_cands.append((score, float(mid), int(pj), int(nj)))
+        pair_cands.sort(key=lambda t: t[0])
+        if pair_cands:
+            _, y, pj, nj = pair_cands[0]
+            used_pos_indices.add(pj)
+            used_neg_indices.add(nj)
+            weighted_y.append((float(y), 1.0))
+            candidate_list.append({"source": "oblique_pair", "y": float(y), "weight": 1.0, "x": float(vx)})
+            continue
+
+        if pos_hits or neg_hits:
+            merged = sorted(pos_hits + neg_hits, key=lambda t: t[2], reverse=True)
+            ymid, idx, _length = merged[0]
+            is_pos = any(int(idx) == int(pj) for _, pj, _ in pos_hits)
+            if is_pos:
+                used_pos_indices.add(int(idx))
+                y = float((ymid - 0.5 * float(k_height_px)) % float(L))
+            else:
+                used_neg_indices.add(int(idx))
+                y = float((ymid + 0.5 * float(k_height_px)) % float(L))
+            weighted_y.append((y, 0.85))
+            candidate_list.append({"source": "single_oblique_shift", "y": y, "weight": 0.85, "x": float(vx)})
+            continue
+
+        if h_hits:
+            h_rows = sorted(h_hits, key=lambda t: t[2], reverse=True)
+            for _y, j, _l in h_rows[:h_keep_n]:
+                used_h_indices.add(int(j))
+            ys = [float(y) for y, _, _ in h_rows[:h_keep_n]]
+            pat_y = _horizontal_pattern_k_y(
+                ys,
+                k_height_px=float(k_height_px),
+                image_height=float(L),
+                tolerance_px=float(pattern_tol),
+            )
+            if pat_y is not None:
+                weighted_y.append((float(pat_y), 0.75))
+                candidate_list.append({"source": "horizontal_pattern", "y": float(pat_y), "weight": 0.75, "x": float(vx)})
+            else:
+                h_mid = float(np.median(ys))
+                weighted_y.append((h_mid, 0.55))
+                candidate_list.append({"source": "horizontal_median", "y": h_mid, "weight": 0.55, "x": float(vx)})
+
+    if not weighted_y:
+        edge = np.asarray(line_data.get("dilated_edges"))
+        if edge.ndim == 2 and edge.shape[0] == L:
+            row_density = np.mean(edge > 0, axis=1)
+            peak = float(int(np.argmax(row_density)))
+            weighted_y.append((peak, 0.3))
+            candidate_list.append({"source": "row_density_peak", "y": peak, "weight": 0.3, "x": 0.5 * float(W)})
+
+    k_y = _consensus_circular_y(
+        weighted_y,
+        image_height=float(L),
+        tol_px=float(params.get("single_ring_consensus_tol_px", max(40.0, 0.8 * float(k_height_px)))),
+    )
+    if k_y is None:
+        k_y = float(L) / 2.0
+        k_type = "r4tun_contract_default"
+        k_conf = 0.2
+    else:
+        k_type = "r4tun_contract_consensus"
+        k_conf = min(0.95, 0.45 + 0.1 * len(weighted_y))
+
+    k_x = float(params.get("single_ring_k_x_frac", 0.5)) * float(W)
+    anchor_row = ("midpoint", float(k_x), float(k_y), float(k_conf))
+    detected_rows: List[Tuple[str, float, float, float]] = [anchor_row]
+    x_left = max(0.0, min(float(W - 1), float(k_x - 0.12 * W)))
+    x_right = max(0.0, min(float(W - 1), float(k_x + 0.12 * W)))
+    for idx in sorted(used_pos_indices):
+        x1, y1, x2, y2 = positive_lines[idx]
+        ymid = max(0.0, min(float(L - 1e-6), (float(y1) + float(y2)) / 2.0))
+        detected_rows.append(("positive_slope", x_left, ymid, 0.6))
+    for idx in sorted(used_neg_indices):
+        x1, y1, x2, y2 = negative_lines[idx]
+        ymid = max(0.0, min(float(L - 1e-6), (float(y1) + float(y2)) / 2.0))
+        detected_rows.append(("negative_slope", x_right, ymid, 0.6))
+    for item in candidate_list:
+        if item["source"] in {"horizontal_pattern", "horizontal_median", "row_density_peak"}:
+            detected_rows.append(("assume", float(k_x), float(item["y"]), float(item["weight"])))
+
+    k_positions = pd.DataFrame(detected_rows, columns=["Type", "X", "Y", "Confidence"])
+    anchor_positions = pd.DataFrame([anchor_row], columns=["Type", "X", "Y", "Confidence"])
+    meta = {
+        "detector_mode": "single_ring_r4tun_k_contract",
+        "image_height": int(L),
+        "image_width": int(W),
+        "lane_xs": [float(v) for v in lane_xs],
+        "k_detection_type": str(k_type),
+        "k_confidence": float(k_conf),
+        "k_y": float(k_y),
+        "k_expected_height_px": float(k_height_px),
+        "candidate_count": int(len(candidate_list)),
+        "candidates": candidate_list,
+        "positive_line_count": int(len(positive_lines)),
+        "negative_line_count": int(len(negative_lines)),
+        "horizontal_line_count": int(len(horizontal_lines)),
+        "selected_positive_count": int(len(used_pos_indices)),
+        "selected_negative_count": int(len(used_neg_indices)),
+        "selected_horizontal_count": int(len(used_h_indices)),
+    }
+    return k_positions, anchor_positions, used_pos_indices, used_neg_indices, used_h_indices, meta
+
+
+def detect_k_single_ring_regular_prior(
+    *,
+    ring_id: int,
+    line_data: Dict,
+    params: Dict,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Set[int], Set[int], Set[int], Dict]:
+    """r4tun regular-family two-level K prior, exposed as an opt-in mode."""
+    L = int(line_data["image_height"])
+    W = int(line_data["image_width"])
+    low_frac = float(params.get("regular_k_prior_low_frac", 1150.0 / 2777.0))
+    high_frac = float(params.get("regular_k_prior_high_frac", 1580.0 / 2777.0))
+    low_parity = int(params.get("regular_k_prior_low_ring_parity", 0))
+    parity = int(ring_id) % 2
+    frac = low_frac if parity == low_parity else high_frac
+    k_y = float(frac * float(L)) % float(L)
+    k_x = float(params.get("single_ring_k_x_frac", 0.5)) * float(W)
+    row = ("regular_prior", float(k_x), float(k_y), 0.7)
+    k_positions = pd.DataFrame([row], columns=["Type", "X", "Y", "Confidence"])
+    meta = {
+        "detector_mode": "single_ring_regular_prior",
+        "image_height": int(L),
+        "image_width": int(W),
+        "ring_id": int(ring_id),
+        "ring_parity": int(parity),
+        "low_ring_parity": int(low_parity),
+        "low_frac": float(low_frac),
+        "high_frac": float(high_frac),
+        "k_y": float(k_y),
+        "k_detection_type": "regular_two_level_prior",
+        "k_confidence": 0.7,
+        "regular_prior_preferred_branch": str(params.get("regular_prior_preferred_branch", "plus")),
+        "positive_line_count": int(len(line_data["positive_lines"])),
+        "negative_line_count": int(len(line_data["negative_lines"])),
+        "horizontal_line_count": int(len(line_data["horizontal_lines"])),
+    }
+    return k_positions, k_positions.copy(), set(), set(), set(), meta
+
+
 # =============================================================================
 # Segment Expansion: K → All Segments
 # =============================================================================
@@ -1142,16 +1458,16 @@ def ensure_segment_completeness(
     *,
     per_ring_offsets: Dict[str, Dict[str, float]],
     enabled_blocks: Optional[set],
+    segment_count: int | None = None,
 ) -> tuple[pd.DataFrame, Dict]:
     """Ensure each ring has the expected block set, repairing simple drops.
 
     If a block is filtered out by enabled_blocks or omitted for any reason
     while an offset exists, reconstruct it deterministically from K_Y + offset.
     """
-    expected_blocks = (
-        sorted(enabled_blocks)
-        if enabled_blocks is not None
-        else list(EXPECTED_7_BLOCKS)
+    expected_blocks = _resolve_expected_blocks(
+        segment_count=segment_count,
+        enabled_blocks=enabled_blocks,
     )
     expected = set(expected_blocks)
     out = all_segments.copy()
@@ -1227,6 +1543,7 @@ def write_direction_hypotheses(
     tunnel_dir: str,
     all_segments_plus: pd.DataFrame,
     boundaries_plus: Dict[str, List[Dict]],
+    expected_blocks: list[str],
 ) -> Dict:
     """Persist plus/minus direction hypotheses for downstream stabilisation."""
     td = Path(tunnel_dir)
@@ -1240,15 +1557,16 @@ def write_direction_hypotheses(
     with open(plus_bnd_path, "w") as f:
         json.dump(boundaries_plus, f, indent=2)
 
-    all_segments_minus = _apply_block_map_to_segments(all_segments_plus, REVERSE_CANONICAL_MAP)
-    boundaries_minus = _apply_block_map_to_boundaries(boundaries_plus, REVERSE_CANONICAL_MAP)
+    reverse_map = _resolve_reverse_map(expected_blocks)
+    all_segments_minus = _apply_block_map_to_segments(all_segments_plus, reverse_map)
+    boundaries_minus = _apply_block_map_to_boundaries(boundaries_plus, reverse_map)
     all_segments_minus.to_csv(minus_seg_path, index=False)
     with open(minus_bnd_path, "w") as f:
         json.dump(boundaries_minus, f, indent=2)
 
     meta = {
         "status": "ok",
-        "reverse_map": REVERSE_CANONICAL_MAP,
+        "reverse_map": reverse_map,
         "files": {
             "all_segments_direction_plus": plus_seg_path.name,
             "boundaries_per_ring_direction_plus": plus_bnd_path.name,
@@ -1286,6 +1604,90 @@ def segments_to_boundaries(all_segments: pd.DataFrame) -> Dict[str, list]:
             })
         result[str(ring_idx)] = boundaries
     return result
+
+
+def _label_from_boundary_template(y: float, template: List[Dict], img_height: int) -> str:
+    if not template:
+        return "BG"
+    sorted_template = sorted(template, key=lambda e: float(e.get("y", 0.0)))
+    yy = float(y) % float(img_height)
+    label = str(sorted_template[-1].get("block", "BG"))
+    for i, entry in enumerate(sorted_template):
+        start = float(entry.get("y", 0.0)) % float(img_height)
+        end = float(sorted_template[(i + 1) % len(sorted_template)].get("y", 0.0)) % float(img_height)
+        if start <= end:
+            inside = start <= yy < end
+        else:
+            inside = yy >= start or yy < end
+        if inside:
+            label = str(entry.get("block", "BG"))
+            break
+    return label
+
+
+def build_single_ring_surface_activity_boundaries(
+    *,
+    depth_map: np.ndarray,
+    base_boundaries: Dict[str, List[Dict]],
+    params: Dict,
+    img_height: int,
+) -> Tuple[Dict[str, List[Dict]], Dict]:
+    """Use depth-map row support to insert repeated BG/non-BG intervals."""
+    if depth_map.ndim != 2 or depth_map.shape[0] != int(img_height):
+        return {}, {"enabled": False, "reason": "invalid_depth_map"}
+    finite = np.isfinite(depth_map)
+    row_density = finite.mean(axis=1)
+    density_min = float(params.get("surface_activity_row_density_min", 0.01))
+    min_run_px = int(params.get("surface_activity_min_run_px", 12))
+    close_gap_px = int(params.get("surface_activity_close_gap_px", 8))
+    active = row_density >= density_min
+
+    if close_gap_px > 0 and active.any():
+        kernel = np.ones(close_gap_px + 1, dtype=np.uint8)
+        active = np.convolve(active.astype(np.uint8), kernel, mode="same") > 0
+
+    runs: List[Tuple[int, int]] = []
+    start: Optional[int] = None
+    for y, is_active in enumerate(active):
+        if bool(is_active) and start is None:
+            start = int(y)
+        if (not bool(is_active) or y == int(img_height) - 1) and start is not None:
+            end = int(y - 1) if not bool(is_active) else int(y)
+            if end - start + 1 >= min_run_px:
+                runs.append((start, end))
+            start = None
+
+    template = list(base_boundaries.get("0", []))
+    if not template or not runs:
+        return {}, {
+            "enabled": False,
+            "reason": "missing_template_or_runs",
+            "run_count": int(len(runs)),
+        }
+
+    entries: List[Dict] = []
+    for start_y, end_y in runs:
+        center_y = (float(start_y) + float(end_y)) / 2.0
+        block = _label_from_boundary_template(center_y, template, int(img_height))
+        if block == "BG":
+            continue
+        entries.append({"y": round(float(start_y), 1), "block": block})
+        if end_y + 1 < int(img_height):
+            entries.append({"y": round(float(end_y + 1), 1), "block": "BG"})
+
+    if not entries:
+        return {}, {"enabled": False, "reason": "no_labeled_activity_runs", "run_count": int(len(runs))}
+
+    entries = sorted(entries, key=lambda e: float(e["y"]))
+    return {"0": entries}, {
+        "enabled": True,
+        "mode": "surface_activity",
+        "row_density_min": float(density_min),
+        "min_run_px": int(min_run_px),
+        "close_gap_px": int(close_gap_px),
+        "run_count": int(len(runs)),
+        "boundary_count": int(len(entries)),
+    }
 
 
 def build_single_ring_visual_slot_boundaries(
@@ -1436,17 +1838,17 @@ def rasterize_labelmap(
     return labelmap
 
 
-def _build_class_ids_for_output(all_segments: pd.DataFrame, detector_mode: str, tunnel_id: str) -> Dict[str, int]:
-    canonical = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
+def _build_class_ids_for_output(
+    all_segments: pd.DataFrame,
+    *,
+    segment_count: int | None,
+    enabled_blocks: Optional[set],
+) -> Dict[str, int]:
+    canonical = _resolve_expected_blocks(segment_count=segment_count, enabled_blocks=enabled_blocks)
     present = set(str(v) for v in all_segments["Block"].astype(str).unique()) if not all_segments.empty else set()
     class_ids: Dict[str, int] = {"BG": 0}
-    # Tunnel 1 uses 6 segments (+BG): no A4.
-    if detector_mode == "single_ring_local" and str(tunnel_id) == "1-1":
-        order = ["K", "B1", "A1", "A2", "A3", "B2"]
-    else:
-        order = canonical
     idx = 1
-    for b in order:
+    for b in canonical:
         if b in present:
             class_ids[b] = idx
             idx += 1
@@ -1577,9 +1979,7 @@ def run_detection(
     ring_count = int(open(os.path.join(tunnel_dir, 'ring_count.txt'), 'r').read())
     L, W = depth_map_outlier.shape
     detector_mode = str(params.get("detector_mode", "default")).strip().lower()
-    if detector_mode == "single_ring_local" and str(tunnel_id) == "1-1" and params.get("enabled_blocks") is None:
-        params = dict(params)
-        params["enabled_blocks"] = ["K", "B1", "A1", "A2", "A3", "B2"]
+    segment_count = int(params.get("segment_count", 7))
 
     per_ring_offsets = params.get('per_ring_offsets', None)
     if per_ring_offsets is None:
@@ -1589,7 +1989,7 @@ def run_detection(
     if params.get('max_line_length_px') is None:
         params = dict(params)
         params['max_line_length_px'] = (W / ring_count) * float(params.get('max_line_length_factor', 1.5))
-    if detector_mode == "single_ring_local" and ring_count == 1:
+    if detector_mode in {"single_ring_local", "single_ring_r4tun_k_contract", "single_ring_regular_prior"} and ring_count == 1:
         params = dict(params)
         params.setdefault("hough_horizontal_threshold", 20)
         params.setdefault("hough_horizontal_min_length", max(20, int(W * 0.08)))
@@ -1630,6 +2030,34 @@ def run_detection(
             single_ring_meta,
         ) = detect_k_single_ring_local(line_data, k_height_px, params)
         print(f"  K positions: {len(k_positions)} local, "
+              f"types={k_positions['Type'].value_counts().to_dict()}")
+    elif detector_mode == "single_ring_r4tun_k_contract" and ring_count == 1:
+        print("  K positions: single-ring r4tun contract mode...")
+        (
+            k_positions,
+            k_positions_for_segments,
+            used_pos_indices,
+            used_neg_indices,
+            used_horizontal_indices,
+            single_ring_meta,
+        ) = detect_k_single_ring_r4tun_contract(line_data, k_height_px, params)
+        print(f"  K positions: {len(k_positions)} contract, "
+              f"types={k_positions['Type'].value_counts().to_dict()}")
+    elif detector_mode == "single_ring_regular_prior" and ring_count == 1:
+        print("  K positions: single-ring regular two-level prior mode...")
+        (
+            k_positions,
+            k_positions_for_segments,
+            used_pos_indices,
+            used_neg_indices,
+            used_horizontal_indices,
+            single_ring_meta,
+        ) = detect_k_single_ring_regular_prior(
+            ring_id=int(ring_id),
+            line_data=line_data,
+            params=params,
+        )
+        print(f"  K positions: {len(k_positions)} regular-prior, "
               f"types={k_positions['Type'].value_counts().to_dict()}")
     elif params.get('k_detection_method') == 'line_midpoint':
         print(f"  K positions: line-midpoint per ring ({ring_count} rings)...")
@@ -1686,13 +2114,23 @@ def run_detection(
           f"{len(per_ring_offsets)} rings)...")
     enabled_blocks_param = params.get("enabled_blocks")
     enabled_blocks = set(str(b) for b in enabled_blocks_param) if isinstance(enabled_blocks_param, list) else None
+    expected_blocks = _resolve_expected_blocks(segment_count=segment_count, enabled_blocks=enabled_blocks)
+    k_positions_for_segments_expansion = k_positions_for_segments.copy()
+    k_anchor_semantics = str(params.get("k_anchor_semantics", "boundary_start")).strip().lower()
+    if k_anchor_semantics == "center":
+        k_positions_for_segments_expansion["Y"] = (
+            k_positions_for_segments_expansion["Y"].astype(float) - 0.5 * float(k_height_px)
+        ) % float(L)
+    elif k_anchor_semantics != "boundary_start":
+        raise ValueError(f"Unsupported k_anchor_semantics={k_anchor_semantics!r}; expected center or boundary_start")
     all_segments = expand_k_with_per_ring_offsets(
-        k_positions_for_segments, img_height=L, per_ring_offsets=per_ring_offsets, enabled_blocks=enabled_blocks
+        k_positions_for_segments_expansion, img_height=L, per_ring_offsets=per_ring_offsets, enabled_blocks=enabled_blocks
     )
     all_segments, completion_meta = ensure_segment_completeness(
         all_segments,
         per_ring_offsets=per_ring_offsets,
         enabled_blocks=enabled_blocks,
+        segment_count=segment_count,
     )
     with open(os.path.join(tunnel_dir, "segment_completion_meta.json"), "w") as f:
         json.dump(completion_meta, f, indent=2)
@@ -1706,15 +2144,31 @@ def run_detection(
     all_segments.to_csv(os.path.join(tunnel_dir, output_filename), index=False)
     print(f"  Segments: {len(all_segments)} total")
 
+    depth_map_path = os.path.join(tunnel_dir, "depth_map.npy")
+    depth_map = None
+    valid_mask = None
+    if os.path.exists(depth_map_path):
+        depth_map = np.load(depth_map_path)
+        valid_mask = np.isfinite(depth_map)
+
     boundaries = segments_to_boundaries(all_segments)
     visual_slot_meta = None
-    if detector_mode == "single_ring_local" and ring_count == 1:
+    if detector_mode in {"single_ring_local", "single_ring_r4tun_k_contract", "single_ring_regular_prior"} and ring_count == 1:
         boundary_mode = str(params.get("single_ring_boundary_mode", "")).strip().lower()
         if boundary_mode in {"visual_slots", "visual_layout"}:
             visual_boundaries, visual_slot_meta = build_single_ring_visual_slot_boundaries(
                 line_data,
                 params,
                 tunnel_id=tunnel_id,
+                img_height=L,
+            )
+            if visual_boundaries:
+                boundaries = visual_boundaries
+        elif boundary_mode == "surface_activity" and depth_map is not None:
+            visual_boundaries, visual_slot_meta = build_single_ring_surface_activity_boundaries(
+                depth_map=depth_map,
+                base_boundaries=boundaries,
+                params=params,
                 img_height=L,
             )
             if visual_boundaries:
@@ -1726,6 +2180,7 @@ def run_detection(
         tunnel_dir=tunnel_dir,
         all_segments_plus=all_segments,
         boundaries_plus=boundaries,
+        expected_blocks=expected_blocks,
     )
     if visual_slot_meta is not None:
         with open(os.path.join(tunnel_dir, "single_ring_visual_slots_meta.json"), "w") as f:
@@ -1733,12 +2188,11 @@ def run_detection(
     print(f"  Boundaries: {len(boundaries)} rings → {boundaries_path}")
     print(f"  Direction hypotheses: {direction_meta['files']}")
 
-    depth_map_path = os.path.join(tunnel_dir, "depth_map.npy")
-    valid_mask = None
-    if os.path.exists(depth_map_path):
-        depth_map = np.load(depth_map_path)
-        valid_mask = np.isfinite(depth_map)
-    class_ids = _build_class_ids_for_output(all_segments, detector_mode=detector_mode, tunnel_id=tunnel_id)
+    class_ids = _build_class_ids_for_output(
+        all_segments,
+        segment_count=segment_count,
+        enabled_blocks=enabled_blocks,
+    )
     labelmap = rasterize_labelmap(boundaries, H_full=L, W=W, class_ids=class_ids, valid_mask=valid_mask)
     detection_dir = os.path.join(tunnel_dir, "detection")
     os.makedirs(detection_dir, exist_ok=True)

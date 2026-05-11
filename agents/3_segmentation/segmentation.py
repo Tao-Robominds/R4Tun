@@ -29,6 +29,7 @@ import cv2
 # Segmentation overwrites these with block labels 1..N.
 PRED_SURFACE = 7
 EXPECTED_7_BLOCKS = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
+EXPECTED_6_BLOCKS = ["K", "B1", "A1", "A2", "A3", "B2"]
 
 DEFAULTS = {
     "ring_half_width": None,
@@ -62,9 +63,8 @@ def compute_block_to_label_map(segment_per_ring: int) -> dict:
     return {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
 
-def _expects_7_blocks(tunnel_id: str) -> bool:
-    """v3 K-bearing scope: family 4-* and 5-* are always 7-block rings."""
-    return str(tunnel_id).startswith(("4-", "5-"))
+def _expected_blocks_for_segment_count(segment_count: int) -> list[str]:
+    return list(EXPECTED_7_BLOCKS) if int(segment_count) == 7 else list(EXPECTED_6_BLOCKS)
 
 
 def _normalize_segments_df(segments_df: pd.DataFrame) -> pd.DataFrame:
@@ -82,7 +82,7 @@ def _normalize_segments_df(segments_df: pd.DataFrame) -> pd.DataFrame:
 
 def _ensure_expected_blocks_per_ring(
     *,
-    tunnel_id: str,
+    segment_count: int,
     segments_df: pd.DataFrame,
     boundaries_per_ring: dict | None,
     per_ring_offsets: dict | None,
@@ -95,17 +95,14 @@ def _ensure_expected_blocks_per_ring(
       - if K is missing or more than one block is missing, fail early
     """
     out = segments_df.copy()
+    expected_blocks = _expected_blocks_for_segment_count(segment_count)
     meta = {
         "status": "ok",
-        "expected_blocks": list(EXPECTED_7_BLOCKS),
+        "expected_blocks": list(expected_blocks),
         "rings": {},
         "repaired_rows": [],
     }
-    if not _expects_7_blocks(tunnel_id):
-        meta["status"] = "skipped_not_7block_scope"
-        return out, meta
-
-    expected = set(EXPECTED_7_BLOCKS)
+    expected = set(expected_blocks)
     for ring_idx in sorted(out["Ring"].unique()):
         ring_rows = out[out["Ring"] == ring_idx]
         observed = set(ring_rows["Block"].astype(str).unique())
@@ -476,27 +473,29 @@ def run_segmentation(
             boundaries_per_ring = json.load(f)
     per_ring_offsets = None
     det_params_path = os.path.join(tunnel_dir, "parameters_detection.json")
+    segment_count_cfg = 7
     if os.path.exists(det_params_path):
         try:
             with open(det_params_path, "r") as f:
                 det_params = json.load(f)
             if isinstance(det_params, dict):
                 per_ring_offsets = det_params.get("per_ring_offsets")
+                segment_count_cfg = int(det_params.get("segment_count", 7))
         except Exception:
             per_ring_offsets = None
+            segment_count_cfg = 7
+    if segment_count_cfg not in (6, 7):
+        segment_count_cfg = 7
+
     segments_df, completion_meta = _ensure_expected_blocks_per_ring(
-        tunnel_id=tunnel_id,
+        segment_count=segment_count_cfg,
         segments_df=segments_df,
         boundaries_per_ring=boundaries_per_ring,
         per_ring_offsets=per_ring_offsets,
     )
     slot_inset_y = params.get("slot_inset_y", DEFAULTS["slot_inset_y"])
 
-    segment_count = (
-        7
-        if _expects_7_blocks(tunnel_id)
-        else (1 + len(set(segments_df["Block"].unique()) - {"K"}))
-    )
+    segment_count = int(segment_count_cfg)
     block_to_label = compute_block_to_label_map(segment_count)
 
     if boundaries_per_ring is not None:
@@ -522,7 +521,7 @@ def run_segmentation(
     )
 
     updated_df = project_back_to_point_cloud(label_map, fix_ring, pixel_to_point, df)
-    expected_ids = set(range(1, 8)) if _expects_7_blocks(tunnel_id) else set(range(1, segment_count + 1))
+    expected_ids = set(range(1, segment_count + 1))
     updated_df, force_meta = _force_missing_labels_in_output(
         updated_df=updated_df,
         pixel_to_point=pixel_to_point,
@@ -561,7 +560,7 @@ def run_segmentation(
         json.dump(
             {
                 "status": "ok",
-                "expected_blocks": EXPECTED_7_BLOCKS if _expects_7_blocks(tunnel_id) else "derived",
+                "expected_blocks": _expected_blocks_for_segment_count(segment_count),
                 "completion_from_segments": completion_meta,
                 "completion_after_projection": force_meta,
                 "final_present_ids": final_ids,
@@ -578,7 +577,7 @@ def run_segmentation(
     if r_surface_min is not None:
         print(f"  r_surface_min: {r_surface_min}")
     print(f"  Output: {out_csv}")
-    if _expects_7_blocks(tunnel_id):
+    if segment_count == 7:
         print(f"  final present labels (1..7): {final_ids}")
 
     return {"df": updated_df, "label_map": label_map}

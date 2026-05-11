@@ -160,6 +160,7 @@ def build_enhancing_params(p: Dict[str, Any]) -> Dict[str, Any]:
         "num_interpolations": int(p.get("outlier_num_interpolations", p.get("num_interpolations", 2))),
         "resolution": float(p.get("depth_map_resolution", RESOLUTION_M)),
         "window_size": int(p.get("interpolation_window", 9)),
+        "depth_height_mode": str(p.get("depth_height_mode", "canonical")),
     }
 
 

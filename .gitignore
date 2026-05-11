@@ -224,3 +224,6 @@ logs/v3_arm_c_reflection_pilot_smoke/
 logs/v3_arm_c_reflection_pilot_v1/**/iter_*/
 logs/v3_arm_c_reflection_pilot_v1/**/reflection_packets/
 logs/v3_arm_c_reflection_pilot_v1/proxy_model/
+logs/v3_arm_c_reflection_40_v1/**/iter_*/
+logs/v3_arm_c_reflection_40_v1/**/reflection_packets/
+logs/v3_arm_c_reflection_40_v1/proxy_model/

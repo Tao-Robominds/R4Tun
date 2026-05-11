@@ -380,6 +380,45 @@ def canonical_theta_pixels(tunnel_diameter: float, resolution: float) -> int:
     return int(round(np.pi * float(tunnel_diameter) / float(resolution)))
 
 
+def _largest_false_run_circular(mask: np.ndarray) -> Tuple[int, int, int]:
+    """Return (length, start, end) for the largest false run on a circular mask."""
+    if mask.size == 0:
+        return 0, 0, 0
+    doubled = np.concatenate([mask, mask])
+    best_len, best_start = 0, 0
+    cur_len, cur_start = 0, 0
+    n = int(mask.size)
+    for i, v in enumerate(doubled):
+        if not bool(v):
+            if cur_len == 0:
+                cur_start = i
+            cur_len += 1
+            if cur_len > best_len and cur_len <= n:
+                best_len, best_start = cur_len, cur_start
+        else:
+            cur_len = 0
+    start = best_start % n
+    end = (best_start + best_len - 1) % n if best_len else start
+    return int(best_len), int(start), int(end)
+
+
+def _theta_gap_aligned(values: pd.Series, *, circumference: float, resolution: float) -> pd.Series:
+    """Rotate theta so the largest empty interval becomes the projection seam."""
+    if values.empty:
+        return values
+    can_h = canonical_theta_pixels(circumference / np.pi, resolution)
+    theta = values.astype(float).to_numpy()
+    bins = np.clip((np.mod(theta, circumference) / float(resolution)).astype(int), 0, can_h - 1)
+    occupied = np.zeros(can_h, dtype=bool)
+    occupied[bins] = True
+    gap_len, _gap_start, gap_end = _largest_false_run_circular(occupied)
+    if gap_len <= 0:
+        return values
+    seam_origin = ((gap_end + 1) % can_h) * float(resolution)
+    shifted = np.mod(theta - seam_origin, circumference)
+    return pd.Series(shifted, index=values.index)
+
+
 def run_ring_enhancing(
     df_point_cloud: pd.DataFrame,
     base_dir: str,
@@ -403,6 +442,7 @@ def run_ring_enhancing(
     num_interpolations = int(e["num_interpolations"])
     resolution = float(e["resolution"])
     window_size = int(e["window_size"])
+    depth_height_mode = str(e.get("depth_height_mode", "canonical")).strip().lower()
 
     df_support_filtered = df_point_cloud[df_point_cloud["pred"] != 0].copy()
     df_support_filtered_curva = compute_curvature(df_support_filtered)
@@ -438,17 +478,38 @@ def run_ring_enhancing(
     df_point_cloud.loc[meaningful_df.index, "pred"] = 0
 
     can_h = canonical_theta_pixels(tunnel_diameter, resolution)
+    canonical_height_px = (
+        None
+        if depth_height_mode in {"observed", "r4tun", "observed_gap_aligned", "r4tun_gap_aligned"}
+        else can_h
+    )
+
+    theta_segment = df_enhance_segment["theta"]
+    theta_joint = df_enhance_joint["theta"]
+    if depth_height_mode in {"observed_gap_aligned", "r4tun_gap_aligned"}:
+        circumference = np.pi * float(tunnel_diameter)
+        combined_theta = pd.concat([theta_segment, theta_joint], ignore_index=True)
+        shifted_combined = _theta_gap_aligned(
+            combined_theta,
+            circumference=circumference,
+            resolution=resolution,
+        )
+        n_seg = len(theta_segment)
+        theta_segment = shifted_combined.iloc[:n_seg].reset_index(drop=True)
+        theta_segment.index = df_enhance_segment.index
+        theta_joint = shifted_combined.iloc[n_seg:].reset_index(drop=True)
+        theta_joint.index = df_enhance_joint.index
 
     data_segment = {
         "index": df_enhance_segment.index,
         "x": df_enhance_segment["h"],
-        "y": df_enhance_segment["theta"],
+        "y": theta_segment,
         "z": df_enhance_segment["r"],
         "pred": df_enhance_segment["pred"],
     }
     data_joint = {
         "x": df_enhance_joint["h"],
-        "y": df_enhance_joint["theta"],
+        "y": theta_joint,
         "z": df_enhance_joint["r"],
         "pred": df_enhance_joint["pred"],
     }
@@ -459,7 +520,7 @@ def run_ring_enhancing(
         resolution=resolution,
         window_size=window_size,
         outlier_mode=False,
-        canonical_height_px=can_h,
+        canonical_height_px=canonical_height_px,
     )
 
     os.makedirs(base_dir, exist_ok=True)
@@ -473,7 +534,7 @@ def run_ring_enhancing(
 
     data_joint_2 = {
         "x": df_enhance_joint["h"],
-        "y": df_enhance_joint["theta"],
+        "y": theta_joint,
         "z": df_enhance_joint["r"],
         "pred": df_enhance_joint["pred"],
         "intensity": df_enhance_joint["intensity"],
@@ -486,7 +547,7 @@ def run_ring_enhancing(
         resolution=resolution,
         window_size=1,
         outlier_mode=True,
-        canonical_height_px=can_h,
+        canonical_height_px=canonical_height_px,
     )
     np.save(os.path.join(base_dir, "depth_map_outlier.npy"), depth_map_outlier)
 
