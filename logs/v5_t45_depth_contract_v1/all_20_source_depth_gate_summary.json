@@ -1,0 +1,33 @@
+{
+  "run_root": "/home/boringtao/Projects/Intrinsic/logs/v5_t45_depth_contract_v1",
+  "gate": "all_20_source_depth_gate",
+  "thresholds": {
+    "min_finite_ratio": 0.6,
+    "min_row_nonempty_ratio": 0.9,
+    "max_largest_empty_vertical_gap_frac": 0.08
+  },
+  "n_rings": 20,
+  "all_depth_maps_pass": false,
+  "failed_rings": [
+    "4-1/r110",
+    "4-10/r398",
+    "4-2/r142",
+    "4-3/r177",
+    "4-4/r212",
+    "4-5/r249",
+    "4-6/r276",
+    "4-7/r308",
+    "4-8/r332",
+    "4-9/r363",
+    "5-1/r118",
+    "5-2/r140",
+    "5-3/r192",
+    "5-3/r195",
+    "5-4/r227",
+    "5-5/r254",
+    "5-5/r259",
+    "5-6/r285",
+    "5-7/r317",
+    "5-7/r322"
+  ]
+}

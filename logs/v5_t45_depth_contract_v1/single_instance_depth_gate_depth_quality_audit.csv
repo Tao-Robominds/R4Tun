@@ -1,0 +1,3 @@
+ring_key,depth_map_path,depth_map_png,selected_interpolation_window,height_px,width_px,finite_ratio,row_nonempty_ratio,largest_empty_vertical_gap_px,largest_empty_vertical_gap_frac,depth_gate_pass,depth_gate_reason
+4-1/r110,logs/v5_t45_depth_contract_v1/4-1/r110/depth_map.npy,logs/v5_t45_depth_contract_v1/4-1/r110/depth_map.png,9,4378,372,0.7125602351935632,0.9264504339881224,91,0.020785746916400182,True,pass
+5-1/r118,logs/v5_t45_depth_contract_v1/5-1/r118/depth_map.npy,logs/v5_t45_depth_contract_v1/5-1/r118/depth_map.png,9,4454,378,0.8444089255719252,0.9425235743152223,93,0.02088010776829816,True,pass

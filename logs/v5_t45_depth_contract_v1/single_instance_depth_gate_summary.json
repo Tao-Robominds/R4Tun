@@ -1,0 +1,12 @@
+{
+  "run_root": "/home/boringtao/Projects/Intrinsic/logs/v5_t45_depth_contract_v1",
+  "gate": "single_instance_depth_gate",
+  "thresholds": {
+    "min_finite_ratio": 0.6,
+    "min_row_nonempty_ratio": 0.9,
+    "max_largest_empty_vertical_gap_frac": 0.08
+  },
+  "n_rings": 2,
+  "all_depth_maps_pass": true,
+  "failed_rings": []
+}
