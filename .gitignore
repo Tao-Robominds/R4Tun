@@ -218,7 +218,11 @@ bo/results/archive/
 bo4tun/training/
 
 # Local bulk experiment trees (too large for git / GitHub)
-stages/
+stages/*
+!stages/v5/
+!stages/v5/README.md
+!stages/v5/panels/
+!stages/v5/panels/v5_50ring_panel.csv
 logs/v3/
 logs/v3_arm_c_reflection_pilot_smoke/
 logs/v3_arm_c_reflection_pilot_v1/**/iter_*/
@@ -227,3 +231,13 @@ logs/v3_arm_c_reflection_pilot_v1/proxy_model/
 logs/v3_arm_c_reflection_40_v1/**/iter_*/
 logs/v3_arm_c_reflection_40_v1/**/reflection_packets/
 logs/v3_arm_c_reflection_40_v1/proxy_model/
+
+# Generated paper build outputs
+papers/main.abs
+papers/main.aux
+papers/main.out
+papers/main.pdf
+
+# Large local reference/sample artifacts
+r4tun/sample/*.pdf
+r4tun/sample/*.ipynb
