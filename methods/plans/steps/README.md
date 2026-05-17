@@ -9,9 +9,9 @@ Current paper workflow is:
 - `03_tuning_memory.md`
 - `04_intrinsics_and_ontology.md`
 - `05_proxy_and_calibration.md`
-- `06_reflection_ablation.md`
+- `06_diversity_expansion.md`
 - `07_generalisation_test.md`
 
-The current plan validates fixed stage proxies as reflection triggers. The main evidence is Spearman correlation plus threshold-trigger validation against final mIoU. Ridge regression, Platt calibration, and leave-one-out ablation are optional appendix analyses only.
+The current plan validates intrinsic proxies as empirical rewards for ring-level self-improvement. The main evidence is not LLM reflection. It is whether a proxy can predict or select mIoU-improving candidates, quantify its own confidence, expose out-of-distribution cases, and improve its confidence as BO experience becomes more diverse.
 
-Design-time history is preserved separately in `methods/plans/preparation/`.
+Design-time history is preserved separately in `methods/plans/preparation/`. Deprecated LLM/reflection material is treated as historical context only unless explicitly reintroduced.

@@ -1,41 +1,84 @@
-# 04 Fixed Intrinsic Proxies
+# 04 Proxy Family and Feature Ablation
 
 ## Goal
-Build fixed, GT-free combined proxies from pipeline outputs. The proxies are reflection triggers, not replacements for GT evaluation and not learned mIoU predictors.
+
+Define and compare intrinsic proxy candidates. The goal is to identify observable rewards that predict or select mIoU-improving candidates, not to claim interpretability without user-study evidence.
 
 ## Runtime Path
-Sandbox path: `logs/{run_id}/{tunnel_id}/r{ring_id}/04_intrinsics_and_ontology/`
+
+Sandbox path: `logs/{run_id}/{tunnel_id}/r{ring_id}/04_proxy_family/`
 
 ## Inputs
-- Stage BO artifacts and logs (step 02).
-- Trial dataset with final mIoU joins (step 03).
-- Preprocessing artifacts (`depth_map.npy`, masks, context files).
-- Detection/boundary artifacts (`all_segments.csv`, `final.csv`, boundary lines, K-line diagnostics).
 
-## Fixed proxies
-- `S_depth = S_coverage * S_empty`
-  - `S_coverage`: normalized valid foreground/depth coverage.
-  - `S_empty`: normalized penalty inverse for dominant empty components, near-empty valid ratio, and empty row/column bands.
-- `S_boundary = S_continuity * S_K * S_spacing * S_layout`
-  - `S_continuity`: boundary continuity and line support.
-  - `S_K`: key-segment/key-boundary support.
-  - `S_spacing`: spacing regularity.
-  - `S_layout`: segment/layout plausibility.
+- Candidate-level dataset from step 03.
+- Intrinsic feature groups from preprocessing, detection, layout, and candidate-distribution diagnostics.
+- Existing proxy variants with 1, 3, 4, and 12 intrinsic features.
+- BO surrogate uncertainty features where available.
 
-Each component must be normalized to `[0, 1]`, where higher is better.
+## V5 Observable Feature Watchlist
+
+Keep these v5-derived features visible from the one-shot BO stage onward:
+
+- 3-feature observable proxy: `struct_missing_ids_before_n`, `depth_row_nonempty_ratio_audit`, `geom_boundary_gap_cv`;
+- 4-feature balance proxy: the 3-feature set plus `balance_norm`;
+- boundary geometry: `geom_boundary_min_gap_frac`, `geom_boundary_max_gap_frac`, `geom_boundary_expected_resid_frac`;
+- K/order observables: `k_anchor_dist_frac`, `k_y_frac`, `horizontal_line_count`, `positive_line_count`, `negative_line_count`;
+- predicted-class distribution: `feat_present_ratio`, `feat_entropy`, `feat_cv`, `feat_max_share`, `feat_nonzero_classes`;
+- candidate descriptors for audit, not standalone proxy claims: `branch_is_minus`, `rotation_shift_num`, `anchor_frac`, `low_parity`.
+
+The plan should track both absolute feature values and deltas versus the deterministic baseline. Features that do not vary within a ring cannot explain candidate selection for that ring, even if they correlate across rings.
+
+## Proxy Families
+
+Compare simple, defensible proxy families before choosing a main paper model:
+
+- single-feature proxy: one strongest intrinsic signal;
+- 3-feature proxy: compact reward from the strongest independent feature groups;
+- 4-feature proxy: compact proxy with one additional stability/coverage signal;
+- 12-feature proxy: fuller observable proxy;
+- ridge / Huber-style linear proxy where useful for stable candidate ranking;
+- BO surrogate confidence as auxiliary evidence, not necessarily the final proxy.
+
+Each feature must be GT-free at runtime. GT mIoU is joined only for training and audit.
+
+## Order-Switching Boundary
+
+Order switching remains a proxy-calibration candidate operation, not a baseline preprocessing step. For each ring where order ambiguity exists:
+
+- generate the deterministic baseline;
+- generate the plausible switched-order candidate(s);
+- compute GT-free proxy features for each candidate;
+- select by higher proxy score;
+- audit whether the higher proxy score corresponds to higher GT mIoU.
+
+This directly tests whether the proxy can identify a better segmentation after switching order, rather than hiding the order correction inside the baseline.
 
 ## Actions
-1. Define the exact formula, normalization, clipping, and missing-artifact handling for each component.
-2. Compute `S_depth` for preprocessing trial outputs.
-3. Compute `S_boundary` for detection/boundary trial outputs.
-4. Join combined proxy scores to final mIoU for validation samples.
-5. Log component scores for diagnostics, but validate the combined proxies first.
-6. Only analyze sub-metric correlations if a combined proxy fails.
+
+1. Freeze the candidate feature list and normalization rules.
+2. Train or fit each proxy only on the allowed BO/few-shot training split.
+3. Evaluate both regression quality and selection quality:
+   - correlation with candidate GT mIoU;
+   - top-1 selected candidate mIoU;
+   - improvement over the deterministic baseline;
+   - rank agreement within each ring;
+   - robustness across condition clusters.
+4. Report feature-delta behavior from the one-shot seed before adding more shots.
+5. Evaluate order-switch pairs as a specific proxy-selection subtest.
+6. Record model complexity and feature count as part of the ablation.
+7. Select a main proxy based on validation performance and confidence calibration, not just average accuracy.
+8. Keep interpretability claims limited to observable feature definitions and ablation results.
 
 ## Outputs
-- `fixed_proxy_definitions.md`
-- `metric_bank.json`
-- `stage_proxy_scores.csv`
+
+- `proxy_feature_bank.json`
+- `v5_feature_watchlist.csv`
+- `one_shot_feature_delta_report.md`
+- `proxy_family_results.csv`
+- `order_switch_proxy_eval.csv`
+- `proxy_ablation_report.md`
+- `selected_proxy.json`
 
 ## Verify Prompt
-`Are S_depth and S_boundary fixed, normalized to [0, 1], computed without GT, and joined to final mIoU only for validation?`
+
+`Are proxy variants compared on the same split, with GT-free runtime features, candidate-selection metrics, and no unsupported interpretability claims?`
