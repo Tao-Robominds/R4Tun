@@ -1,4 +1,0 @@
-failure_reason,selected_tunnel_id,selected_ring_id,selected_ring_key,control_tunnel_id,control_ring_id,control_ring_key,n_candidates_for_reason
-dominant_empty_component,1-3,128,1-3/r128,1-3,127,1-3/r127,6
-many_empty_row_bands,2-3,221,2-3/r221,2-3,222,2-3/r222,14
-near_empty_valid_ratio,1-5,272,1-5/r272,1-5,273,1-5/r273,3

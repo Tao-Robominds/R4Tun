@@ -1,0 +1,152 @@
+{
+  "archive_id": "v5_archive_handoff_2026-05-17",
+  "moved_at_utc": "2026-05-17T07:32:25.890232+00:00",
+  "moved_count": 18,
+  "note": "All top-level logs/v5* directories were moved to stages/v5/logs/ for v6 handoff.",
+  "entries": [
+    {
+      "name": "v5_static_r4tun_baseline_v1",
+      "original_path": "logs/v5_static_r4tun_baseline_v1",
+      "archived_path": "stages/v5/logs/v5_static_r4tun_baseline_v1",
+      "bytes_before_move": 5101043897,
+      "artifact_category": "paper-critical-baseline",
+      "role": "SAM4Tun static 50-ring baseline used for final comparison (mean mIoU 0.1374)."
+    },
+    {
+      "name": "v5_stage_validation_v1",
+      "original_path": "logs/v5_stage_validation_v1",
+      "archived_path": "stages/v5/logs/v5_stage_validation_v1",
+      "bytes_before_move": 67236,
+      "artifact_category": "paper-critical-validation",
+      "role": "Canonical v5 held-out 50-ring stage validation scoreboards and summary tables."
+    },
+    {
+      "name": "v5_depth_contract_paper_audit_v1",
+      "original_path": "logs/v5_depth_contract_paper_audit_v1",
+      "archived_path": "stages/v5/logs/v5_depth_contract_paper_audit_v1",
+      "bytes_before_move": 10962,
+      "artifact_category": "paper-critical-depth-audit",
+      "role": "Consolidated depth quality audit/report for all 50 held-out rings."
+    },
+    {
+      "name": "v5_t123_depth_contract_v1",
+      "original_path": "logs/v5_t123_depth_contract_v1",
+      "archived_path": "stages/v5/logs/v5_t123_depth_contract_v1",
+      "bytes_before_move": 6969044743,
+      "artifact_category": "depth-stabilisation",
+      "role": "Depth-contract preprocessing and gate outputs for tunnel families 1-3."
+    },
+    {
+      "name": "v5_t45_depth_contract_v1",
+      "original_path": "logs/v5_t45_depth_contract_v1",
+      "archived_path": "stages/v5/logs/v5_t45_depth_contract_v1",
+      "bytes_before_move": 5692063946,
+      "artifact_category": "depth-stabilisation",
+      "role": "Depth-contract preprocessing and gate outputs for tunnel families 4-5."
+    },
+    {
+      "name": "v5_t123_kcenter_recovery_v1",
+      "original_path": "logs/v5_t123_kcenter_recovery_v1",
+      "archived_path": "stages/v5/logs/v5_t123_kcenter_recovery_v1",
+      "bytes_before_move": 34230584676,
+      "artifact_category": "recovery-self-refinement",
+      "role": "T1-T3 k-center recovery runs, candidate pool, issue logs, and family scoreboards."
+    },
+    {
+      "name": "v5_t1_regular_recovery_v2",
+      "original_path": "logs/v5_t1_regular_recovery_v2",
+      "archived_path": "stages/v5/logs/v5_t1_regular_recovery_v2",
+      "bytes_before_move": 5773969891,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Tunnel 1 regular recovery run and gate scoreboard outputs."
+    },
+    {
+      "name": "v5_t1_sub06_recovery_v3",
+      "original_path": "logs/v5_t1_sub06_recovery_v3",
+      "archived_path": "stages/v5/logs/v5_t1_sub06_recovery_v3",
+      "bytes_before_move": 24493801630,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Tunnel 1 sub-0.6 targeted recovery run with gate/oracle logs."
+    },
+    {
+      "name": "v5_t3_continuous_recovery_v1",
+      "original_path": "logs/v5_t3_continuous_recovery_v1",
+      "archived_path": "stages/v5/logs/v5_t3_continuous_recovery_v1",
+      "bytes_before_move": 11679364131,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Tunnel 3 continuous recovery run with candidate pools and gating."
+    },
+    {
+      "name": "v5_t3_gt_range_recovery_v1",
+      "original_path": "logs/v5_t3_gt_range_recovery_v1",
+      "archived_path": "stages/v5/logs/v5_t3_gt_range_recovery_v1",
+      "bytes_before_move": 11638666821,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Tunnel 3 GT-range recovery/ablation run used in selector development."
+    },
+    {
+      "name": "v5_t1_t3_unified_from_t2_v1",
+      "original_path": "logs/v5_t1_t3_unified_from_t2_v1",
+      "archived_path": "stages/v5/logs/v5_t1_t3_unified_from_t2_v1",
+      "bytes_before_move": 5548944148,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Intermediate unified T1/T3-from-T2 run retained as historical lineage."
+    },
+    {
+      "name": "v5_t1_t3_unified_from_t2_v2",
+      "original_path": "logs/v5_t1_t3_unified_from_t2_v2",
+      "archived_path": "stages/v5/logs/v5_t1_t3_unified_from_t2_v2",
+      "bytes_before_move": 34407536908,
+      "artifact_category": "recovery-self-refinement",
+      "role": "Unified T1/T3-from-T2 v2 run used for candidate/gate evidence."
+    },
+    {
+      "name": "v5_t3_intrinsic_selector_ablation_v1",
+      "original_path": "logs/v5_t3_intrinsic_selector_ablation_v1",
+      "archived_path": "stages/v5/logs/v5_t3_intrinsic_selector_ablation_v1",
+      "bytes_before_move": 1405030429,
+      "artifact_category": "bo-proxy-ablation",
+      "role": "T3 intrinsic selector ablations and ridge proxy experiments."
+    },
+    {
+      "name": "v5_adaptive_proxy_pilot_v1",
+      "original_path": "logs/v5_adaptive_proxy_pilot_v1",
+      "archived_path": "stages/v5/logs/v5_adaptive_proxy_pilot_v1",
+      "bytes_before_move": 100416092970,
+      "artifact_category": "bo-proxy-pilot",
+      "role": "Adaptive proxy pilot run producing pilot candidates/scoreboards."
+    },
+    {
+      "name": "v5_proxy_improvement_v1",
+      "original_path": "logs/v5_proxy_improvement_v1",
+      "archived_path": "stages/v5/logs/v5_proxy_improvement_v1",
+      "bytes_before_move": 7154454,
+      "artifact_category": "bo-proxy-training",
+      "role": "Proxy feature/training pool, formulas, and pilot comparison outputs."
+    },
+    {
+      "name": "v5_finer_proxy_search_v1",
+      "original_path": "logs/v5_finer_proxy_search_v1",
+      "archived_path": "stages/v5/logs/v5_finer_proxy_search_v1",
+      "bytes_before_move": 4460261,
+      "artifact_category": "bo-proxy-search",
+      "role": "Finer proxy search candidates, scoreboard, and failure-mode diagnostics."
+    },
+    {
+      "name": "v5_balance_norm_proxy_v1",
+      "original_path": "logs/v5_balance_norm_proxy_v1",
+      "archived_path": "stages/v5/logs/v5_balance_norm_proxy_v1",
+      "bytes_before_move": 2628259,
+      "artifact_category": "bo-proxy-final",
+      "role": "Final balance-norm proxy selection outputs including selected_scoreboard_50rings.csv (mean mIoU 0.4750)."
+    },
+    {
+      "name": "v5_t123_single_instance_gate_v1",
+      "original_path": "logs/v5_t123_single_instance_gate_v1",
+      "archived_path": "stages/v5/logs/v5_t123_single_instance_gate_v1",
+      "bytes_before_move": 1847,
+      "artifact_category": "gating-evidence",
+      "role": "Single-instance gate report artifact for tunnel 1 scaling checks."
+    }
+  ]
+}
