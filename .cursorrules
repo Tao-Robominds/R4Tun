@@ -32,8 +32,8 @@ These paths are read-only. NEVER write under them, NEVER point a `--base-dir` /
 `--output-dir` / scratch directory at them, NEVER use them as a sandbox for any
 BO trial, sweep, or experiment:
 
-- `data/ablation/**`, `data/bo/**` (includes user-promoted snapshots such as
-  `data/bo/preprocessing/**` — never delete or overwrite), `data/baseline/**`,
+- `data/ablation/**`, `data/bo/**` (6-ring BO-calibration frozen preprocessing),
+  `data/held-out/**` (50-ring held-out frozen preprocessing), `data/baseline/**`,
   `data/preprocessing_qa/**`, `data/represents/**`
 - `logs/context_preprocessing_v1/**` (fixed B+C+D baseline snapshot — read-only)
 - `data/<tunnel_id>/r*/**` (per-ring corpora; `tunnel_id` matches `\d+(?:-\d+)+`)
@@ -50,6 +50,18 @@ explicitly check the resolved value. If it falls under any prefix above, FIX
 the default before running. The only legitimate writer of `data/<tunnel>/r*/**`
 is `agents/1_preprocessing/scripts/run_all_rings.py` when the user explicitly
 asks to regenerate the corpus.
+
+## 3b) AGENTS-IMMUTABILITY (HARD RULE)
+
+As of 2026-05-29, `agents/**` is FROZEN. Validation confirmed capability-
+sufficiency: frozen preprocessing + searchable K/A/B offsets reaches near the
+GT-derived ceiling (1-1/r18: ceiling 0.882, BO 0.823, regret 0.059;
+`logs/aboffset_capability_v1/single_instance_gate.json`). Locked corpora:
+`data/bo/` (6/6 ceiling pass) and `data/held-out/` (50/50 ceiling pass) —
+read-only; all BO/eval outputs go to `logs/<run_id>/` only. Preprocessing QA:
+3a intrinsic guardrails + 3b ceiling ≥ 0.85 (`agents/1_preprocessing/knowledge.md`,
+`bo/lib/ceiling_gate.py`). Parameter/search changes only via
+`bo/**` and `logs/**`. If a task needs an `agents/**` edit, STOP and ask.
 
 ## 4) Goal-Driven Execution
 
