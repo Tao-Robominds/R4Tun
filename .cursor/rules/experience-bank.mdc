@@ -1,0 +1,130 @@
+---
+description: Locked BO experience bank — canonical schema, three pools, normalised features (paper).
+alwaysApply: true
+---
+
+# Experience bank (LOCKED)
+
+**Canonical artifacts (read-only — do not overwrite or regenerate without explicit user approval):**
+
+```
+methods/paper/experience/
+  experience_bank.csv                    # 1440 rows — one row per BO trial
+  experience_bank_schema.json
+  experience_bank_gate.json
+  proposal_anchors_sam4tun.csv           # 6 rings — SAM4Tun_static anchor (normalised)
+  proposal_templates_sam4tun.csv         # top-20% correction deltas per ring
+  proposal_templates_sam4tun_schema.json
+  proposal_templates_sam4tun_gate.json
+  proposal_good_form_gt_derived.csv          # 6 rings — form-range templates (v5, no GT positions)
+  proposal_good_form_gt_derived_exemplars.csv
+  proposal_good_form_gt_derived_schema.json
+  proposal_good_form_gt_derived_gate.json
+  failure_memory_random.csv                  # bottom-20% v3 failure exemplars
+  failure_memory_random_rules.csv
+  failure_memory_random_rules.json
+  failure_memory_random_schema.json
+  failure_memory_random_gate.json
+```
+
+Builder (sandbox only): `bo/build_experience_bank.py`, `bo/build_proposal_templates.py` → write under `logs/<run_id>/`, then **promote** to `methods/paper/experience/` only with user approval.
+
+## SAM4Tun proposal source (primary deployment recipe)
+
+From v4 pool (`source_type: SAM4Tun`), per ring:
+
+1. **Anchor:** `sam4tun_static` warm-start (`proposal_anchors_sam4tun.csv`)
+2. **Deltas:** top 20% trials by `label_gt_miou` per ring → `proposal_templates_sam4tun.csv`
+   - `delta_k_center_norm`, `delta_k_width_norm`
+   - `delta_ab_offset_norm_json`, `delta_form_params_json` (Hough / merge / snap / r_surface)
+3. **Deploy:** `candidate = SAM4Tun_prior + retrieved_successful_delta`
+
+Do not mix delta retrieval across rings or source types.
+
+## GT-derived good-form templates (local tuning, not GT anchor)
+
+From v5 pool (`source_type: GT-derived`), top 20% by mIoU per ring → `proposal_good_form_gt_derived.csv`:
+
+- **Teaches:** reasonable K width, A/B arc separation, boundary spacing, Hough/merge/snap/inset/r_surface bands, segment coverage/entropy — as **P10–P90 ranges** in `good_form_ranges_json`.
+- **Does NOT export:** GT `k_y`, A/B offsets, or oracle positions for runtime.
+- **Deploy:** apply ranges locally around **SAM4Tun**, **line-derived**, or **hybrid SAM–line** anchor — tune form near the right anchor, not where GT was.
+
+## Random failure memory (v3 filter)
+
+From v3 pool (`source_type: random`), bottom 20% by mIoU → `failure_memory_random.csv`:
+
+- **Tags:** `bad_k_shift`, `good_form_wrong_anchor`, `misleading_line_proxy`, `bad_layout_perturbation`, `low_miou`.
+- **Rules:** `failure_memory_random_rules.json` — reject candidates whose normalised K falls in failure band or matches failure tags; **penalise** when form coverage is high but `line_detection_confidence_K` is low (good form ≠ good mIoU if K is wrong).
+
+## Three source pools (480 trials each → 1440 total)
+
+| Pool | `experience_pool` | `source_type` | Trial logs |
+|------|-------------------|---------------|------------|
+| Failure memory | `v3` | `random` | `logs/bo_experience_v3/bo_trials.csv` |
+| SAM4Tun prior | `v4` | `SAM4Tun` | `logs/bo_experience_v4_sam4tun_prior/bo_trials.csv` |
+| GT-derived anchor | `v5` | `GT-derived` | `logs/bo_experience_v5_gt_derived/bo_trials.csv` |
+
+Corpus: read-only `data/bo_calibration/` (6 rings). Do **not** merge v1/v2 oracle pools.
+
+## Row contract (58 columns — see schema JSON)
+
+Each row = one BO trial with prefixed feature blocks:
+
+- **Identity:** `experience_id`, `ring_id`, `source_type`, `experience_pool`, `trial_id`, `trial_kind`
+- **Ring (`ring_*`):** `segment_count`, depth coverage / blank-band / row-nonempty ratios, `density_sparsity_slot`, `tunnel_id`, `tunnel_diameter_m`, `image_height`, `image_width`
+- **Line (`line_*`):** oblique/horizontal counts from detection logs; K/AB confidence from trial intrinsics
+- **Layout (`layout_*`):** normalised K + A/B offsets, boundaries, segment order, Hough/merge/snap/r_surface params
+- **Form (`form_*`):** missing-block hints, boundary gap, coverage, arc entropy, reclass count
+- **Label (`label_*`):** `gt_miou`, regret, rank within ring / ring+pool, success/failure flags
+
+## Normalisation (HARD — no raw pixel coords for cross-ring layout)
+
+K and offsets live on the **circumferential axis** (depth-map height `H`):
+
+- `layout_k_center_norm` = k_y / **image_height**
+- `layout_k_width_norm` = K arc span / **image_height**
+- `layout_ab_offset_norm_json` = per-block offset / **image_height**
+- `layout_k_center_norm_w` = k_y / image_width (secondary only)
+
+6-seg and 7-seg rings differ in geometry — never compare raw `k_y` or pixel offsets across rings.
+
+## Agent rules
+
+1. Treat `methods/paper/experience/**` as **immutable** (same tier as `data/bo_calibration/`).
+2. Proxy / retrieval / paper analysis must read the locked bank or schema — not re-derive ad hoc from sandbox CSVs.
+3. Rebuild flow: `./venv/bin/python bo/build_experience_bank.py --out-dir logs/<run_id>` → gate → user promotes to `methods/paper/experience/`.
+4. Do not collapse the three `source_type` pools into one without documenting which anchor each row came from.
+5. GT labels (`label_gt_miou`) are design-time only; runtime pipeline stays GT-free.
+
+## Stage A deploy retrieval (held-out candidate generation)
+
+Runtime reads locked bank + three proposal CSVs via `bo/lib/experience_retrieval.py` and `bo/run_held_out_candidates.py`.
+
+**Sandbox:** `logs/stage_a_candidates_v1/<tunnel>/r<ring>/`
+
+**Per ring pipeline:**
+
+1. `compute_sam4tun_prior` → C0 baseline (mandatory safety floor)
+2. Line evidence → `rho_K`, `rho_AB` (`bo/lib/line_reliability.py`)
+3. Two-stage retrieval: coarse calib-ring match (6 diversity slots) → fine top-k per pool (v4/v5/v3)
+4. 18-candidate pool (`bo/lib/candidate_generator.py`):
+
+| Type | Count | Source |
+|------|------:|--------|
+| `sam4tun_baseline` | 1 | SAM4Tun C0 |
+| `sam_plus_delta` | 4 | C0 + retrieved v4 deltas |
+| `line_derived` | 4 | line anchor + form jitter |
+| `hybrid_sam_line` | 4 | `(1-ρ)*SAM + ρ*line + delta` |
+| `gt_form_template` | 3 | clip form to v5 P10–P90 bands |
+| `diversity_explore` | 2 | geometric / LHS backup |
+
+**Hybrid blend (normalised space):**
+
+```
+K  = (1 - rho_K)  * K_SAM  + rho_K  * K_line  + delta_k
+AB = (1 - rho_AB) * AB_SAM + rho_AB * AB_line + delta_ab
+```
+
+**v3 failure filter:** reject/penalise via `failure_memory_random_rules.json`; never use v3 layouts as positive seeds.
+
+**Outputs per ring:** `candidate_pool.json`, `retrieval_audit.json`, `line_evidence.json`

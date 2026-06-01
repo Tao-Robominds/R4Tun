@@ -1,0 +1,42 @@
+{
+  "canonical_set": "A3_v5_held_out",
+  "status": "locked",
+  "locked_at": "2026-05-31",
+  "purpose": "held_out_stage_a_proxy_select",
+  "sandbox": "logs/bo_v5_proxy_v1",
+  "selection_regime": "bo_and_perturb_only",
+  "requires_seg_replay": true,
+  "note": "Three frozen Ridge proxies (A3 det/pre + v5/seg). Do not retrain on held-out.",
+  "variants": {
+    "p11": {
+      "name": "A3_v5_p11",
+      "label": "best",
+      "manifest": "logs/bo_v5_proxy_v1/PROXY_P11_MANIFEST.json",
+      "model": "logs/bo_v5_proxy_v1/proxy_p11.json",
+      "loro_mean_selected_miou": 0.7921960761401216,
+      "n_features": 11
+    },
+    "p10": {
+      "name": "A3_v5_p10",
+      "label": "balanced",
+      "manifest": "logs/bo_v5_proxy_v1/PROXY_P10_MANIFEST.json",
+      "model": "logs/bo_v5_proxy_v1/proxy_p10.json",
+      "loro_mean_selected_miou": 0.7674937609438612,
+      "n_features": 10
+    },
+    "p9": {
+      "name": "A3_v5_p9",
+      "label": "minimal",
+      "manifest": "logs/bo_v5_proxy_v1/PROXY_P9_MANIFEST.json",
+      "model": "logs/bo_v5_proxy_v1/proxy_p9.json",
+      "loro_mean_selected_miou": 0.6928855361994701,
+      "n_features": 9
+    }
+  },
+  "reference_baselines": {
+    "a3_slim": {
+      "manifest": "logs/bo_feature_enrichment_v1/PROXY_A3_SLIM_MANIFEST.json",
+      "loro_mean_selected_miou": 0.726
+    }
+  }
+}

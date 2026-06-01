@@ -15,6 +15,17 @@ def parse_ring_key(ring_key: str) -> tuple[str, int]:
     return tunnel_id, int(rr.replace("r", ""))
 
 
+SPARSE_SLOTS = frozenset({"sparse_6", "sparse_7"})
+
+
+def n_evals_for_ring_entry(entry: dict[str, Any], default: int = 60) -> int:
+    """Step 3 budget: sparse slots 120, representative slots 60."""
+    slot = entry.get("diversity_slot", "")
+    if slot in SPARSE_SLOTS:
+        return 120
+    return default
+
+
 def load_manifest_rings(
     manifest_path: Path,
     *,

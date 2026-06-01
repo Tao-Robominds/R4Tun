@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "criteria": {
+    "has_failure_rows": true,
+    "all_rings_have_failures": true,
+    "min_failures_per_ring": true,
+    "rules_per_ring": true,
+    "failure_tags_present": true
+  },
+  "n_failure_rows": 96,
+  "n_rule_rows": 6,
+  "expected_rings": 6,
+  "bottom_frac": 0.2,
+  "failures_per_ring": {
+    "1-1/r20": 12,
+    "1-4/r206": 24,
+    "1-5/r271": 12,
+    "4-1/r116": 12,
+    "4-6/r283": 24,
+    "5-5/r258": 12
+  },
+  "evidence_path": "methods/paper/experience/failure_memory_random_gate.json"
+}

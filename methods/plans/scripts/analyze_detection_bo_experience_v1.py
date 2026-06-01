@@ -18,7 +18,6 @@ DEFAULT_RUN = REPO_ROOT / "logs" / "v7_detection_bo_v1"
 INTRINSIC_CANDIDATES = [
     "det_y_coverage_pct",
     "det_block_count_per_ring",
-    "det_groove_alignment_pct",
     "det_ready_for_segmentation",
     "det_k_count_match",
     "det_min_y_gap_px",

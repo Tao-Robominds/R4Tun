@@ -1,0 +1,35 @@
+{
+  "status": "ok",
+  "selected_branch": "plus",
+  "score_plus": 0.5697010526867126,
+  "score_minus": -0.04146119442616136,
+  "margin": 0.6111622471128739,
+  "template_margin_minus_plus": -0.20372074903762463,
+  "template_switch_margin": 0.08,
+  "low_confidence": false,
+  "direction_select_enabled": true,
+  "branches": {
+    "plus": {
+      "template_match_score": 0.1845670175622375,
+      "det_y_order_consistency": 0.0,
+      "det_y_coverage_pct": 100.0,
+      "det_min_y_gap_px": 16.0,
+      "det_guardrail_passed": null,
+      "det_guardrail_violations": [],
+      "seg_missing_class_count": 2,
+      "composite_score": 0.5697010526867126,
+      "agent_error": false
+    },
+    "minus": {
+      "template_match_score": -0.019153731475387122,
+      "det_y_order_consistency": 0.0,
+      "det_y_coverage_pct": 100.0,
+      "det_min_y_gap_px": 16.0,
+      "det_guardrail_passed": null,
+      "det_guardrail_violations": [],
+      "seg_missing_class_count": 2,
+      "composite_score": -0.04146119442616136,
+      "agent_error": false
+    }
+  }
+}

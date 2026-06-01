@@ -13,8 +13,9 @@ alwaysApply: true
 2. **DATA-IMMUTABILITY (HARD RULE — NO EXCEPTIONS).** The following paths are **read-only** for every script, BO runner, agent, and shell command. They MUST NEVER be opened for writing, deleted, or used as a working directory by any tool that emits new outputs:
 
    - `data/ablation/**`
-   - `data/bo/**` (6-ring **BO-calibration** frozen preprocessing; all rings passed GT-derived ceiling ≥ 0.85 — see `data/bo/MANIFEST.json`; never delete or overwrite)
-   - `data/held-out/**` (50-ring **held-out evaluation** frozen preprocessing; all rings passed GT-derived ceiling ≥ 0.85 — see `data/held-out/_manifests/data_v6_50ring_summary.json`; never delete or overwrite)
+   - `data/bo/**` (legacy 6-ring BO-calibration corpus; superseded by `data/bo_calibration/` — still read-only)
+   - `data/bo_calibration/**` (canonical **6-ring diversity BO-calibration** corpus for proxy/BO design-time work and ablation; 6/6 ceiling ≥ 0.85 — see `data/bo_calibration/MANIFEST.json`, `methods/ablation/step_1.md`; never delete or overwrite)
+   - `data/held-out/**` (50-ring **held-out evaluation** frozen preprocessing for ablation final eval; 50/50 ceiling ≥ 0.85 — see `data/held-out/_manifests/data_v6_50ring_summary.json`; never delete or overwrite)
    - `data/baseline/**`
    - `data/preprocessing_qa/**`
    - `data/represents/**`
@@ -23,6 +24,7 @@ alwaysApply: true
    - `r4tun/data/**`
    - `r4tun/references/**`
    - `methods/plans/output/**`
+   - `methods/paper/experience/**` (locked 1440-row BO experience bank — see `.cursor/rules/experience-bank.mdc`)
 
    **All experiment / BO / sweep / trial outputs go under `logs/<run_id>/<tunnel>/r<ring>/`.** A runner that needs the baseline as input must **copy** the relevant files into its own `logs/...` sandbox and operate there.
 
@@ -54,16 +56,18 @@ alwaysApply: true
    - All capability changes happen via **parameters** and via **BO/sandbox runners** under `bo/**` and `logs/**`.
    - If a task seems to require an `agents/**` edit, STOP and raise it with the user first.
 
-12. **LOCKED PREPROCESSING CORPORA (CONFIRMED 2026-05-29).** Two promoted datasets are the canonical depth-map sources for design-time BO and held-out evaluation. They are **read-only** like `data/bo/**` above; all future BO trials, proxy training, and evaluation runs write outputs under `logs/<run_id>/` only.
+12. **LOCKED PREPROCESSING CORPORA (ablation study — DO NOT TOUCH).** Two promoted datasets are the canonical inputs for all future BO trials, proxy calibration, and ablation evaluation. They are **read-only**; all trial outputs write under `logs/<run_id>/` only.
 
    | Corpus | Path | Rings | Ceiling gate | Manifest |
    |---|---|---:|---|---|
-   | BO calibration | `data/bo/` | 6 | 6/6 ≥ 0.85 | `data/bo/MANIFEST.json` |
+   | BO calibration | `data/bo_calibration/` | 6 | 6/6 ≥ 0.85 | `data/bo_calibration/MANIFEST.json` |
    | Held-out evaluation | `data/held-out/` | 50 | 50/50 ≥ 0.85 | `data/held-out/_manifests/data_v6_50ring_summary.json` |
 
+   - **Never modify, delete, or write into `data/bo_calibration/**` or `data/held-out/**`.** Copy into a `logs/...` sandbox before any BO trial, sweep, or ablation run.
    - Runners must **copy** ring artifacts from these paths into a `logs/...` sandbox; never point `--data-dir`, `--base-dir`, or `--output-dir` at them for writes.
-   - Retune/promotion of a new corpus version requires explicit user approval, full 3a+3b re-gate, and a **new** path (e.g. `data/bo_v2/`) — never in-place overwrite.
-   - Evidence: `logs/calib_depthmap_ceiling_v1/gate.json`, `logs/v6_replacement_preprocessing_v1/gates/`, `logs/v6_preprocessing_passed_v1/MANIFEST.json`.
+   - Retune/promotion requires explicit user approval, full 3a+3b re-gate, and a **new** path (e.g. `data/bo_calibration_v2/`) — never in-place overwrite.
+   - Legacy `data/bo/` remains read-only but is superseded by `data/bo_calibration/` for ablation work.
+   - Step 1 panel evidence: `methods/ablation/step_1.md`, lineage `logs/bo_panel_regen_v1/`.
 
 13. **PREPROCESSING QA + CEILING GATES (CONFIRMED).** Use these as the standard acceptance contract before promoting any preprocessing corpus.
 

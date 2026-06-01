@@ -1,0 +1,8 @@
+{
+  "anchors": "/home/boringtao/Projects/Intrinsic/methods/paper/experience/proposal_anchors_sam4tun.csv",
+  "templates": "/home/boringtao/Projects/Intrinsic/methods/paper/experience/proposal_templates_sam4tun.csv",
+  "schema": "/home/boringtao/Projects/Intrinsic/methods/paper/experience/proposal_templates_sam4tun_schema.json",
+  "gate": "/home/boringtao/Projects/Intrinsic/methods/paper/experience/proposal_templates_sam4tun_gate.json",
+  "gate_passed": true,
+  "n_templates": 95
+}

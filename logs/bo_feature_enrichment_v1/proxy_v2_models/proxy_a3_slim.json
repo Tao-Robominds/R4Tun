@@ -1,0 +1,46 @@
+{
+  "alpha": 1.0,
+  "scaler_mean": [
+    0.7980553099258003,
+    0.1426976410700811,
+    5587.25,
+    538.125,
+    6938.879166666667,
+    1.705872900366444,
+    0.37063594760505797,
+    50.1375
+  ],
+  "scaler_scale": [
+    0.06204059634555003,
+    0.0770457832979167,
+    5752.876774927479,
+    228.44388670962505,
+    11102.203398893362,
+    0.14439831034601028,
+    0.21533972050686223,
+    21.14192738966814
+  ],
+  "coef": [
+    0.016769594386255998,
+    0.009893985376282185,
+    -0.0360960023612885,
+    0.07019731778300575,
+    0.04064441899299092,
+    0.07557623047847202,
+    -0.013684167929444768,
+    0.015121772401088496
+  ],
+  "intercept": 0.2887847139065113,
+  "level": "A3-slim",
+  "feature_columns": [
+    "feat_pre_row_nonempty_ratio",
+    "feat_pre_largest_empty_vertical_gap_frac",
+    "feat_pre_pre_depth_map_valid_pixels",
+    "feat_pre_pre_depth_map_max_empty_row_run",
+    "feat_intrinsic_n_reclassified_by_r_filter",
+    "feat_intrinsic_arc_width_entropy",
+    "param_k_y_frac",
+    "param_hough_oblique_threshold"
+  ],
+  "dropped_constant_columns": []
+}

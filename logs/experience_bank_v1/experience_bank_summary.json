@@ -1,0 +1,7 @@
+{
+  "n_rows": 1440,
+  "experience_bank": "/home/boringtao/Projects/Intrinsic/logs/experience_bank_v1/experience_bank.csv",
+  "schema": "/home/boringtao/Projects/Intrinsic/logs/experience_bank_v1/experience_bank_schema.json",
+  "gate": "/home/boringtao/Projects/Intrinsic/logs/experience_bank_v1/experience_bank_gate.json",
+  "gate_passed": true
+}

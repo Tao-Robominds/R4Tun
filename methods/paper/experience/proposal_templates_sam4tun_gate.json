@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "criteria": {
+    "anchor_per_ring": true,
+    "has_templates": true,
+    "all_rings_have_templates": true,
+    "min_templates_per_ring": true,
+    "delta_k_present": true,
+    "delta_ab_present": true
+  },
+  "n_anchors": 6,
+  "n_templates": 95,
+  "expected_rings": 6,
+  "top_frac": 0.2,
+  "templates_per_ring": {
+    "1-1/r20": 12,
+    "1-4/r206": 24,
+    "1-5/r271": 12,
+    "4-1/r116": 12,
+    "4-6/r283": 23,
+    "5-5/r258": 12
+  },
+  "mean_candidate_miou": 0.3484,
+  "evidence_path": "methods/paper/experience/proposal_templates_sam4tun_gate.json"
+}

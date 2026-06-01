@@ -1,0 +1,63 @@
+{
+  "segment_count": 6,
+  "search_dim": 13,
+  "layout_variables": [
+    "k_y (K position)",
+    "per_ring_offsets (A/B offsets)",
+    "hough_threshold (15.0\u201390.0, default=37.0)",
+    "hough_horizontal_threshold (10.0\u2013120.0, default=50.0)",
+    "merge_distance_threshold (1.0\u201312.0, default=3.0)",
+    "single_ring_visual_slot_snap_px (5.0\u201380.0, default=20.0)",
+    "slot_inset_y (0.0\u201325.0, default=0.0)",
+    "r_surface_min (ring-adaptive r_lo\u2013r_hi)"
+  ],
+  "excluded": "preprocessing, binary_threshold, full SAM4Tun space",
+  "r_surface_min_bounds": {
+    "lo": 2.7397,
+    "hi": 2.7535,
+    "otsu_ref": 2.4101,
+    "ceiling_ref": 2.7397
+  },
+  "params": [
+    {
+      "name": "hough_threshold",
+      "log_column": "hough_oblique_threshold",
+      "stage": "detection",
+      "lo": 15.0,
+      "hi": 90.0,
+      "default": 37.0
+    },
+    {
+      "name": "hough_horizontal_threshold",
+      "log_column": "hough_horizontal_threshold",
+      "stage": "detection",
+      "lo": 10.0,
+      "hi": 120.0,
+      "default": 50.0
+    },
+    {
+      "name": "merge_distance_threshold",
+      "log_column": "line_merge_distance",
+      "stage": "detection",
+      "lo": 1.0,
+      "hi": 12.0,
+      "default": 3.0
+    },
+    {
+      "name": "single_ring_visual_slot_snap_px",
+      "log_column": "line_snap_tolerance_px",
+      "stage": "detection",
+      "lo": 5.0,
+      "hi": 80.0,
+      "default": 20.0
+    },
+    {
+      "name": "slot_inset_y",
+      "log_column": "segmentation_slot_inset_y",
+      "stage": "segmentation",
+      "lo": 0.0,
+      "hi": 25.0,
+      "default": 0.0
+    }
+  ]
+}

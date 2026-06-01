@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-06-01T00:53:46.768946+00:00",
+  "case_id": "1-4/r206",
+  "command": "./venv/bin/python bo/run_layout_bo.py experience --only-ring 1-4/r206 --run-root logs/bo_experience_v3",
+  "target_n_evals": 120,
+  "best_bo_miou": 0.3794396976199277,
+  "ceiling_miou_reference": 0.9351,
+  "regret_vs_ceiling": 0.5556603023800724,
+  "n_oracle_trials": 0,
+  "experience_gate": {
+    "case_id": "1-4/r206",
+    "objective": "honest GT-labeled experience collection (no oracle layout trials)",
+    "n_oracle_trials": 0,
+    "target_n_evals": 120,
+    "n_evals": 120,
+    "n_perturb_trials": 24,
+    "perturb_trial_frac": 0.2,
+    "ceiling_miou_reference": 0.9351,
+    "best_bo_miou": 0.3794396976199277,
+    "regret_vs_ceiling": 0.5556603023800724,
+    "miou_std": 0.0692176202622731,
+    "random_phase_median_miou": 0.1061186926256758,
+    "bo_beats_random_median": true,
+    "criteria": {
+      "n_trials_complete": true,
+      "trial_schema_ok": true,
+      "miou_spread_ok": true,
+      "bo_improves_over_random": true,
+      "intrinsics_populated": true,
+      "perturb_fraction_ok": true,
+      "no_oracle_trials": true,
+      "direction_select_populated": true
+    },
+    "passed": true,
+    "outputs": {
+      "bo_trials": "logs/bo_experience_v3/1-4/r206/bo_trials.csv",
+      "best_bo_trial": "logs/bo_experience_v3/1-4/r206/best_bo_trial.json",
+      "ceiling": "logs/bo_experience_v3/1-4/r206/ceiling.json"
+    }
+  },
+  "honesty_gate": {
+    "passed": true,
+    "criteria": {
+      "non_empty": true,
+      "no_oracle_trials": true,
+      "direction_select_enabled": true,
+      "branch_selection_logged": true,
+      "miou_spread_ok": true
+    },
+    "details": {
+      "case_id": "panel",
+      "n_trials": 120,
+      "n_oracle_trials": 0,
+      "gt_miou_std": 0.0692
+    },
+    "per_ring": [
+      {
+        "passed": true,
+        "criteria": {
+          "non_empty": true,
+          "no_oracle_trials": true,
+          "direction_select_enabled": true,
+          "branch_selection_logged": true,
+          "miou_spread_ok": true
+        },
+        "details": {
+          "case_id": "1-4/r206",
+          "n_trials": 120,
+          "n_oracle_trials": 0,
+          "gt_miou_std": 0.0692
+        }
+      }
+    ],
+    "all_rings_passed": true
+  },
+  "pass_criterion": "experience_gate_passed and honesty_gate_passed and zero gt_layout trials",
+  "passed": true,
+  "evidence_path": "logs/bo_experience_v3/single_instance_gate.json"
+}

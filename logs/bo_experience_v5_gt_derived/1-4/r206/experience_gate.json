@@ -1,0 +1,31 @@
+{
+  "case_id": "1-4/r206",
+  "objective": "GT-labeled experience collection (GT-anchor warm-start)",
+  "warm_anchor": "gt_derived",
+  "n_oracle_trials": 2,
+  "target_n_evals": 120,
+  "n_evals": 120,
+  "n_perturb_trials": 24,
+  "perturb_trial_frac": 0.2,
+  "ceiling_miou_reference": 0.9351,
+  "gt_layout_ceiling_r_miou": 0.9169283635126143,
+  "best_bo_miou": 0.9169283635126143,
+  "regret_vs_ceiling": 0.018171636487385734,
+  "miou_std": 0.23021875330424296,
+  "criteria": {
+    "n_trials_complete": true,
+    "trial_schema_ok": true,
+    "miou_spread_ok": true,
+    "gt_ceiling_warm_present": true,
+    "gt_ceiling_warm_miou_ok": true,
+    "intrinsics_populated": true,
+    "perturb_fraction_ok": true,
+    "direction_select_populated": true
+  },
+  "passed": true,
+  "outputs": {
+    "bo_trials": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v5_gt_derived/1-4/r206/bo_trials.csv",
+    "best_bo_trial": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v5_gt_derived/1-4/r206/best_bo_trial.json",
+    "ceiling": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v5_gt_derived/1-4/r206/ceiling.json"
+  }
+}

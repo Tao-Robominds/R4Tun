@@ -1,0 +1,162 @@
+{
+  "run_root": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v5_gt_derived",
+  "passed": false,
+  "panel": {
+    "passed": false,
+    "criteria": {
+      "non_empty": true,
+      "n_trials_expected": true,
+      "gt_ceiling_warm_present": true,
+      "gt_ceiling_warm_miou_ok": false,
+      "has_oracle_warm": true,
+      "direction_select_enabled": true,
+      "miou_spread_ok": true
+    },
+    "details": {
+      "case_id": "panel",
+      "n_trials": 480,
+      "expected_n": 480,
+      "n_gt_layout_ceiling_r": 6,
+      "gt_layout_ceiling_r_miou_min": 0.3704,
+      "gt_layout_ceiling_r_miou": 0.7834,
+      "n_oracle_trials": 12,
+      "miou_std": 0.2154
+    }
+  },
+  "rings": [
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": true,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-1/r20",
+        "n_trials": 60,
+        "expected_n": 60,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.8549,
+        "gt_layout_ceiling_r_miou": 0.8549,
+        "n_oracle_trials": 2,
+        "miou_std": 0.2348
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": true,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-4/r206",
+        "n_trials": 120,
+        "expected_n": 120,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.9169,
+        "gt_layout_ceiling_r_miou": 0.9169,
+        "n_oracle_trials": 2,
+        "miou_std": 0.2302
+      }
+    },
+    {
+      "passed": false,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": false,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-5/r271",
+        "n_trials": 60,
+        "expected_n": 60,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.3704,
+        "gt_layout_ceiling_r_miou": 0.3704,
+        "n_oracle_trials": 2,
+        "miou_std": 0.1014
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": true,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "4-1/r116",
+        "n_trials": 60,
+        "expected_n": 60,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.9031,
+        "gt_layout_ceiling_r_miou": 0.9031,
+        "n_oracle_trials": 2,
+        "miou_std": 0.2379
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": true,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "4-6/r283",
+        "n_trials": 120,
+        "expected_n": 120,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.8268,
+        "gt_layout_ceiling_r_miou": 0.8268,
+        "n_oracle_trials": 2,
+        "miou_std": 0.2071
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "n_trials_expected": true,
+        "gt_ceiling_warm_present": true,
+        "gt_ceiling_warm_miou_ok": true,
+        "has_oracle_warm": true,
+        "direction_select_enabled": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "5-5/r258",
+        "n_trials": 60,
+        "expected_n": 60,
+        "n_gt_layout_ceiling_r": 1,
+        "gt_layout_ceiling_r_miou_min": 0.8283,
+        "gt_layout_ceiling_r_miou": 0.8283,
+        "n_oracle_trials": 2,
+        "miou_std": 0.2229
+      }
+    }
+  ],
+  "n_rings": 6,
+  "n_rings_passed": 5
+}

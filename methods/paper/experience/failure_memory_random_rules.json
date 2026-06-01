@@ -1,0 +1,90 @@
+{
+  "description": "Failure memory from v3 random BO for deploy-time reject/penalise filters",
+  "filter_recipe": "reject candidate near failure exemplar k/AB patterns; penalise high form_segment_coverage_pct when line_detection_confidence_K is low",
+  "per_ring_rules": [
+    {
+      "ring_id": "1-1/r20",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.013676,
+      "reject_k_center_norm_hi": 0.723118,
+      "reject_k_shift_norm_abs_p90": 0.459149,
+      "reject_miou_upper_bound": 0.1083,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.1268,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 12,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    },
+    {
+      "ring_id": "1-4/r206",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.095312,
+      "reject_k_center_norm_hi": 0.867169,
+      "reject_k_shift_norm_abs_p90": 0.590052,
+      "reject_miou_upper_bound": 0.1141,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.1185,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 24,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    },
+    {
+      "ring_id": "1-5/r271",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.053404,
+      "reject_k_center_norm_hi": 0.689328,
+      "reject_k_shift_norm_abs_p90": 0.515485,
+      "reject_miou_upper_bound": 0.1388,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.155,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 12,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    },
+    {
+      "ring_id": "4-1/r116",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.479127,
+      "reject_k_center_norm_hi": 0.608304,
+      "reject_k_shift_norm_abs_p90": 0.153862,
+      "reject_miou_upper_bound": 0.1249,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.1349,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 12,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    },
+    {
+      "ring_id": "4-6/r283",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.032334,
+      "reject_k_center_norm_hi": 0.957918,
+      "reject_k_shift_norm_abs_p90": 0.641867,
+      "reject_miou_upper_bound": 0.0588,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.0796,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 24,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    },
+    {
+      "ring_id": "5-5/r258",
+      "source_type": "random",
+      "source_pool": "v3",
+      "reject_k_center_norm_lo": 0.229124,
+      "reject_k_center_norm_hi": 0.773242,
+      "reject_k_shift_norm_abs_p90": 0.40942,
+      "reject_miou_upper_bound": 0.0779,
+      "penalise_coverage_min": 100.0,
+      "penalise_miou_max": 0.0906,
+      "penalise_k_confidence_max": 1.0,
+      "n_failure_exemplars": 12,
+      "filter_recipe": "reject if layout_k_center_norm in [reject_k_center_norm_lo, reject_k_center_norm_hi] or failure_tags match bad_k_shift; penalise if form_segment_coverage_pct >= penalise_coverage_min AND line_detection_confidence_K <= penalise_k_confidence_max (good form does not guarantee good mIoU when K is wrong)"
+    }
+  ]
+}

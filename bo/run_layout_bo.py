@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,13 +30,17 @@ from lib.layout_bo import (  # noqa: E402
 )
 from lib.manifest import (  # noqa: E402
     load_manifest_rings,
+    n_evals_for_ring_entry,
     parse_ring_key,
     write_experience_panel_summary,
 )
 from lib.verify import verify_ring  # noqa: E402
 
-DEFAULT_BO_MANIFEST = REPO_ROOT / "data" / "bo" / "MANIFEST.json"
-DEFAULT_BO_SOURCE = REPO_ROOT / "data" / "bo"
+HONESTY_GATE = REPO_ROOT / "bo" / "check_experience_honesty_gate.py"
+GT_EXPERIENCE_GATE = REPO_ROOT / "bo" / "check_gt_experience_gate.py"
+
+DEFAULT_BO_MANIFEST = REPO_ROOT / "data" / "bo_calibration" / "MANIFEST.json"
+DEFAULT_BO_SOURCE = REPO_ROOT / "data" / "bo_calibration"
 DEFAULT_MINIMUM_MANIFEST = REPO_ROOT / "data" / "minimum" / "MANIFEST.json"
 DEFAULT_MINIMUM_SOURCE = REPO_ROOT / "data" / "minimum"
 
@@ -76,6 +81,7 @@ def cmd_ceiling_push(args: argparse.Namespace) -> int:
             source_root=source,
             run_root=run_root,
             segment_count=seg,
+            manifest_entry=entry,
             order_branch=branch,
             eval_chunk=args.eval_chunk,
             max_total_evals=args.max_total_evals,
@@ -107,6 +113,38 @@ def cmd_ceiling_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_subprocess_gate(script: Path, run_root: Path, extra_args: list[str] | None = None) -> dict:
+    out_name = script.stem.replace("check_", "") + ".json"
+    if script.name == "check_gt_experience_gate.py":
+        out_name = "gt_experience_gate.json"
+    elif script.name == "check_experience_honesty_gate.py":
+        out_name = "honesty_gate.json"
+    out = run_root / out_name
+    cmd = [str(REPO_ROOT / "venv" / "bin" / "python"), str(script), "--run-root", str(run_root)]
+    if extra_args:
+        cmd.extend(extra_args)
+    proc = subprocess.run(
+        cmd,
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if out.is_file():
+        return json.loads(out.read_text(encoding="utf-8"))
+    return {"passed": False, "error": proc.stderr or proc.stdout}
+
+
+def _run_honesty_gate(run_root: Path, *, expected_n: int | None = None) -> dict:
+    extra = [f"--expected-n={expected_n}"] if expected_n is not None else None
+    return _run_subprocess_gate(HONESTY_GATE, run_root, extra)
+
+
+def _run_gt_experience_gate(run_root: Path, *, expected_n: int | None = None) -> dict:
+    extra = [f"--expected-n={expected_n}"] if expected_n is not None else None
+    return _run_subprocess_gate(GT_EXPERIENCE_GATE, run_root, extra)
+
+
 def cmd_experience(args: argparse.Namespace) -> int:
     source = Path(args.source_dir).resolve()
     run_root = Path(args.run_root).resolve()
@@ -131,16 +169,24 @@ def cmd_experience(args: argparse.Namespace) -> int:
         tunnel_id, ring_id = parse_ring_key(ring_key)
         branch = entry.get("order_branch_default", args.order_branch)
         seg = entry.get("segment_count") or args.segment_count
-        print(f"\n{'=' * 60}\nExperience BO: {ring_key} (branch={branch})\n{'=' * 60}")
+        n_evals = n_evals_for_ring_entry(entry, default=args.n_evals) if entry.get("diversity_slot") else args.n_evals
+        mode_label = "GT-anchor" if args.warm_anchor == "gt_derived" else "Honest"
+        print(f"\n{'=' * 60}\n{mode_label} experience BO: {ring_key} (n_evals={n_evals})\n{'=' * 60}")
+        prior_root = None if args.warm_anchor == "gt_derived" else (
+            Path(args.prior_root).resolve() if args.prior_root else None
+        )
         result = run_ring_bo(
             tunnel_id,
             ring_id,
             source_root=source,
             run_root=run_root,
-            n_evals=args.n_evals,
+            n_evals=n_evals,
             seed=args.seed,
             segment_count=seg,
+            manifest_entry=entry,
             order_branch=branch,
+            prior_root=prior_root,
+            warm_anchor=args.warm_anchor,
         )
         gate = result["gate"]
         best = result["bo_result"]["best_payload"]
@@ -152,15 +198,73 @@ def cmd_experience(args: argparse.Namespace) -> int:
             "regret_vs_ceiling": gate.get("regret_vs_ceiling"),
             "miou_std": gate["miou_std"],
             "experience_gate_passed": gate["passed"],
+            "best_layout_params": best.get("best_layout_params"),
             "best_r_surface_min": best.get("best_r_surface_min"),
+            "r_surface_min_ceiling_ref": best.get("r_surface_min_ceiling_ref"),
             "best_k_y": best.get("best_k_y"),
         })
+
+    gt_gate_args: dict[str, int | None] = {}
+    if args.only_ring and summaries:
+        gt_gate_args["expected_n"] = summaries[0]["n_trials"]
+    elif args.warm_anchor == "gt_derived" and len(rings) > 1:
+        gt_gate_args["expected_n"] = 480
 
     if len(rings) > 1 or not args.tunnel_id:
         summary = write_experience_panel_summary(run_root, Path(args.manifest), summaries)
         print(json.dumps(summary, indent=2))
+        if args.warm_anchor == "gt_derived":
+            gt_gate = _run_gt_experience_gate(run_root, **gt_gate_args)
+            print(f"== panel GT experience gate: passed={gt_gate.get('passed')} ==")
+        else:
+            honesty = _run_honesty_gate(run_root)
+            print(f"== panel honesty gate: passed={honesty.get('passed')} ==")
     elif summaries:
         print(json.dumps(summaries[0], indent=2))
+
+    if args.warm_anchor == "gt_derived":
+        panel_gate = _run_gt_experience_gate(run_root, **gt_gate_args)
+    else:
+        panel_gate = _run_honesty_gate(run_root)
+
+    if args.only_ring and summaries:
+        gate = summaries[0]
+        if args.warm_anchor == "gt_derived":
+            pass_criterion = "experience_gate_passed and gt_experience_gate_passed"
+            passed = bool(gate["experience_gate_passed"] and panel_gate.get("passed"))
+            single = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "case_id": gate["ring_key"],
+                "command": (
+                    "bo/run_layout_bo.py experience --warm-anchor gt_derived "
+                    f"--only-ring {gate['ring_key']} --run-root {run_root}"
+                ),
+                "warm_anchor": args.warm_anchor,
+                "target_n_evals": gate["n_trials"],
+                "experience_gate": gate,
+                "gt_experience_gate": panel_gate,
+                "pass_criterion": pass_criterion,
+                "passed": passed,
+                "evidence_path": str(run_root / "single_instance_gate.json"),
+            }
+        else:
+            single = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "case_id": gate["ring_key"],
+                "command": "bo/run_layout_bo.py experience --only-ring ... --run-root logs/bo_experience_v4_sam4tun_prior",
+                "target_n_evals": gate["n_trials"],
+                "experience_gate": gate,
+                "honesty_gate": panel_gate,
+                "pass_criterion": "experience_gate_passed and honesty_gate_passed and zero gt_layout trials",
+                "passed": bool(gate["experience_gate_passed"] and panel_gate.get("passed")),
+                "evidence_path": str(run_root / "single_instance_gate.json"),
+            }
+        (run_root / "single_instance_gate.json").write_text(json.dumps(single, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(single, indent=2))
+        return 0 if single["passed"] else 1
+
+    if len(rings) > 1 and not panel_gate.get("passed"):
+        return 1
 
     return 0
 
@@ -188,6 +292,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
                 run_root=run_root,
                 order_branch=branch,
                 segment_count=seg,
+                manifest_entry=entry,
             )
         )
 
@@ -210,11 +315,22 @@ def main() -> int:
 
     exp = sub.add_parser("experience", help="Fixed-budget trial collection")
     _add_corpus_args(exp)
-    exp.add_argument("--n-evals", type=int, default=64)
+    exp.add_argument("--n-evals", type=int, default=60, help="Default evals for non-sparse rings (sparse=120 via manifest slot)")
     exp.add_argument("--tunnel-id", default=None, help="Single ring without manifest")
     exp.add_argument("--ring-id", type=int, default=None)
     exp.add_argument("--segment-count", type=int, default=None, choices=[6, 7])
     exp.add_argument("--order-branch", default="plus", choices=["plus", "minus"])
+    exp.add_argument(
+        "--prior-root",
+        default=str(REPO_ROOT / "logs" / "sam4tun_prior_v1"),
+        help="SAM4Tun prior JSON root from build_sam4tun_prior.py (ignored when --warm-anchor gt_derived)",
+    )
+    exp.add_argument(
+        "--warm-anchor",
+        default="sam4tun",
+        choices=["sam4tun", "geometric", "gt_derived"],
+        help="Warm-start policy: sam4tun (v4), geometric (v3), gt_derived (v5 GT-anchor)",
+    )
     exp.set_defaults(func=cmd_experience)
 
     ver = sub.add_parser("verify", help="GT layout encode/decode smoke test")

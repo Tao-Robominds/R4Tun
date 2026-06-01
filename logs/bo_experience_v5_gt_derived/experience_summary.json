@@ -1,0 +1,15 @@
+{
+  "n_rings": 6,
+  "n_total_trials": 480,
+  "rings_passed_experience_gate": 5,
+  "rings_passed_gt_warm_gate": 5,
+  "n_oracle_trials_total": 12,
+  "warm_anchor": "gt_derived",
+  "mean_best_miou": 0.8334,
+  "mean_regret": 0.0601,
+  "panel_summary": "logs/bo_experience_v5_gt_derived/panel_summary.csv",
+  "bo_trials": "logs/bo_experience_v5_gt_derived/bo_trials.csv",
+  "gt_experience_gate": "logs/bo_experience_v5_gt_derived/gt_experience_gate.json",
+  "single_instance_gate": "logs/bo_experience_v5_gt_derived/single_instance_gate.json",
+  "vs_v3_v4_v5_summary": "logs/bo_experience_v5_gt_derived/vs_v3_v4_v5_summary.md"
+}

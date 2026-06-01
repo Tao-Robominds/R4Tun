@@ -1,0 +1,65 @@
+{
+  "name": "A3-slim",
+  "target": "response_gt_miou",
+  "alpha": 1.0,
+  "intercept_standardized": 0.2887847139065113,
+  "features": [
+    {
+      "column": "feat_pre_row_nonempty_ratio",
+      "mean": 0.7980553099258003,
+      "std": 0.06204059634555003,
+      "weight_standardized": 0.016769594386255998,
+      "weight_raw": 0.27030034161589467
+    },
+    {
+      "column": "feat_pre_largest_empty_vertical_gap_frac",
+      "mean": 0.1426976410700811,
+      "std": 0.0770457832979167,
+      "weight_standardized": 0.009893985376282185,
+      "weight_raw": 0.12841696135432393
+    },
+    {
+      "column": "feat_pre_pre_depth_map_valid_pixels",
+      "mean": 5587.25,
+      "std": 5752.876774927479,
+      "weight_standardized": -0.0360960023612885,
+      "weight_raw": -6.274426478002135e-06
+    },
+    {
+      "column": "feat_pre_pre_depth_map_max_empty_row_run",
+      "mean": 538.125,
+      "std": 228.44388670962505,
+      "weight_standardized": 0.07019731778300575,
+      "weight_raw": 0.00030728472884123856
+    },
+    {
+      "column": "feat_intrinsic_n_reclassified_by_r_filter",
+      "mean": 6938.879166666667,
+      "std": 11102.203398893362,
+      "weight_standardized": 0.04064441899299092,
+      "weight_raw": 3.660932657479708e-06
+    },
+    {
+      "column": "feat_intrinsic_arc_width_entropy",
+      "mean": 1.705872900366444,
+      "std": 0.14439831034601028,
+      "weight_standardized": 0.07557623047847202,
+      "weight_raw": 0.5233872217574753
+    },
+    {
+      "column": "param_k_y_frac",
+      "mean": 0.37063594760505797,
+      "std": 0.21533972050686223,
+      "weight_standardized": -0.013684167929444768,
+      "weight_raw": -0.06354688255949834
+    },
+    {
+      "column": "param_hough_oblique_threshold",
+      "mean": 50.1375,
+      "std": 21.14192738966814,
+      "weight_standardized": 0.015121772401088496,
+      "weight_raw": 0.0007152504179197192
+    }
+  ],
+  "intercept_raw": -1.006098467957313
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "1-4/r206",
+  "best_bo_miou": 0.3794396976199277,
+  "best_k_y": 1431.2738505093057,
+  "best_offsets": {
+    "K": 0.0,
+    "B1": 2442.7572029777134,
+    "A1": 365.17474429150707,
+    "A2": 113.90664029138577,
+    "A3": 1736.4981091160057,
+    "B2": 1365.4352381580784
+  },
+  "best_layout_params": {
+    "hough_threshold": 63.0,
+    "hough_horizontal_threshold": 42.0,
+    "line_merge_distance": 9.8276,
+    "line_snap_tolerance_px": 61.751,
+    "slot_inset_y": 8.2067
+  },
+  "best_r_surface_min": 2.7401,
+  "n_evals": 120,
+  "ceiling_miou_reference": 0.9351
+}

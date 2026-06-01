@@ -1,0 +1,42 @@
+{
+  "description": "SAM4Tun prior + correction delta proposal templates (top trials per ring)",
+  "source_pool": "v4",
+  "source_type": "SAM4Tun",
+  "deployment_recipe": "candidate = SAM4Tun_prior + retrieved_successful_delta",
+  "top_frac": 0.2,
+  "anchor_columns": [
+    "ring_id",
+    "source_type",
+    "anchor_experience_id",
+    "anchor_trial_kind",
+    "anchor_k_center_norm",
+    "anchor_k_width_norm",
+    "anchor_ab_offset_norm_json",
+    "anchor_arc_width_norm_json",
+    "anchor_form_params_json",
+    "anchor_label_gt_miou",
+    "ring_segment_count",
+    "ring_image_height",
+    "ring_image_width",
+    "deployment_base"
+  ],
+  "template_columns": [
+    "proposal_id",
+    "ring_id",
+    "source_type",
+    "anchor_experience_id",
+    "candidate_experience_id",
+    "candidate_trial_kind",
+    "delta_k_center_norm",
+    "delta_k_width_norm",
+    "delta_ab_offset_norm_json",
+    "delta_arc_width_norm_json",
+    "delta_form_params_json",
+    "label_gt_miou",
+    "label_regret_vs_ceiling",
+    "label_rank_within_ring_pool",
+    "label_success_flag",
+    "top_frac_bucket",
+    "deployment_recipe"
+  ]
+}

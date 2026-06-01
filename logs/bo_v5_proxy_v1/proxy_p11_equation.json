@@ -1,0 +1,86 @@
+{
+  "name": "A3_v5_p11",
+  "target": "response_gt_miou",
+  "alpha": 1.0,
+  "intercept_standardized": 0.3099580254426599,
+  "intercept_raw": 0.11543510075921015,
+  "features": [
+    {
+      "column": "feat_pre_row_nonempty_ratio",
+      "mean": 0.7980553099258003,
+      "std": 0.06204059634555003,
+      "weight_standardized": -0.0472519737268739,
+      "weight_raw": -0.7616299086438928
+    },
+    {
+      "column": "feat_pre_pre_depth_map_valid_pixels",
+      "mean": 5587.25,
+      "std": 5752.876774927479,
+      "weight_standardized": -0.06346273951474135,
+      "weight_raw": -1.103147903173041e-05
+    },
+    {
+      "column": "feat_intrinsic_n_reclassified_by_r_filter",
+      "mean": 6935.643229166667,
+      "std": 11090.85393021477,
+      "weight_standardized": 0.06343535172478729,
+      "weight_raw": 5.719609339725466e-06
+    },
+    {
+      "column": "feat_intrinsic_arc_width_entropy",
+      "mean": 1.6986777336559447,
+      "std": 0.14739915308130297,
+      "weight_standardized": 0.04113172377086641,
+      "weight_raw": 0.2790499328593755
+    },
+    {
+      "column": "param_k_y_frac",
+      "mean": 0.3599704275115169,
+      "std": 0.18047255933108283,
+      "weight_standardized": -0.01601711518337058,
+      "weight_raw": -0.08875097268381205
+    },
+    {
+      "column": "param_hough_oblique_threshold",
+      "mean": 50.315104166666664,
+      "std": 21.251769068263847,
+      "weight_standardized": 0.018289146621727554,
+      "weight_raw": 0.0008605940786849364
+    },
+    {
+      "column": "v5_balance_norm",
+      "mean": 0.5534112193461845,
+      "std": 0.082755888932664,
+      "weight_standardized": 0.032835311409463816,
+      "weight_raw": 0.39677310984093145
+    },
+    {
+      "column": "v5_geom_boundary_gap_cv",
+      "mean": 0.7443495620117555,
+      "std": 0.306401302435643,
+      "weight_standardized": 0.00799429122539706,
+      "weight_raw": 0.026090917897048406
+    },
+    {
+      "column": "v5_S_boundary",
+      "mean": 0.2744282606913217,
+      "std": 0.23018511147008644,
+      "weight_standardized": 0.0464207150416002,
+      "weight_raw": 0.20166688777189992
+    },
+    {
+      "column": "seg_k_size_ratio",
+      "mean": 13.430254754060925,
+      "std": 13.236645952612411,
+      "weight_standardized": -0.01898112805771048,
+      "weight_raw": -0.0014339832103739485
+    },
+    {
+      "column": "seg_groove_score",
+      "mean": 7.1684653125703335,
+      "std": 3.5974105802013496,
+      "weight_standardized": 0.03204705829487854,
+      "weight_raw": 0.008908368277797427
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "case_id": "5-5/r258",
+  "best_bo_miou": 0.8282975144376041,
+  "best_k_y": 522.6503075772691,
+  "best_offsets": {
+    "K": 0.0,
+    "B1": 3913.206677870483,
+    "A1": 3177.802496193929,
+    "A2": 2443.4079546680523,
+    "A3": 1709.6806908105045,
+    "A4": 973.7782665652599,
+    "B2": 245.4530089214346
+  },
+  "best_layout_params": {
+    "hough_threshold": 37.0,
+    "hough_horizontal_threshold": 50.0,
+    "merge_distance_threshold": 3.0,
+    "single_ring_visual_slot_snap_px": 20.0,
+    "slot_inset_y": 0.0
+  },
+  "best_r_surface_min": 3.7349,
+  "r_surface_min_ceiling_ref": 3.7349,
+  "n_evals": 60,
+  "ceiling_miou_reference": 0.8745,
+  "order_branch": "plus",
+  "direction_selected_branch": "plus"
+}

@@ -1,0 +1,22 @@
+{
+  "n_rings": 2,
+  "all_passed": true,
+  "rings": [
+    {
+      "ring_key": "1-1/r19",
+      "segment_count": 6,
+      "tunnel_diameter": 5.5,
+      "corpus": "held-out",
+      "ring_site_params_path": "logs/ring_site_params_v1/1-1_r19/ring_site_params.json",
+      "passed": true
+    },
+    {
+      "ring_key": "4-7/r308",
+      "segment_count": 7,
+      "tunnel_diameter": 7.5,
+      "corpus": "held-out",
+      "ring_site_params_path": "logs/ring_site_params_v1/4-7_r308/ring_site_params.json",
+      "passed": true
+    }
+  ]
+}

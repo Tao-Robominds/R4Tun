@@ -1,0 +1,31 @@
+{
+  "case_id": "4-6/r283",
+  "objective": "honest GT-labeled experience collection (no oracle layout trials)",
+  "n_oracle_trials": 0,
+  "target_n_evals": 120,
+  "n_evals": 120,
+  "n_perturb_trials": 24,
+  "perturb_trial_frac": 0.2,
+  "ceiling_miou_reference": 0.8686,
+  "best_bo_miou": 0.8055310465609322,
+  "regret_vs_ceiling": 0.06306895343906782,
+  "miou_std": 0.19910244658809326,
+  "random_phase_median_miou": 0.09821137645957234,
+  "bo_beats_random_median": true,
+  "criteria": {
+    "n_trials_complete": true,
+    "trial_schema_ok": true,
+    "miou_spread_ok": true,
+    "bo_improves_over_random": true,
+    "intrinsics_populated": true,
+    "perturb_fraction_ok": true,
+    "no_oracle_trials": true,
+    "direction_select_populated": true
+  },
+  "passed": true,
+  "outputs": {
+    "bo_trials": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v4_sam4tun_prior/4-6/r283/bo_trials.csv",
+    "best_bo_trial": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v4_sam4tun_prior/4-6/r283/best_bo_trial.json",
+    "ceiling": "/home/boringtao/Projects/Intrinsic/logs/bo_experience_v4_sam4tun_prior/4-6/r283/ceiling.json"
+  }
+}

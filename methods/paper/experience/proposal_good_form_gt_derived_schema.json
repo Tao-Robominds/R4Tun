@@ -1,0 +1,35 @@
+{
+  "description": "Good-form tuning ranges from v5 GT-derived BO (no GT positions at deploy)",
+  "source_pool": "v5",
+  "source_type": "GT-derived",
+  "deployment_recipe": "Tune form params locally around SAM4Tun | line-derived | hybrid anchor using good_form_ranges_json P10-P90 bands",
+  "excludes_at_deploy": [
+    "layout_k_center_norm",
+    "layout_ab_offset_norm_json",
+    "gt_layout trials"
+  ],
+  "top_frac": 0.2,
+  "template_columns": [
+    "ring_id",
+    "source_type",
+    "source_pool",
+    "n_good_trials",
+    "n_non_oracle_good_trials",
+    "good_miou_lo",
+    "good_miou_hi",
+    "good_form_ranges_json",
+    "deployment_recipe",
+    "allowed_anchors_json"
+  ],
+  "exemplar_columns": [
+    "ring_id",
+    "experience_id",
+    "trial_kind",
+    "label_gt_miou",
+    "layout_k_width_norm",
+    "form_segment_coverage_pct",
+    "form_arc_width_entropy",
+    "layout_hough_oblique_threshold",
+    "layout_line_merge_distance"
+  ]
+}

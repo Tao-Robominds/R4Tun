@@ -1,0 +1,27 @@
+{
+  "case_id": "4-6/r283",
+  "best_bo_miou": 0.2992743865009365,
+  "best_k_y": 3258.249338442097,
+  "best_offsets": {
+    "K": 0.0,
+    "B1": 2480.478288566226,
+    "A1": 1993.5005958860106,
+    "A2": 1336.4599857257792,
+    "A3": 1308.7096741343255,
+    "A4": 3727.100967905939,
+    "B2": 2366.698582479359
+  },
+  "best_layout_params": {
+    "hough_threshold": 65.0,
+    "hough_horizontal_threshold": 86.0,
+    "merge_distance_threshold": 6.935,
+    "single_ring_visual_slot_snap_px": 77.6203,
+    "slot_inset_y": 0.0698
+  },
+  "best_r_surface_min": 3.7359,
+  "r_surface_min_ceiling_ref": 3.7343,
+  "n_evals": 120,
+  "ceiling_miou_reference": 0.8686,
+  "order_branch": "minus",
+  "direction_selected_branch": "minus"
+}

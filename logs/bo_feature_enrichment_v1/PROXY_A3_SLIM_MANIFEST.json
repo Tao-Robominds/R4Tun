@@ -1,0 +1,56 @@
+{
+  "canonical_proxy": "A3-slim",
+  "status": "locked",
+  "locked_at": "2026-05-31",
+  "lineage": {
+    "training_records": "logs/bo_feature_enrichment_v1/calibration_records_v2.csv",
+    "calibration_corpus": "data/bo_calibration/",
+    "experience_trials": "logs/bo_experience_v1/bo_trials.csv"
+  },
+  "spec": {
+    "name": "A3-slim",
+    "status": "locked",
+    "description": "Canonical BO proxy: PRE7 (4) + det observables (3) + hough_oblique (1)",
+    "n_columns": 8,
+    "columns": [
+      "feat_pre_row_nonempty_ratio",
+      "feat_pre_largest_empty_vertical_gap_frac",
+      "feat_pre_pre_depth_map_valid_pixels",
+      "feat_pre_pre_depth_map_max_empty_row_run",
+      "feat_intrinsic_n_reclassified_by_r_filter",
+      "feat_intrinsic_arc_width_entropy",
+      "param_k_y_frac",
+      "param_hough_oblique_threshold"
+    ],
+    "feature_groups": {
+      "pre7_ring_qa": [
+        "feat_pre_row_nonempty_ratio",
+        "feat_pre_largest_empty_vertical_gap_frac",
+        "feat_pre_pre_depth_map_valid_pixels",
+        "feat_pre_pre_depth_map_max_empty_row_run"
+      ],
+      "det_layout_observables": [
+        "feat_intrinsic_n_reclassified_by_r_filter",
+        "feat_intrinsic_arc_width_entropy",
+        "param_k_y_frac"
+      ],
+      "layout_param": [
+        "param_hough_oblique_threshold"
+      ]
+    },
+    "selection_regime": "bo_and_perturb_only",
+    "requires_seg_replay": false,
+    "training_records": "calibration_records_v2.csv",
+    "ridge_alpha": 1.0
+  },
+  "model": "logs/bo_feature_enrichment_v1/proxy_v2_models/proxy_a3_slim.json",
+  "equation": "logs/bo_feature_enrichment_v1/proxy_v2_models/A3_slim_equation.json",
+  "metrics": {
+    "pooled_spearman_rho": 0.303,
+    "mean_regret_full_pool": 0.4085,
+    "mean_regret_bo_regime": 0.1414,
+    "mean_top3_recall_bo_regime": 0.5,
+    "n_features_fit": 8
+  },
+  "selection_rule": "Argmax pred_mIoU over kind in {bo, perturb_*}; abstain comparison vs gt_layout."
+}

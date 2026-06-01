@@ -32,10 +32,12 @@ These paths are read-only. NEVER write under them, NEVER point a `--base-dir` /
 `--output-dir` / scratch directory at them, NEVER use them as a sandbox for any
 BO trial, sweep, or experiment:
 
-- `data/ablation/**`, `data/bo/**` (6-ring BO-calibration frozen preprocessing),
-  `data/held-out/**` (50-ring held-out frozen preprocessing), `data/baseline/**`,
-  `data/preprocessing_qa/**`, `data/represents/**`
+- `data/ablation/**`, `data/bo/**` (legacy BO-calibration; read-only),
+  `data/bo_calibration/**` (6-ring diversity BO-calibration — locked for trials/ablation),
+  `data/held-out/**` (50-ring held-out eval — locked for trials/ablation),
+  `data/baseline/**`, `data/preprocessing_qa/**`, `data/represents/**`
 - `logs/context_preprocessing_v1/**` (fixed B+C+D baseline snapshot — read-only)
+- `methods/paper/experience/**` (locked BO experience bank — read-only)
 - `data/<tunnel_id>/r*/**` (per-ring corpora; `tunnel_id` matches `\d+(?:-\d+)+`)
 - `r4tun/data/**`, `r4tun/references/**`
 - `methods/plans/output/**`
@@ -57,8 +59,8 @@ As of 2026-05-29, `agents/**` is FROZEN. Validation confirmed capability-
 sufficiency: frozen preprocessing + searchable K/A/B offsets reaches near the
 GT-derived ceiling (1-1/r18: ceiling 0.882, BO 0.823, regret 0.059;
 `logs/aboffset_capability_v1/single_instance_gate.json`). Locked corpora:
-`data/bo/` (6/6 ceiling pass) and `data/held-out/` (50/50 ceiling pass) —
-read-only; all BO/eval outputs go to `logs/<run_id>/` only. Preprocessing QA:
+`data/bo_calibration/` (6/6 ceiling pass) and `data/held-out/` (50/50 ceiling pass) —
+read-only; never modify for BO trials or ablation — copy into `logs/<run_id>/` sandboxes only. Preprocessing QA:
 3a intrinsic guardrails + 3b ceiling ≥ 0.85 (`agents/1_preprocessing/knowledge.md`,
 `bo/lib/ceiling_gate.py`). Parameter/search changes only via
 `bo/**` and `logs/**`. If a task needs an `agents/**` edit, STOP and ask.
@@ -86,3 +88,4 @@ read-only; all BO/eval outputs go to `logs/<run_id>/` only. Preprocessing QA:
 Also apply focused rules in `.cursor/rules/`:
 
 - `intrinsic-project.mdc`
+- `experience-bank.mdc` — locked BO experience bank (`methods/paper/experience/`)

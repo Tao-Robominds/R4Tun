@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "criteria": {
+    "one_template_per_ring": true,
+    "has_form_ranges": true,
+    "no_gt_position_export": true,
+    "has_exemplars": true,
+    "allowed_anchors_present": true
+  },
+  "n_templates": 6,
+  "n_exemplars": 84,
+  "expected_rings": 6,
+  "top_frac": 0.2,
+  "templates_per_ring": {
+    "1-1/r20": 1,
+    "1-4/r206": 1,
+    "1-5/r271": 1,
+    "4-1/r116": 1,
+    "4-6/r283": 1,
+    "5-5/r258": 1
+  },
+  "evidence_path": "methods/paper/experience/proposal_good_form_gt_derived_gate.json"
+}

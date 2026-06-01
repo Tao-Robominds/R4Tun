@@ -1,0 +1,47 @@
+{
+  "description": "Failure memory from v3 random BO for deploy-time reject/penalise filters",
+  "source_pool": "v3",
+  "source_type": "random",
+  "deployment_recipe": "reject candidate near failure exemplar k/AB patterns; penalise high form_segment_coverage_pct when line_detection_confidence_K is low",
+  "bottom_frac": 0.2,
+  "memory_columns": [
+    "failure_id",
+    "ring_id",
+    "source_type",
+    "source_pool",
+    "experience_id",
+    "trial_kind",
+    "failure_tags_json",
+    "layout_k_center_norm",
+    "layout_k_width_norm",
+    "layout_ab_offset_norm_json",
+    "line_oblique_line_count",
+    "line_detection_confidence_K",
+    "form_segment_coverage_pct",
+    "form_arc_width_entropy",
+    "label_gt_miou",
+    "k_shift_from_ring_median"
+  ],
+  "rule_columns": [
+    "ring_id",
+    "source_type",
+    "source_pool",
+    "reject_k_center_norm_lo",
+    "reject_k_center_norm_hi",
+    "reject_k_shift_norm_abs_p90",
+    "reject_miou_upper_bound",
+    "penalise_coverage_min",
+    "penalise_miou_max",
+    "penalise_k_confidence_max",
+    "n_failure_exemplars",
+    "filter_recipe"
+  ],
+  "failure_tags": [
+    "bad_k_shift",
+    "good_form_wrong_anchor",
+    "misleading_line_proxy",
+    "bad_layout_perturbation",
+    "low_miou",
+    "hard_failure"
+  ]
+}

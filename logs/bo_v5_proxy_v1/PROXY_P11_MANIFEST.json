@@ -1,0 +1,103 @@
+{
+  "variant_id": "p11",
+  "name": "A3_v5_p11",
+  "label": "best",
+  "status": "locked",
+  "locked_at": "2026-05-31",
+  "purpose": "held_out_stage_a_proxy_select",
+  "description": "Minimal 11-feature set; best BO-calib within-pool selection.",
+  "lineage": {
+    "training_records_v2": "logs/bo_feature_enrichment_v1/calibration_records_v2.csv",
+    "training_records_v5": "logs/bo_v5_proxy_v1/calibration_records_v5.csv",
+    "calibration_corpus": "data/bo_calibration/",
+    "experience_trials": "logs/bo_experience_v1/bo_trials.csv"
+  },
+  "spec": {
+    "n_columns": 11,
+    "columns": [
+      "feat_pre_row_nonempty_ratio",
+      "feat_pre_pre_depth_map_valid_pixels",
+      "feat_intrinsic_n_reclassified_by_r_filter",
+      "feat_intrinsic_arc_width_entropy",
+      "param_k_y_frac",
+      "param_hough_oblique_threshold",
+      "v5_balance_norm",
+      "v5_geom_boundary_gap_cv",
+      "v5_S_boundary",
+      "seg_k_size_ratio",
+      "seg_groove_score"
+    ],
+    "dropped": [
+      "v5_S_layout_coverage",
+      "v5_S_spacing"
+    ],
+    "selection_regime": "bo_and_perturb_only",
+    "requires_seg_replay": true,
+    "ridge_alpha": 1.0
+  },
+  "model": "logs/bo_v5_proxy_v1/proxy_p11.json",
+  "equation": "logs/bo_v5_proxy_v1/proxy_p11_equation.json",
+  "eval": "logs/bo_v5_proxy_v1/proxy_p11_eval.json",
+  "metrics": {
+    "loro_mean_selected_miou": 0.7921960761401216,
+    "loro_mean_oracle_miou": 0.8678018522522324,
+    "loro_mean_regret_vs_oracle": 0.07560577611211067,
+    "per_ring": [
+      {
+        "case_id": "1-1/r20",
+        "oracle_gt_miou": 0.8548967926658134,
+        "proxy_gt_miou": 0.8548967926658134,
+        "regret_vs_oracle": 0.0,
+        "proxy_rank": 1,
+        "n_candidates": 48,
+        "within_pool_spearman": 0.3832559667404638
+      },
+      {
+        "case_id": "1-4/r206",
+        "oracle_gt_miou": 0.9169283635126144,
+        "proxy_gt_miou": 0.4632937068399504,
+        "regret_vs_oracle": 0.453634656672664,
+        "proxy_rank": 18,
+        "n_candidates": 96,
+        "within_pool_spearman": 0.6061284537396724
+      },
+      {
+        "case_id": "1-5/r271",
+        "oracle_gt_miou": 0.8768439172495202,
+        "proxy_gt_miou": 0.8768439172495202,
+        "regret_vs_oracle": 0.0,
+        "proxy_rank": 1,
+        "n_candidates": 48,
+        "within_pool_spearman": 0.18856041542564542
+      },
+      {
+        "case_id": "4-1/r116",
+        "oracle_gt_miou": 0.9030603079594456,
+        "proxy_gt_miou": 0.9030603079594456,
+        "regret_vs_oracle": 0.0,
+        "proxy_rank": 1,
+        "n_candidates": 48,
+        "within_pool_spearman": 0.3129887128564195
+      },
+      {
+        "case_id": "4-6/r283",
+        "oracle_gt_miou": 0.8267842176883957,
+        "proxy_gt_miou": 0.8267842176883957,
+        "regret_vs_oracle": 0.0,
+        "proxy_rank": 1,
+        "n_candidates": 96,
+        "within_pool_spearman": 0.2868424546189793
+      },
+      {
+        "case_id": "5-5/r258",
+        "oracle_gt_miou": 0.8282975144376041,
+        "proxy_gt_miou": 0.8282975144376041,
+        "regret_vs_oracle": 0.0,
+        "proxy_rank": 1,
+        "n_candidates": 48,
+        "within_pool_spearman": 0.35208515165874804
+      }
+    ]
+  },
+  "selection_rule": "Argmax pred_mIoU over kind in {bo, perturb_*}; exclude gt_layout."
+}

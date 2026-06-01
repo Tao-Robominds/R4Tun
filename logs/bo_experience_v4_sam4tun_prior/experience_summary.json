@@ -1,0 +1,8 @@
+{
+  "n_rings": 6,
+  "n_rings_run_this_session": 5,
+  "n_total_trials": 480,
+  "rings_passed_experience_gate": 5,
+  "panel_summary": "logs/bo_experience_v4_sam4tun_prior/panel_summary.csv",
+  "bo_trials": "logs/bo_experience_v4_sam4tun_prior/bo_trials.csv"
+}

@@ -1,0 +1,23 @@
+{
+  "out_dir": "/home/boringtao/Projects/Intrinsic/methods/paper/experience",
+  "sources": [
+    {
+      "source": "sam4tun",
+      "gate_passed": true,
+      "n_templates": 95
+    },
+    {
+      "source": "gt_good_form",
+      "gate_passed": true,
+      "n_templates": 6,
+      "n_exemplars": 84
+    },
+    {
+      "source": "random_failure",
+      "gate_passed": true,
+      "n_failure_rows": 96,
+      "n_rule_rows": 6
+    }
+  ],
+  "all_passed": true
+}

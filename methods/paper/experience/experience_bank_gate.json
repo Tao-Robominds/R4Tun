@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "criteria": {
+    "row_count": true,
+    "has_all_pools": true,
+    "has_source_types": true,
+    "has_miou": true,
+    "has_layout_norm": true,
+    "has_ring_features": true
+  },
+  "n_rows": 1440,
+  "expected_n": 1440,
+  "per_pool_counts": {
+    "v3": 480,
+    "v4": 480,
+    "v5": 480
+  },
+  "n_rings": 6,
+  "mean_gt_miou_by_pool": {
+    "GT-derived": 0.2529,
+    "SAM4Tun": 0.1885,
+    "random": 0.1717
+  },
+  "evidence_path": "methods/paper/experience/experience_bank_gate.json"
+}

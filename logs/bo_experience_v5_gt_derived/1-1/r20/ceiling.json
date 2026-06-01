@@ -1,0 +1,20 @@
+{
+  "case_id": "1-1/r20",
+  "agents_gt_ceiling_miou": 0.8828,
+  "ceiling_no_filter_miou": 0.8344,
+  "r_surface_min_selected": 2.7353,
+  "r_surface_min_otsu_intrinsic": 2.449,
+  "per_class_iou": {
+    "0": 0.8761,
+    "1": 0.8798,
+    "2": 0.942,
+    "3": 0.9711,
+    "4": 0.703,
+    "5": 0.9513,
+    "6": 0.8559
+  },
+  "r_search_bounds": {
+    "r_lo": 2.035289080399071,
+    "r_hi": 2.754122777398321
+  }
+}

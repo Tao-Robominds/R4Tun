@@ -1,0 +1,31 @@
+{
+  "case_id": "1-4/r206",
+  "objective": "honest GT-labeled experience collection (no oracle layout trials)",
+  "n_oracle_trials": 0,
+  "target_n_evals": 120,
+  "n_evals": 120,
+  "n_perturb_trials": 24,
+  "perturb_trial_frac": 0.2,
+  "ceiling_miou_reference": 0.9351,
+  "best_bo_miou": 0.3794396976199277,
+  "regret_vs_ceiling": 0.5556603023800724,
+  "miou_std": 0.0692176202622731,
+  "random_phase_median_miou": 0.1061186926256758,
+  "bo_beats_random_median": true,
+  "criteria": {
+    "n_trials_complete": true,
+    "trial_schema_ok": true,
+    "miou_spread_ok": true,
+    "bo_improves_over_random": true,
+    "intrinsics_populated": true,
+    "perturb_fraction_ok": true,
+    "no_oracle_trials": true,
+    "direction_select_populated": true
+  },
+  "passed": true,
+  "outputs": {
+    "bo_trials": "logs/bo_experience_v3/1-4/r206/bo_trials.csv",
+    "best_bo_trial": "logs/bo_experience_v3/1-4/r206/best_bo_trial.json",
+    "ceiling": "logs/bo_experience_v3/1-4/r206/ceiling.json"
+  }
+}

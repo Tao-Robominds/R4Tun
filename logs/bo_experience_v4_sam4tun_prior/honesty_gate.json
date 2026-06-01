@@ -1,0 +1,115 @@
+{
+  "passed": true,
+  "criteria": {
+    "non_empty": true,
+    "no_oracle_trials": true,
+    "direction_select_enabled": true,
+    "branch_selection_logged": true,
+    "miou_spread_ok": true
+  },
+  "details": {
+    "case_id": "panel",
+    "n_trials": 480,
+    "n_oracle_trials": 0,
+    "gt_miou_std": 0.123
+  },
+  "per_ring": [
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-1/r20",
+        "n_trials": 60,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.1176
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-4/r206",
+        "n_trials": 120,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.0648
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "1-5/r271",
+        "n_trials": 60,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.0642
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "4-1/r116",
+        "n_trials": 60,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.0789
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "4-6/r283",
+        "n_trials": 120,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.1991
+      }
+    },
+    {
+      "passed": true,
+      "criteria": {
+        "non_empty": true,
+        "no_oracle_trials": true,
+        "direction_select_enabled": true,
+        "branch_selection_logged": true,
+        "miou_spread_ok": true
+      },
+      "details": {
+        "case_id": "5-5/r258",
+        "n_trials": 60,
+        "n_oracle_trials": 0,
+        "gt_miou_std": 0.0627
+      }
+    }
+  ],
+  "all_rings_passed": true
+}

@@ -1,0 +1,12 @@
+{
+  "n_rings": 6,
+  "n_total_trials": 480,
+  "rings_passed_experience_gate": 6,
+  "n_oracle_trials_total": 0,
+  "mean_best_miou": 0.3794,
+  "mean_regret": 0.5141,
+  "panel_summary": "logs/bo_experience_v3/panel_summary.csv",
+  "bo_trials": "logs/bo_experience_v3/bo_trials.csv",
+  "honesty_gate": "logs/bo_experience_v3/honesty_gate.json",
+  "single_instance_gate": "logs/bo_experience_v3/single_instance_gate.json"
+}
