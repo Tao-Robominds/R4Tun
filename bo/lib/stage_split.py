@@ -15,7 +15,7 @@ HARD_QUOTAS = {
     (7, 7.5): 10,
 }
 
-SOFT_TIERS = ("density_tier", "k_span_tier", "pattern_tier", "coverage_tier")
+SOFT_TIERS = ("density_tier", "k_span_tier", "direction_tier", "coverage_tier")
 MAX_DRIFT_PP = 0.08
 
 

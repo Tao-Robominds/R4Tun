@@ -1,0 +1,52 @@
+{
+  "status": "locked",
+  "confirmed_at": "2026-06-03",
+  "purpose": "Paper Table~\\ref{tab:dataset_panels} descriptor marginals (frozen corpora)",
+  "eval_script": "bo/eval_panel_descriptor_distribution.py",
+  "lineage_log": "logs/panel_descriptor_distribution_v1",
+  "paper_ref": "methods/paper/main.tex",
+  "corpora": {
+    "bo_calibration": "data/bo_calibration",
+    "held_out_evaluation": "data/held-out"
+  },
+  "thresholds": {
+    "density": {
+      "source": "data/rings/summary.json field reason",
+      "dense": "density_dense",
+      "medium": "density_medium",
+      "low": ["density_low", "density_sparse"]
+    },
+    "coverage": {
+      "full_if_angular_gap_frac_lte": 0.02,
+      "fallback_full_if_finite_ratio_gte": 0.85,
+      "partial": "otherwise"
+    },
+    "k_span_deg": {
+      "priority": ["summary.k_span_deg", "GT keystone arc span", "enhanced theta span"],
+      "narrow_deg_lte": 22.0,
+      "normal_deg_range": "(22.0, 39.0)",
+      "wide_deg_gte": 39.0
+    },
+    "direction": {
+      "source": "gt_layout.json spatial_order_by_label",
+      "plus": "cyclic rotation of (1,2,...,n)",
+      "minus": "cyclic rotation of (n,n-1,...,1)"
+    }
+  },
+  "panels": {
+    "bo_calibration": {
+      "n_rings": 6,
+      "density_dense_medium_low": [3, 1, 2],
+      "coverage_full_partial": [5, 1],
+      "k_span_narrow_normal_wide": [1, 4, 1],
+      "direction_plus_minus": [2, 4]
+    },
+    "held_out_evaluation": {
+      "n_rings": 50,
+      "density_dense_medium_low": [13, 18, 19],
+      "coverage_full_partial": [48, 2],
+      "k_span_narrow_normal_wide": [15, 27, 8],
+      "direction_plus_minus": [26, 24]
+    }
+  }
+}

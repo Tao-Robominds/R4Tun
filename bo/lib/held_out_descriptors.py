@@ -1,4 +1,4 @@
-"""Ring descriptors for held-out panel (depth QA, density, k-span, pattern)."""
+"""Ring descriptors for held-out panel (depth QA, density, k-span, direction)."""
 from __future__ import annotations
 
 import json
@@ -66,25 +66,45 @@ def _k_span_degrees(ring_dir: Path, segment_count: int) -> float:
     return 0.5
 
 
-def _pattern_score(ring_dir: Path, segment_count: int) -> float:
-    enh = ring_dir / "enhanced.csv"
-    if not enh.is_file():
-        return 0.5
-    cols = pd.read_csv(enh, nrows=0).columns.tolist()
-    label_col = "pred" if "pred" in cols else ("segment" if "segment" in cols else None)
-    if label_col is None:
-        return 0.5
-    df = pd.read_csv(enh, usecols=[label_col, "h"])
-    df[label_col] = pd.to_numeric(df[label_col], errors="coerce")
-    df = df.dropna(subset=[label_col])
-    if df.empty:
-        return 0.5
-    med_h = df.groupby(label_col)["h"].median().sort_values()
-    if len(med_h) < 2:
-        return 0.5
-    diffs = med_h.diff().dropna()
-    canonical = float((diffs > 0).mean()) if len(diffs) else 0.5
-    return canonical
+def _is_rotation(order: list[int], template: list[int]) -> bool:
+    if len(order) != len(template) or not order:
+        return False
+    n = len(template)
+    for i in range(n):
+        if order == template[i:] + template[:i]:
+            return True
+    return False
+
+
+def _load_spatial_order(ring_dir: Path, segment_count: int) -> list[int] | None:
+    gt_path = ring_dir / "gt_layout.json"
+    if gt_path.is_file():
+        data = json.loads(gt_path.read_text(encoding="utf-8"))
+        order = data.get("spatial_order_by_label")
+        if isinstance(order, list) and order:
+            return [int(x) for x in order]
+    from lib.ceiling_gate import derive_gt_layout
+
+    try:
+        layout = derive_gt_layout(ring_dir, ring_dir, segment_count)
+    except Exception:
+        return None
+    order = layout.get("spatial_order_by_label")
+    if not isinstance(order, list) or not order:
+        return None
+    return [int(x) for x in order]
+
+
+def _direction_from_spatial_order(order: list[int] | None, segment_count: int) -> tuple[str, float]:
+    if not order:
+        return "unknown", 0.5
+    forward = list(range(1, segment_count + 1))
+    backward = list(reversed(forward))
+    if _is_rotation(order, forward):
+        return "plus", 1.0
+    if _is_rotation(order, backward):
+        return "minus", 0.0
+    return "unknown", 0.5
 
 
 def _tier_density(score: float) -> str:
@@ -101,10 +121,6 @@ def _tier_k_span(score: float) -> str:
     if score < 0.65:
         return "normal"
     return "wide"
-
-
-def _tier_pattern(score: float) -> str:
-    return "canonical" if score >= 0.5 else "reversed_canonical"
 
 
 def _tier_coverage(finite_ratio: float) -> str:
@@ -139,7 +155,8 @@ def build_ring_descriptor(
 
     density = _density_score(ring_dir)
     k_span = _k_span_degrees(ring_dir, seg)
-    pattern = _pattern_score(ring_dir, seg)
+    spatial_order = _load_spatial_order(ring_dir, seg)
+    direction_tier, direction_score = _direction_from_spatial_order(spatial_order, seg)
 
     return {
         "ring_key": ring_key,
@@ -154,10 +171,11 @@ def build_ring_descriptor(
         "blank_band_ratio": round(gap_frac, 6),
         "density_score": round(density, 6),
         "k_span_score": round(k_span, 6),
-        "pattern_score": round(pattern, 6),
+        "direction_score": round(direction_score, 6),
+        "spatial_order_by_label": spatial_order,
         "density_tier": _tier_density(density),
         "k_span_tier": _tier_k_span(k_span),
-        "pattern_tier": _tier_pattern(pattern),
+        "direction_tier": direction_tier,
         "coverage_tier": _tier_coverage(finite),
         "image_height": int(audit.get("height_px", 0)),
         "image_width": int(audit.get("width_px", 0)),

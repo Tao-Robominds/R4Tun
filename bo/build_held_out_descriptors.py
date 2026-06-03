@@ -38,7 +38,7 @@ def main() -> int:
         "held_out_root": str(Path(args.held_out_root).resolve()),
         "density_tiers": df["density_tier"].value_counts().to_dict(),
         "k_span_tiers": df["k_span_tier"].value_counts().to_dict(),
-        "pattern_tiers": df["pattern_tier"].value_counts().to_dict(),
+        "direction_tiers": df["direction_tier"].value_counts().to_dict(),
         "coverage_tiers": df["coverage_tier"].value_counts().to_dict(),
     }
     meta_path = out_dir / "ring_descriptors.meta.json"

@@ -1,0 +1,1087 @@
+\UseRawInputEncoding
+%% ReflectiveTun — Automation in Construction (cas-dc double-column template)
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{amssymb} % for \checkmark, \circlearrowright
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{hyperref}
+\usepackage{placeins}
+\usepackage{flafter} % prevent floats from appearing before their definition
+\usepackage{float} % provides [H] to force a float to appear exactly here
+\usepackage{caption}
+\usepackage{subcaption} % provides subfigure environment
+\usepackage{balance}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit}
+
+% ─── Shared TikZ styles (reused across figures) ────────────────────────────
+\tikzset{%
+  box/.style={draw,rounded corners,align=center,minimum height=8mm,inner sep=4pt},
+  gate/.style={draw,rounded corners,align=center,minimum height=10mm,inner sep=5pt},
+  arrow/.style={-{Latex[length=2mm]}, thick}%
+}
+
+\usepackage{soul} % for \\hl
+% Allow soul highlighting to contain common cross-reference commands
+\soulregister\ref7
+\soulregister\pageref7
+\soulregister\eqref7
+% Highlight helper that also works in math mode (e.g., $+36\%$)
+\newcommand{\hlpct}[1]{\ifmmode\mbox{\hl{#1}}\else\hl{#1}\fi}
+\usepackage[most]{tcolorbox} % for section-wide highlighting
+
+% ─── Hidden subsection helper (keeps numbering/labels, hides printed title) ─
+\makeatletter
+\newcommand{\hiddensubsection}[1]{%
+  \refstepcounter{subsection}%
+  \addcontentsline{toc}{subsection}{\protect\numberline{\thesubsection}#1}%
+  \@afterheading%
+}
+\makeatother
+
+\providecommand{\printorcid}{}
+\providecommand{\printfacebook}{}
+\providecommand{\printtwitter}{}
+\providecommand{\printlinkedin}{}
+\providecommand{\printgplus}{}
+\providecommand{\printinstagram}{}
+\providecommand{\printemails}{}
+\providecommand{\printurls}{}
+\usepackage{lineno}
+%\linenumbers % (disabled)
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+% ────────────────────────────── Front matter ──────────────────────────────
+
+{\shorttitle{Proxy4Tun: self-refine deployment-label-free tunnel point-cloud segmentation}
+\shortauthors{X.\ Tao et~al.}
+
+\title[mode=title]{Proxy4Tun: self-refine framework for deployment-label-free segmental tunnel lining segmentation}
+
+\author[1]{Xinghui Tao}
+\credit{Conceptualization, Methodology, Software, Writing -- original draft}
+
+\author[1]{Guangming Wang}
+\cormark[1]
+\ead{gw462@cam.ac.uk}
+\credit{Supervision, Writing -- review \& editing}
+
+\author[1]{Brian Sheil}
+\credit{Supervision, Funding acquisition, Project administration}
+
+\cortext[cor1]{Corresponding author}
+
+\affiliation[1]{organization={Construction Engineering, University of Cambridge},
+    addressline={Trumpington Street},
+    city={Cambridge},
+    postcode={CB2 1PZ},
+    country={United Kingdom}}
+
+% ─── Abstract ─────────────────────────────────────────────────────────────
+
+
+\begin{abstract}
+Segment-wise inspection of tunnel linings, such as joint gaps, leakage, and deformation, requires accurate segmentation, yet deployment rarely provides ground-truth labels for tuning or quality control. We present \textbf{Proxy4Tun}, a deployment-time, label-free assess-and-refine framework for a projection-based, ring-level pipeline. At design time, Bayesian optimisation (BO) on a small set of labelled diversity-selected rings selects a bounded set of sensitive parameters and a compact set of intrinsic metrics that correlate with mIoU; these are then used to learn a proxy objective that guides deployment-time self-refinement. The study indicates that calibrated intrinsic proxies can support label-free adaptation and quality control at deployment.
+\end{abstract}
+
+
+% ─── Highlights ───────────────────────────────────────────────────────────
+
+\begin{highlights}
+\item Label-free point cloud tunnel-lining segmentation at deployment.
+\item Ring-level projection-based pipeline employing boundary detection.
+\item Design-time BO-calibrated intrinsic proxy serving as an mIoU indicator.
+\end{highlights}
+
+% ─── Keywords ─────────────────────────────────────────────────────────────
+
+\begin{keywords}
+Tunnel-lining segmentation \sep Point-cloud segmentation \sep Depth-map segmentation \sep Deployment-time self-refinement \sep Intrinsic proxy \sep Bayesian optimisation
+\end{keywords}
+
+\maketitle
+
+\smallskip
+% ─────────────────────────────────────────────────────────────────────────
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Introduction}\label{sec:intro}
+% ══════════════════════════════════════════════════════════════════════════
+% ─── Figure (TikZ): Motivation and positioning ────────────────────────────
+\begin{figure*}[t]
+\centering
+
+% ---------------- Panel (a) ----------------
+\begin{subfigure}{0.98\textwidth}
+\centering
+\begin{tikzpicture}[
+    font=\small
+]
+
+% Main horizontal flow
+\node[box] (ring) at (0,0) {Tunnel \\ point cloud};
+\node[box] (seg) at (3.0,0) {Segmentation\\approaches};
+\node[box] (layout) at (6.2,0) {Predicted\\segments};
+\node[gate, draw=red] (qc) at (9.5,0) {Deployment QC \\{\footnotesize without GT}};
+
+\draw[arrow] (ring) -- (seg);
+\draw[arrow] (seg) -- (layout);
+\draw[arrow] (layout) -- (qc);
+
+% Decision outputs
+\coordinate (fork) at ($(qc.south)+(0,-0.45)$);
+\draw[arrow] (qc.south) -- (fork);
+
+\node[box] (accept) at (6.7,-2.0) {Accept\\{\footnotesize $\checkmark$}};
+\node[box] (refine) at (9.5,-2.0) {Refine\\{\footnotesize $\circlearrowright$}};
+\node[box] (abstain) at (12.3,-2.0) {Abstain\\{\footnotesize !}};
+
+\draw[arrow] (fork) -| (accept.north);
+\draw[arrow] (fork) -- (refine.north);
+\draw[arrow] (fork) -| (abstain.north);
+
+\end{tikzpicture}
+\caption{Deployment decision gap.}
+\end{subfigure}
+
+\vspace{4mm}
+
+% ---------------- Panel (b) ----------------
+\begin{subfigure}{0.98\textwidth}
+\centering
+\begin{tikzpicture}[
+    font=\scriptsize,
+    method/.style={
+        draw,
+        rounded corners,
+        align=center,
+        text width=32mm,
+        inner sep=3pt
+    },
+    proxy/.style={
+        draw,
+        rounded corners,
+        align=center,
+        text width=34mm,
+        inner sep=3pt
+    },
+    axis/.style={-{Latex[length=2mm]}, thick},
+    guide/.style={dashed, thin}
+]
+
+% Axes (slightly larger canvas to avoid overlaps)
+\draw[axis] (0,0) -- (13.5,0);
+\draw[axis] (0,0) -- (0,7.0);
+
+% Middle guide lines
+\draw[guide] (6.75,0) -- (6.75,6.75);
+\draw[guide] (0,3.5) -- (13.2,3.5);
+
+% Axis labels
+\node[align=center] at (6.75,-0.5)
+{Deployment QC strength\\
+{\footnotesize weak / implicit gate \hspace{28mm} strong / explicit gate}};
+
+\node[rotate=90, align=center] at (-0.5,3.5)
+{Deployment adaptability\\
+{\footnotesize low \hspace{28mm} high}};
+
+% Quadrant labels (pushed outward so they don't collide with boxes)
+\node[align=center, font=\footnotesize] at (3.3,6.55) {High adaptability Weak QC};
+\node[align=center, font=\footnotesize] at (10.2,6.55) {High adaptability Strong QC};
+\node[align=center, font=\footnotesize] at (3.3,0.25) {Low adaptability Weak QC};
+\node[align=center, font=\footnotesize] at (10.2,0.25) {Low adaptability Strong QC};
+
+% Method boxes (spread out a bit)
+\node[proxy, draw=green] (proxy4tun) at (9.6,5.2)
+{\textbf{Proxy4Tun}\\
+adapts by deployment-time self-refinement\\
+QC: calibrated proxy gate for accept/refine/abstain\\
+};
+
+\node[method] (fm) at (4.6,4.6)
+{\textbf{Foundation-model pipeline}\\
+adapts through prompts / expert-tuned parameters\\
+QC: output sanity checks only};
+
+\node[method] (dl) at (2.6,2.2)
+{\textbf{Supervised}\\
+\textbf{deep learning}\\
+adapts through labelled-data training\\
+QC: confidence scores, but no calibrated gate};
+
+\node[method] (rules) at (11.0,1.5)
+{\textbf{Engineer-designed rules}\\
+adapts through manual retuning\\
+QC: explicit rule thresholds / checks\\
+};
+
+\end{tikzpicture}
+\caption{Conceptual approach positioning under deployment constraints.}
+\end{subfigure}
+
+\caption{
+Motivation and positioning of Proxy4Tun.
+(a) At deployment, tunnel-ring segmentation outputs require accept, refine, or abstain decisions without ground-truth (GT).
+(b) Existing segmentation approaches differ in deployment adaptability and deployment quality-control (QC) strength. Proxy4Tun targets the high-adaptability and strong-QC region by using an intrinsic proxy learnt at design time on a small set of labelled diversity-selected rings, then used for deployment-time scoring and refinement without GT.
+}
+\label{fig:proxy4tun_motivation_positioning}
+\end{figure*}
+
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\FloatBarrier % keep Fig.~1 with the Introduction (avoid large blank space)
+\section{Related work}\label{sec:related}
+% ══════════════════════════════════════════════════════════════════════════
+
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Methodology}\label{sec:methods}
+% ══════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}
+\item \textbf{Datasets} (Sec.~\ref{subsec:datasets})
+\item \textbf{Overall framework} (Sec.~\ref{subsec:overall_framework})
+\item \textbf{Ring-level backbone} (Sec.~\ref{subsec:ring_level_backbone})
+\item \textbf{BO-calibrated proxy} (Sec.~\ref{subsec:bo_calibration})
+\item \textbf{Self-refinement} (Sec.~\ref{subsec:self_refinement})
+\item \textbf{Ablation design} (Sec.~\ref{subsec:proxy_ablation_design})
+\item \textbf{Evaluation} (Sec.~\ref{subsec:evaluation})
+
+\end{itemize}
+
+
+\hiddensubsection{Datasets}\label{subsec:datasets}
+\begin{table*}[t]
+\caption{Composition of the BO calibration and evaluation panels (counts from frozen corpora). \textbf{Density:} pre-registered point-count regime in \texttt{data/rings/summary.json} (\texttt{density\_dense}$\rightarrow$dense, \texttt{density\_medium}$\rightarrow$medium, \texttt{density\_low}/\texttt{density\_sparse}$\rightarrow$low). \textbf{Coverage:} full if angular gap fraction $\leq 0.02$, else partial; if gap unlisted, full if depth-map finite ratio $\geq 0.85$. \textbf{K-span:} circumferential keystone span in degrees (\texttt{k\_span\_deg} when listed, else GT keystone arc, else enhanced $\theta$ span); narrow $\leq 22^{\circ}$, normal $22^{\circ}<s<39^{\circ}$, wide $\geq 39^{\circ}$. \textbf{Direction:} GT circumferential block order; \emph{plus} $=$ rotation of $1,\ldots,n$; \emph{minus} $=$ rotation of $n,\ldots,1$.}
+\label{tab:dataset_panels}
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Descriptor & BO calibration & Evaluation \\
+\midrule
+Rings & 6 & 50 \\
+Density (dense / medium / low) & 3 / 1 / 2 & 13 / 18 / 19 \\
+Coverage (full / partial) & 5 / 1 & 48 / 2 \\
+K-span (narrow / normal / wide) & 1 / 4 / 1 & 15 / 27 / 8 \\
+Direction (plus / minus) & 2 / 4 & 26 / 24 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\hiddensubsection{Overall framework}\label{subsec:overall_framework}
+% ─── Figure (TikZ): Overall Proxy4Tun framework ───────────────────────────
+\begin{figure*}[t]
+\centering
+
+% ===================== Panel (a): Design time =====================
+\begin{subfigure}{0.98\textwidth}
+\raggedright
+
+\begin{tikzpicture}[
+    font=\small,
+    scale=0.9,
+    transform shape,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=30mm,
+        inner sep=4pt
+    },
+    keybox/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=34mm,
+        inner sep=4pt
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Nodes
+\node[box, text width=40mm] (panel) at (0,0) {Labelled\\diversity-selected rings};
+
+% Title label (left-aligned to the left edge of the first box)
+\node[anchor=west, font=\small\bfseries] at ([yshift=10mm]panel.west) {DESIGN TIME};
+\node[box, very thick, text width=40mm, right=6mm of panel] (backbone) {Ring-level \\ segmentation backbone};
+\node[box, right=6mm of backbone] (bo) {BO experience\\generation};
+\node[keybox, right=6mm of bo] (proxy) {Learnt intrinsic\\proxy};
+
+% Arrows
+\draw[arrow] (panel) -- (backbone);
+\draw[arrow] (backbone) -- (bo);
+\draw[arrow] (bo) -- (proxy);
+% (Deployment box removed)
+
+
+\end{tikzpicture}%
+
+\caption{Design-time calibration of the intrinsic proxy.}
+\end{subfigure}
+
+\vspace{5mm}
+
+% ===================== Panel (b): Deployment time =====================
+\begin{subfigure}{0.98\textwidth}
+\raggedright
+
+\begin{tikzpicture}[
+    font=\small,
+    scale=0.9,
+    transform shape,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=28mm,
+        inner sep=4pt
+    },
+    process/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=34mm,
+        inner sep=4pt
+    },
+    decision/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=24mm,
+        inner sep=4pt
+    },
+    finalbox/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=32mm,
+        inner sep=4pt
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick},
+    looparrow/.style={-{Latex[length=2mm]}, thick, dashed}
+]
+
+
+% Title label
+\node[align=left, font=\small\bfseries] at (0,1.15) {DEPLOYMENT TIME};
+\node[align=left, font=\footnotesize] at (0,0.75) {no ground-truth labels};
+
+% Main runtime pipeline
+\node[box] (ring) at (0,0) {New ring};
+\node[process, very thick, right=7mm of ring] (backbone) {Ring-level\\segmentation backbone};
+\node[process, right=7mm of backbone] (score) {Proxy scoring};
+
+\draw[arrow] (ring) -- (backbone);
+\draw[arrow] (backbone) -- (score);
+
+% Decision branches (no abstain: accept best when budget ends / improvement plateaus)
+% Place decisions centered under the scoring step (Refine left, Accept right).
+\node[decision, below=12mm of score, xshift=-18mm] (refine) {Refine\\(budget left)};
+\node[decision, below=12mm of score, xshift=18mm] (accept) {Accept\\(best proxy)};
+
+\coordinate (fork) at ($(score.south)+(0,-4mm)$);
+\draw[arrow] (score.south) -- (fork);
+\draw[arrow] (fork) -| (refine.north);
+\draw[arrow] (fork) -| (accept.north);
+
+% Refine loops back towards the ring-level segmentation backbone
+% (left, then up; no final rightward segment)
+\coordinate (refloopx) at ($(refine.west)+(-16mm,0)$);
+\draw[looparrow] (refine.west) -- (refloopx) -- (refloopx |- backbone.south);
+
+% Final output
+\node[finalbox, below=10mm of accept] (layout) {Selected\\2D layout};
+\node[finalbox, right=12mm of layout] (out3d) {3D reprojected\\segmentation};
+
+\draw[arrow] (accept.south) -- (layout.north);
+\draw[arrow] (layout) -- (out3d);
+
+\end{tikzpicture}%
+
+\caption{Deployment-time proxy-guided refinement and selection.}
+\end{subfigure}
+
+\caption{
+Overall Proxy4Tun framework built around a shared ring-level segmentation backbone used at both design time and deployment.
+(a) At design time, six labelled diversity-selected rings are processed by the backbone to generate BO experience and relate intrinsic quality metrics to mIoU, learning an intrinsic proxy.
+(b) At deployment, each new ring is stabilised, segmented by the same backbone, and refined through learnt proxy scoring. Refinement continues while budget remains and proxy improvements persist; when the budget is exhausted or improvements plateau, the best proxy-scoring output is accepted (no deployment ground-truth labels).
+}
+\label{fig:overall_proxy4tun_framework}
+\end{figure*}
+
+\hiddensubsection{Ring-level backbone}\label{subsec:ring_level_backbone}
+% ─── Figure (TikZ): Ring-level segmentation backbone ──────────────────────
+\begin{figure*}[t]
+\centering
+
+% ===================== Panel (a): Ring-level backbone =====================
+\begin{subfigure}{0.98\textwidth}
+\centering
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=24mm,
+        inner sep=4pt
+    },
+    keybox/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=28mm,
+        inner sep=4pt
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Nodes (wrapped into two rows to fit page width)
+\node[box] (raw) at (0,0) {Raw \\point cloud};
+
+% Title label (left-aligned, same style as Figure 2)
+\node[anchor=west, font=\small\bfseries] at ([yshift=10mm]raw.west) {Ring-level backbone};
+
+\node[box, text width=34mm, right=5mm of raw] (extract) {Ring extraction /\\cylindrical reference};
+\node[box, right=5mm of extract] (unfold) {Bottom-aligned\\unfolding};
+\node[box, right=5mm of unfold] (denoise) {Radial point\\filtering};
+
+% Second row flows right-to-left to shorten the denoise→enhance connection
+\node[box, text width=38mm, below=9mm of denoise] (enhance) {Curvature-guided\\upsampling/interpolation};
+\node[keybox, left=5mm of enhance] (boundary) {Boundary and\\layout detection};
+\node[box, left=5mm of boundary] (layout) {2D segment\\layout};
+\node[box, left=5mm of layout] (reproj) {3D reprojection\\point labels};
+
+% Arrows
+\draw[arrow] (raw) -- (extract);
+\draw[arrow] (extract) -- (unfold);
+\draw[arrow] (unfold) -- (denoise);
+\draw[arrow] (denoise.south) -- (enhance.north);
+\draw[arrow] (enhance) -- (boundary);
+\draw[arrow] (boundary) -- (layout);
+\draw[arrow] (layout) -- (reproj);
+
+
+\end{tikzpicture}
+\caption{Ring-level segmentation backbone.}
+\end{subfigure}
+
+\vspace{5mm}
+
+% ===================== Panel (b): Why ring-level =====================
+\begin{subfigure}{0.98\textwidth}
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=32mm,
+        inner sep=4pt
+    },
+    good/.style={box},
+    bad/.style={box, dashed},
+    note/.style={
+        draw,
+        rounded corners,
+        align=left,
+        inner sep=5pt,
+        text width=150mm,
+        font=\footnotesize
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Input
+\node[box] (pc) at (0,0) {Same tunnel\\point cloud};
+
+% Per-ring bounded search + proxy
+% (keep the rest of the pipeline vertically centered w.r.t. the input box)
+\node[good, right=54mm of pc] (search) {Per-ring \\parameter search};
+\node[good, right=10mm of search] (proxy) {Per-ring\\proxy score};
+\node[good, right=10mm of proxy] (out) {Reassembled\\3D output};
+
+% Depth maps (heterogeneous quality)
+% (place them midway between input and search; split above/below the input midline)
+\coordinate (middepth) at ($ (pc.east)!0.5!(search.west) $);
+\node[good] (dense)  at ($ (middepth) + (0,6mm) $) {Dense / clearer\\depth map};
+\node[bad]  (sparse) at ($ (middepth) + (0,-6mm) $) {Sparse / missing\\depth map};
+
+% Connections
+\draw[arrow] (pc.east) -- (dense.west);
+\draw[arrow] (pc.east) -- (sparse.west);
+\draw[arrow] (dense.east) -- (search.west);
+\draw[arrow] (sparse.east) -- (search.west);
+\draw[arrow] (search) -- (proxy);
+\draw[arrow] (proxy) -- (out);
+\draw[arrow] (proxy) -- (out);
+
+
+
+\end{tikzpicture}%
+}
+\caption{Why Proxy4Tun operates at ring level rather than tunnel level.}
+\end{subfigure}
+
+\caption{
+Shared ring-level segmentation backbone.
+(a) Backbone. For each ring, we (i) extract the ring and establish a cylindrical reference, (ii) perform bottom-aligned unfolding to a 2D depth map, (iii) apply radial point filtering to remove out-of-surface points, (iv) enhance the map via curvature-guided upsampling/interpolation to improve continuity, (v) detect boundaries and infer the 2D segment layout, and (vi) reproject the predicted labels to 3D.
+(b) Motivation for ring-level operation. Processing rings independently reduces the search space and preserves local variation while enforcing a consistent ring grammar; this matters because unfolded rings from the same tunnel can differ substantially in density, coverage, and missing regions.
+}
+\label{fig:ring_level_formulation_backbone}
+\end{figure*}
+
+
+% ─── Table: Ring-level workflow parameters ───────────────────────────────
+\begin{table*}[t]
+\caption{
+A full list of parameters governing the parameterised stages of the ring-level segmentation workflow.
+Each group controls a specific mechanism in the transformation from raw point cloud to 2D layout and reprojected 3D labels.
+}
+\label{tab:workflow_full_parameters}
+\centering
+\footnotesize
+\begin{tabular}{p{0.20\textwidth}p{0.36\textwidth}p{0.36\textwidth}}
+\toprule
+Stage & Parameters & Effect on the pipeline \\
+\midrule
+Ring extraction / cylindrical reference
+& \texttt{tunnel\_diameter}, \texttt{vertical\_filter\_window}, \texttt{ransac\_threshold}, \texttt{ransac\_probability}, \texttt{ransac\_inlier\_ratio}, \texttt{ransac\_sample\_size}, \texttt{ransac\_initial\_iterations}, \texttt{ransac\_inlier\_threshold\_multiplier}, \texttt{num\_slicing\_planes}
+& Sets ring cropping, cylindrical scale, and RANSAC reference-shape estimation before unfolding to 2D. \\
+\addlinespace
+Bottom-aligned unfolding
+& \texttt{gravity\_anchor} (\texttt{enabled}, \texttt{n\_bins})
+& Fixes bottom-anchor selection and the starting circumferential angle of the unfolded ring. \\
+\addlinespace
+Radial point filtering
+& \texttt{radius\_min}, \texttt{radius\_max}, \texttt{default\_cutoff\_z}, \texttt{y\_step}, \texttt{z\_step}, \texttt{gradient\_threshold}, \texttt{smoothing\_window\_size}, \texttt{smoothing\_offset}
+& Controls which surface points are retained, denoised, and passed to enhancement. \\
+\addlinespace
+Curvature-guided interpolation + upsampling
+& \texttt{target\_distances}, \texttt{num\_neighbors}, \texttt{curvature\_threshold\_enh}, \texttt{interpolation\_window}, \texttt{depth\_threshold\_low}, \texttt{depth\_threshold\_high}, \texttt{outlier\_interpolation\_radius}, \texttt{outlier\_num\_interpolations}, \texttt{outlier\_duplicate\_threshold}, \texttt{outlier\_high\_density\_ring\_start}, \texttt{outlier\_high\_density\_ring\_end}
+& Controls gap filling, outlier repair, and final 2D depth-map density. \\
+\addlinespace
+Boundary and layout detection
+& \texttt{detector\_mode}, \texttt{segment\_count}, \texttt{enabled\_blocks}, \texttt{k\_y\_positions}, \texttt{per\_ring\_offsets}, \texttt{k\_anchor\_semantics}, \texttt{regular\_k\_prior\_low\_frac}, \texttt{regular\_k\_prior\_high\_frac}, \texttt{regular\_k\_prior\_low\_ring\_parity}, \texttt{binary\_threshold}, \texttt{canny\_low}, \texttt{canny\_high}, \texttt{hough\_threshold}, \texttt{hough\_horizontal\_threshold}, \texttt{hough\_min\_length}, \texttt{hough\_max\_gap}, \texttt{merge\_distance\_threshold}, \texttt{single\_ring\_visual\_slot\_snap\_px}, \texttt{angle\_pos\_min}, \texttt{angle\_pos\_max}, \texttt{angle\_neg\_min}, \texttt{angle\_neg\_max}, \texttt{eps}, \texttt{k\_expected\_height\_px}, \texttt{k\_gap\_tolerance\_px}, \texttt{groove\_snap\_px}
+& Detects block boundaries in the 2D map and assembles a valid per-ring segment layout (K anchor, A/B offsets, line merge/snap). \\
+\addlinespace
+Segmentation
+& \texttt{ring\_half\_width}, \texttt{slot\_inset\_y}, \texttt{r\_surface\_min}, \texttt{r\_surface\_min\_per\_ring}, \texttt{k\_cap}, \texttt{ab\_cap}
+& Projects 2D layout labels to points, applies radial groove rejection, and writes final block predictions. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\hiddensubsection{BO calibration}\label{subsec:bo_calibration}
+% ===================== Fig. 4 =====================
+\begin{figure*}[t]
+\centering
+% Elsevier-style figures typically avoid scaling text up (e.g., via \resizebox).
+% Keep the diagram at its natural size and control font size explicitly.
+\begin{tikzpicture}[
+    font=\footnotesize,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=10mm,
+        text width=27mm,
+        inner sep=4pt
+    },
+    keybox/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=10mm,
+        text width=30mm,
+        inner sep=4pt,
+        very thick
+    },
+    stage/.style={
+        draw,
+        rounded corners,
+        dashed,
+        inner sep=7pt
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+% Main flow nodes (wrapped into two stacks to fit page width)
+% Top row
+\node[box] (rings) at (0,0)
+{6 Labelled\\diversity-selected rings};
+% Title label (left-aligned to the left edge of the first box)
+\node[anchor=west, font=\small\bfseries] at ([yshift=18mm]rings.west) {BO-calibrated proxy};
+
+
+\node[box, right=8mm of rings] (space)
+{Warm-start:\\
+{\footnotesize SAM4Tun static\\parameters}};
+
+\node[box, right=8mm of space] (bo)
+{GP-BO:\\
+{\footnotesize GP surrogate + EI\\proposes next setting}};
+
+\node[box, right=8mm of bo] (pool)
+{Trial collection:\\
+{\footnotesize good, poor, and\\failed layouts}};
+
+% Bottom row (continues from pool, right-to-left)
+\node[box, below=12mm of pool] (records)
+{Trial dataset:\\
+{\footnotesize params, proxy features,\\GT mIoU}};
+
+\node[box, left=8mm of records] (analysis)
+{Proxy--mIoU\\correlation:\\
+{\footnotesize select useful features;\\identify failure modes}};
+
+\node[keybox, left=8mm of analysis] (proxy)
+{Deployment\\proxy:\\
+{\footnotesize learnt features and trained proxy}};
+
+% Arrows
+\draw[arrow] (rings) -- (space);
+\draw[arrow] (space) -- (bo);
+\draw[arrow] (bo) -- (pool);
+\draw[arrow] (pool) -- (records);
+\draw[arrow] (records) -- (analysis);
+\draw[arrow] (analysis) -- (proxy);
+
+% Stage grouping boxes
+\node[stage, fit=(space)(bo),
+      label={[font=\bfseries]above:Step 1. Warm-start and run GP-BO}] (stage1) {};
+
+\node[stage, fit=(pool)(records),
+      label={[font=\bfseries]above:Step 2. Log trials}] (stage2) {};
+
+\node[stage, fit=(analysis)(proxy),
+      label={[font=\bfseries]above:Step 3. Learn the deployment proxy}] (stage3) {};
+
+% Notes (removed for concision)
+
+\end{tikzpicture}
+
+\caption{
+Design-time BO calibration of the deployment proxy. Six labelled diversity-selected rings are used to evaluate pipeline settings with Gaussian-process Bayesian optimisation (GP-BO): a Gaussian-process surrogate predicts the score (with uncertainty), and an Expected Improvement (EI) criterion proposes the next setting to test. Each trial saves a dataset comprising parameters, proxy features, and the GT mIoU. These records are used to select effective proxy features and train proxy, producing a learnt deployment proxy rule that operates without GT.
+}
+\label{fig:bo_proxy_calibration}
+\end{figure*}
+
+\begin{table}[t]
+\caption{BO calibration outcome on the six-ring panel (480 trials per arm): mean best BO trial mIoU.}
+\label{tab:bo_warmstart_miou}
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+ & Random search & SAM4Tun prior \\
+\midrule
+mIoU & 0.379 & 0.438 \\
+\bottomrule
+\end{tabular}
+\vspace{1mm}
+
+{\footnotesize Random search: geometric warm-start and random space-filling trials, then GP-BO (\texttt{logs/bo\_experience\_v3}). SAM4Tun prior: resolution-aligned static warm-start, then the same GP-BO budget (\texttt{logs/bo\_experience\_v4\_sam4tun\_prior/vs\_v3\_summary.md}).}
+\end{table}
+
+\FloatBarrier % keep Fig.~4 from floating past the equations/algorithm below
+\clearpage % start Eq.~(1)--(2) and Alg.~1 at the top of a fresh two-column page
+
+% ─── Keep Alg.~1 and Eq.~(1)--(2) on the same page ────────────────────────
+\begin{samepage}
+
+% ─── Algorithm: Design-time calibration of the deployment proxy ───────────
+% Render Alg.~1 as a non-floating block so it can't disappear or move away.
+\begin{center}
+\begin{minipage}{\textwidth}
+% Recreate the ruled algorithm look while keeping it non-floating.
+\captionsetup{type=algorithm, labelfont=bf, font=small}
+% Thicker rules + tighter padding to match the usual algorithm style.
+\hrule height 0.9pt\vspace{0.2em}
+\captionof{algorithm}{Design-time calibration of the deployment proxy}
+\label{alg:design_time_proxy_calibration}
+\vspace{0.2em}\hrule height 0.9pt\vspace{0.35em}
+\begin{algorithmic}[1]
+\Require Labelled diversity-selected rings, warm-start parameters $\theta_0$, tunable pipeline parameters, BO budget $T$
+\Ensure Learnt deployment proxy rule
+\State Initialise the trial set with the warm-start setting $\theta_0$
+\For{$t=1,\ldots,T$}
+    \State Run the ring-level pipeline with the current parameter setting
+    \State Compute proxy features from the output layout without using labels
+    \State Compute ground-truth mIoU for calibration only
+    \State Update the Gaussian-process surrogate with the completed trial
+    \State Select the next setting using Expected Improvement (Eq.~\ref{eq:expected_improvement})
+\EndFor
+\State Compute proxy--mIoU correlations for candidate proxy features (Eq.~\ref{eq:proxy_miou_correlation})
+\State Select proxy features and accept/refine criteria
+\State Freeze the selected features and criteria as the deployment proxy
+\end{algorithmic}
+\vspace{0.1em}\hrule height 0.9pt
+\end{minipage}
+\end{center}
+
+\vspace{-3mm}
+
+% --- Equations (kept together) ---
+\begin{equation}
+\theta_{t+1}
+= \arg\max_{\theta} \mathrm{EI}_t(\theta),
+\qquad
+\mathrm{EI}_t(\theta)
+= \mathbb{E}\left[\max\left(s(\theta)-s_{\mathrm{best}},0\right)\right].
+\label{eq:expected_improvement}
+\end{equation}
+where $\theta_0$ is the warm-start static setting, $s(\theta)$ is the calibration score for setting $\theta$, $\theta_{t+1}$ is the next setting chosen at BO iteration $t$, $\mathrm{EI}_t(\theta)$ is the Expected Improvement under the GP surrogate, and $s_{\mathrm{best}}$ is the best score observed so far. At iteration $t$, the GP surrogate models the score and uncertainty over candidates, and EI balances exploitation and exploration.
+
+\begin{equation}
+\rho_j
+= \mathrm{Spearman}\!\left(
+\{\phi_{i,j}\}_{i=1}^{N},
+\{\mathrm{mIoU}^{GT}_{i}\}_{i=1}^{N}
+\right),
+\label{eq:proxy_miou_correlation}
+\end{equation}
+where $\rho_j$ is the Spearman rank correlation between proxy feature $\phi_j$ and ground-truth mIoU across the $N$ calibration trials (with $\phi_{i,j}$ and $\mathrm{mIoU}^{GT}_{i}$ from trial $i$). During calibration, $\phi_{i,j}$ is computed without labels, while $\mathrm{mIoU}^{GT}_{i}$ uses labels; only proxies with stable, interpretable correlation are kept for deployment.
+
+\end{samepage}
+
+\FloatBarrier % ensure the equations+algorithm appear before Fig.~5
+
+\hiddensubsection{Self-refinement}\label{subsec:self_refinement}
+% ─── Figure (TikZ): Deployment-time refinement loop ───────────────────────
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=8mm,
+        text width=30mm,
+        inner sep=4pt
+    },
+    sbox/.style={
+        draw,
+        rounded corners,
+        align=left,
+        minimum height=8mm,
+        text width=34mm,
+        inner sep=4pt
+    },
+    gate/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=9mm,
+        text width=34mm,
+        inner sep=4pt,
+        very thick
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick},
+    looparrow/.style={-{Latex[length=2mm]}, thick, dashed}
+]
+
+% Horizontal deployment flow
+\node[box] (initial) at (0,0)
+{Initial\\layout};
+
+% Title label (left-aligned to the left edge of the first box)
+% Note: this figure is inside \resizebox{\textwidth}{!}{...}, so we bump the title font up.
+\node[anchor=west, font=\large\bfseries] at ([yshift=36mm]initial.west) {Proxy-guided self-refinement};
+
+% Move the "New ring" box above the main horizontal pipeline to free horizontal space.
+\node[box, above=10mm of initial] (ring)
+{New ring processed \\
+{\footnotesize with SAM4Tun \\static parameters}};
+
+\node[sbox, right=8mm of initial] (variants)
+{Generate variants:\\
+\quad 12 BO-informed\\
+\quad 6 exploratory};
+
+\node[box, right=8mm of variants] (batch)
+{Candidate\\layout batch};
+
+\node[gate, right=8mm of batch] (score)
+{Proxy score};
+
+\node[box, right=8mm of score] (selected)
+{Accept};
+
+\node[box, below=12mm of score] (fallback)
+{Fall back /\\flag for review};
+
+\node[box, above=12mm of score] (refine)
+{Refinement\\needed};
+
+\draw[arrow] (ring) -- (initial);
+\draw[arrow] (initial) -- (variants);
+\draw[arrow] (variants) -- (batch);
+\draw[arrow] (batch) -- (score);
+\draw[arrow] (score) -- (selected);
+\draw[arrow] (score) -- node[right, font=\footnotesize]{budget ended or no safe improvement} (fallback);
+\draw[arrow] (score) -- node[right, font=\footnotesize]{within budget} (refine);
+\draw[looparrow] (refine.west) -- ++(-20mm,0) -| (variants.north);
+
+\end{tikzpicture}
+}
+\caption{Deployment-time proxy-guided self-refinement with a set candidate budget. Each new ring is first processed with the ring-level backbone initialised by the SAM4Tun static parameters. A variant generator produces 18 candidates: 12 BO-informed (concentrated near calibration-supported regions) and 6 exploratory (covering alternative possibilities). Each candidate is executed by the shared backbone to produce a layout, which is then evaluated by the learnt proxy score. The system accepts the best-scoring candidate, falls back to the initial layout and flags the ring when the budget ends or no improvement exists, or loops back to generate another batch when refinement is within budget.}
+\label{fig:self_refinement}
+\end{figure*}
+
+
+
+\hiddensubsection{Ablation design}\label{subsec:proxy_ablation_design}
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=9mm,
+        text width=34mm,
+        inner sep=4pt
+    },
+    wide/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=9mm,
+        text width=44mm,
+        inner sep=4pt
+    },
+    gate/.style={
+        draw,
+        rounded corners,
+        align=center,
+        minimum height=9mm,
+        text width=38mm,
+        inner sep=4pt,
+        very thick
+    },
+    arrow/.style={-{Latex[length=2mm]}, thick}
+]
+
+\node[box] (ptrain) at (0,0)
+{Train 1/4/full-feature\\proxy};
+
+% Title label (left-aligned to the left edge of the first box)
+% Note: this figure is inside \resizebox{\textwidth}{!}{...}, so we bump the title font up.
+\node[anchor=west, font=\Large\bfseries] at ([yshift=18mm]ptrain.west) {Two-stage ablation design};
+
+\node[wide, right=12mm of ptrain] (pool)
+{Shared pool:\\
+{\footnotesize 50 rings $\times$ 18 candidates}};
+
+% Score the same candidate pool with each proxy (split into three boxes)
+\node[box, right=10mm of pool] (score)
+{1/4/full-feature \\ proxy score\\};
+
+\node[wide, right=10mm of score] (select)
+{A: Selected proxy:\\
+{\footnotesize highest accumulated GT mIoU}};
+
+\node[wide, right=10mm of select] (depth)
+{B: self-refinement\\
+{\footnotesize 1 vs 3 vs 5 iterations}};
+
+
+\draw[arrow] (ptrain.east) -- (pool.west);
+\draw[arrow] (pool.east) -- (score.west);
+\draw[arrow] (score.east) -- (select.west);
+\draw[arrow] (select) -- (depth);
+
+\end{tikzpicture}%
+}
+\caption{Two-stage ablation design. Stage~A trains the 1/4/full-feature proxies from the same six-ring BO-calibrated dataset and selects the proxy with the highest accumulated GT mIoU on a shared candidate pool. Stage~B fixes that proxy and evaluates self-refinement depth with 1, 3, and 5 iterations.}
+\label{fig:proxy_ablation_design}
+\end{figure*}
+
+\hiddensubsection{Evaluation}\label{subsec:evaluation}
+
+\begin{table*}[t]
+\caption{Proxy-ablation evaluation: ring-level endpoints, preferred direction, and practical implications.}
+\label{tab:proxy_ablation_summary}
+\centering
+\footnotesize
+\begin{tabular}{p{0.42\textwidth}p{0.18\textwidth}p{0.30\textwidth}}
+\toprule
+Evaluation & Preferred direction & Practical implications \\
+\midrule
+Best GT mIoU & Higher & Maximum performance \\
+High-proxy / low-mIoU mismatch & Lower & Safety against bad selections \\
+Low-proxy / high-mIoU mismatch & Lower & Capturing improvement opportunities \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{algorithm*}[t]
+\caption{Two-stage proxy and refinement-depth ablation}
+\label{alg:proxy_ablation_shared_candidates}
+\begin{algorithmic}[1]
+\Require Six-ring BO-calibrated dataset, evaluation rings, proxy candidates
+\Ensure Selected proxy
+\State For each proxy candidate, extract its feature columns from the BO-calibrated dataset
+\State Standardise features and fit Ridge regression to calibration mIoU
+\Statex \textbf{Stage A: proxy-candidate ablation}
+\For{each evaluation ring}
+    \State Generate one shared 18-candidate batch: 12 BO-informed and 6 exploratory
+    \State Execute the ring-level backbone once per candidate variant
+    \For{each trained proxy}
+        \State Score the same candidate layouts
+        \State Select the best candidate by proxy score
+        \State Compute selected mIoU, and the two proxy--mIoU mismatch rates
+    \EndFor
+\EndFor
+\State Select the proxy candidate with the highest GT mIoU 
+\Statex \textbf{Stage B: refinement-iteration ablation}
+\For{each evaluation ring}
+    \For{refinement budget in $\{1,3,5\}$}
+        \State Run proxy-dependent refinement with the selected proxy and the given budget
+        \State Compute selected mIoU, and mismatch rates
+    \EndFor
+\EndFor
+\State Compute paired ring-level differences for proxy candidates and refinement budgets
+\State Estimate 95\% confidence intervals by bootstrap over rings
+\State Compute paired $p$-values for statistical significance
+\end{algorithmic}
+\end{algorithm*}
+
+\FloatBarrier % keep Fig.~5 and ablation design artifacts from floating past the results section below
+\clearpage
+% ══════════════════════════════════════════════════════════════════════════
+\section{Results}\label{sec:results}% ══════════════════════════════════════════════════════════════════════════
+\begin{table*}[t]
+\caption{
+Critical parameters (agent-configurable subset used in calibration and deployment).
+}
+\label{tab:workflow_critical_parameters}
+\centering
+\footnotesize
+\begin{tabular}{p{0.20\textwidth}p{0.36\textwidth}p{0.36\textwidth}}
+\toprule
+Stage & Parameters & Effect on the pipeline \\
+\midrule
+Ring extraction / cylindrical reference
+& \texttt{tunnel\_diameter}
+& Sets the cylindrical scale used when unfolding the ring and generating candidate variants. \\
+\addlinespace
+Bottom-aligned unfolding
+& \texttt{gravity\_anchor} (preset)
+& Bottom alignment is fixed before candidate generation; not varied in the calibration candidate set. \\
+\addlinespace
+Radial point filtering
+& \texttt{radius\_min}, \texttt{num\_neighbors}
+& Adjust the lower radial acceptance band and local-neighbour support for denoising/cleanup. \\
+\addlinespace
+Curvature-guided interpolation + upsampling
+& \texttt{interpolation\_window}
+& Adjusts the local interpolation window when densifying sparse or missing lining support. \\
+\addlinespace
+Boundary and layout detection
+& \texttt{segment\_count}, \texttt{enabled\_blocks}, \texttt{k\_y\_positions}, \texttt{per\_ring\_offsets}, \texttt{regular\_k\_prior\_low\_frac}, \texttt{regular\_k\_prior\_high\_frac}, \texttt{regular\_k\_prior\_low\_ring\_parity}, \texttt{hough\_threshold}, \texttt{hough\_horizontal\_threshold}, \texttt{merge\_distance\_threshold}, \texttt{single\_ring\_visual\_slot\_snap\_px}
+& Adjust K position, A/B placement, regular-family K prior band, line-detection merge/snap, and layout assembly (plus/minus branch selected at runtime when both hypotheses are emitted). \\
+\addlinespace
+Segmentation
+& \texttt{r\_surface\_min}, \texttt{slot\_inset\_y}
+& Adjust radial groove/background rejection and slot padding before 3D label reprojection. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{table*}[H]
+\caption{Proxy features.}
+\label{tab:proxy_ablation_families}
+\centering
+\footnotesize
+\begin{tabular}{p{0.20\textwidth}p{0.18\textwidth}p{0.52\textwidth}}
+\toprule
+Proxy family & Scope & Proxy features \\
+\midrule
+Single-feature & one feature
+& \texttt{balance\_norm} \\
+\addlinespace
+Compact descriptor & three detection features
+& \texttt{struct\_missing\_ids\_before\_n}, \texttt{depth\_row\_nonempty\_ratio\_audit}, \texttt{geom\_boundary\_gap\_cv} \\
+\addlinespace
+Full proxy-feature library & nine features
+& \texttt{feat\_pre\_pre\_depth\_map\_valid\_pixels}, \texttt{feat\_intrinsic\_n\_reclassified\_by\_r\_filter}, \texttt{feat\_intrinsic\_arc\_width\_entropy}, \texttt{param\_k\_y\_frac}, \texttt{param\_hough\_oblique\_threshold}, \texttt{balance\_norm}, \texttt{S\_boundary}, \texttt{seg\_k\_size\_ratio}, \texttt{seg\_groove\_score} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+% ══════════════════════════════════════════════════════════════════════════
+\section{Discussion}\label{sec:discussion}
+% ══════════════════════════════════════════════════════════════════════════
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Conclusions}\label{sec:conclusions}
+% ══════════════════════════════════════════════════════════════════════════
+
+% ══════════════════════════════════════════════════════════════════════════
+% Data availability, declarations, etc.
+% ══════════════════════════════════════════════════════════════════════════
+
+\section*{Data availability}
+
+The source code, adapted parameters, and evaluation scripts are available at \url{https://github.com/Tao-Robominds/R4Tun}. The Seg2Tunnel dataset is publicly available.
+
+\section*{Declaration of competing interest}
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+%\printcredits  % Uncomment if cas-dc supports it in your version
+
+% ══════════════════════════════════════════════════════════════════════════
+% Appendices
+% ══════════════════════════════════════════════════════════════════════════
+
+% \clearpage
+\section*{Appendices}
+
+% \input{appendices}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% Bibliography
+% ══════════════════════════════════════════════════════════════════════════
+
+% \clearpage % start Biography on a new page
+% \section*{Biography}
+
+\end{document}

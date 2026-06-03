@@ -26,7 +26,7 @@ from typing import Tuple, List, Dict, Optional, Set
 from sklearn.cluster import DBSCAN, AgglomerativeClustering
 EXPECTED_7_BLOCKS = ["K", "B1", "A1", "A2", "A3", "A4", "B2"]
 EXPECTED_6_BLOCKS = ["K", "B1", "A1", "A2", "A3", "B2"]
-REVERSE_CANONICAL_MAP = {
+MINUS_DIRECTION_BLOCK_MAP = {
     "K": "K",
     "B1": "B2",
     "A1": "A4",
@@ -35,7 +35,7 @@ REVERSE_CANONICAL_MAP = {
     "A4": "A1",
     "B2": "B1",
 }
-REVERSE_CANONICAL_MAP_6 = {
+MINUS_DIRECTION_BLOCK_MAP_6 = {
     "K": "K",
     "B1": "B2",
     "A1": "A3",
@@ -58,10 +58,10 @@ def _resolve_expected_blocks(
     return list(EXPECTED_7_BLOCKS)
 
 
-def _resolve_reverse_map(expected_blocks: list[str]) -> Dict[str, str]:
+def _resolve_minus_direction_block_map(expected_blocks: list[str]) -> Dict[str, str]:
     if set(expected_blocks) == set(EXPECTED_6_BLOCKS):
-        return dict(REVERSE_CANONICAL_MAP_6)
-    return dict(REVERSE_CANONICAL_MAP)
+        return dict(MINUS_DIRECTION_BLOCK_MAP_6)
+    return dict(MINUS_DIRECTION_BLOCK_MAP)
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1557,16 +1557,16 @@ def write_direction_hypotheses(
     with open(plus_bnd_path, "w") as f:
         json.dump(boundaries_plus, f, indent=2)
 
-    reverse_map = _resolve_reverse_map(expected_blocks)
-    all_segments_minus = _apply_block_map_to_segments(all_segments_plus, reverse_map)
-    boundaries_minus = _apply_block_map_to_boundaries(boundaries_plus, reverse_map)
+    minus_block_map = _resolve_minus_direction_block_map(expected_blocks)
+    all_segments_minus = _apply_block_map_to_segments(all_segments_plus, minus_block_map)
+    boundaries_minus = _apply_block_map_to_boundaries(boundaries_plus, minus_block_map)
     all_segments_minus.to_csv(minus_seg_path, index=False)
     with open(minus_bnd_path, "w") as f:
         json.dump(boundaries_minus, f, indent=2)
 
     meta = {
         "status": "ok",
-        "reverse_map": reverse_map,
+        "minus_direction_block_map": minus_block_map,
         "files": {
             "all_segments_direction_plus": plus_seg_path.name,
             "boundaries_per_ring_direction_plus": plus_bnd_path.name,
