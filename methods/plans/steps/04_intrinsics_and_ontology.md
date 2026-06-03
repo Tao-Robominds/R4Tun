@@ -19,8 +19,8 @@ Sandbox path: `logs/{run_id}/{tunnel_id}/r{ring_id}/04_proxy_family/`
 
 Keep these v5-derived features visible from the one-shot BO stage onward:
 
-- 3-feature observable proxy: `struct_missing_ids_before_n`, `depth_row_nonempty_ratio_audit`, `geom_boundary_gap_cv`;
-- 4-feature balance proxy: the 3-feature set plus `balance_norm`;
+- 3-feature observable proxy: top-3 GT-free observables by **mean within-ring |Spearman(feature, mIoU)|** (min ring coverage), one per redundant cluster;
+- 4-feature balance proxy: top-4 with the same rule (typically adds `balance_norm` or `feat_cv`-derived balance when class-balance signal ranks);
 - boundary geometry: `geom_boundary_min_gap_frac`, `geom_boundary_max_gap_frac`, `geom_boundary_expected_resid_frac`;
 - K/order observables: `k_anchor_dist_frac`, `k_y_frac`, `horizontal_line_count`, `positive_line_count`, `negative_line_count`;
 - predicted-class distribution: `feat_present_ratio`, `feat_entropy`, `feat_cv`, `feat_max_share`, `feat_nonzero_classes`;
@@ -56,18 +56,19 @@ This directly tests whether the proxy can identify a better segmentation after s
 ## Actions
 
 1. Freeze the candidate feature list and normalization rules.
-2. Train or fit each proxy only on the allowed BO/few-shot training split.
-3. Evaluate both regression quality and selection quality:
+2. **Feature pick (Spearman):** on the BO/candidate training pool, rank GT-free observables by mean within-ring |Spearman(feature, mIoU)|; require variation on ≥ `min_rings` rings and ≥ `min_candidates` rows per ring; greedy top-k skipping pairs with |Spearman(feature_i, feature_j)| ≥ 0.9. CLI: `bo/pick_proxy_features_spearman.py`.
+3. Train or fit each proxy only on the allowed BO/few-shot training split.
+4. Evaluate both regression quality and selection quality:
    - correlation with candidate GT mIoU;
    - top-1 selected candidate mIoU;
    - improvement over the deterministic baseline;
    - rank agreement within each ring;
    - robustness across condition clusters.
-4. Report feature-delta behavior from the one-shot seed before adding more shots.
-5. Evaluate order-switch pairs as a specific proxy-selection subtest.
-6. Record model complexity and feature count as part of the ablation.
-7. Select a main proxy based on validation performance and confidence calibration, not just average accuracy.
-8. Keep interpretability claims limited to observable feature definitions and ablation results.
+5. Report feature-delta behavior from the one-shot seed before adding more shots.
+6. Evaluate order-switch pairs as a specific proxy-selection subtest.
+7. Record model complexity and feature count as part of the ablation.
+8. Select a main proxy based on validation performance and confidence calibration, not just average accuracy.
+9. Keep interpretability claims limited to observable feature definitions and ablation results.
 
 ## Outputs
 

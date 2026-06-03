@@ -59,6 +59,44 @@ def search_dim(segment_count: int) -> int:
     return 1 + int(segment_count) + N_LAYOUT_TAIL + N_R_SURFACE
 
 
+def layout_stream_dim(segment_count: int) -> int:
+    """Stream L: offsets + layout tail + r_surface_min (k_y frozen from SAM4Tun prior)."""
+    return int(segment_count) + N_LAYOUT_TAIL + N_R_SURFACE
+
+
+def k_stream_dim() -> int:
+    """Stream K: k_y_frac only (layout frozen from Stream L handoff)."""
+    return 1
+
+
+def d_stream_dim() -> int:
+    """Stream D: no continuous search (L+K frozen; order selection policy only)."""
+    return 0
+
+
+def full_to_layout_stream_x(x: np.ndarray, segment_count: int) -> np.ndarray:
+    """Drop k_y_frac (index 0) from a full search vector."""
+    x = np.asarray(x, dtype=float).ravel()
+    n = int(segment_count)
+    full_n = search_dim(n)
+    if x.size != full_n:
+        raise ValueError(f"Expected full search_x length {full_n}, got {x.size}")
+    return np.concatenate([x[1 : 1 + n], x[1 + n :]])
+
+
+def layout_stream_to_full_x(
+    layout_x: np.ndarray, k_y_frac: float, segment_count: int
+) -> np.ndarray:
+    """Expand layout subvector with frozen k_y_frac."""
+    layout_x = np.asarray(layout_x, dtype=float).ravel()
+    n = int(segment_count)
+    expected = layout_stream_dim(n)
+    if layout_x.size != expected:
+        raise ValueError(f"Expected layout stream length {expected}, got {layout_x.size}")
+    k = float(np.clip(k_y_frac, 0.0, 1.0))
+    return np.concatenate([[k], layout_x])
+
+
 def v1_search_dim(segment_count: int) -> int:
     """Step-2 vector without searchable r_surface_min."""
     return 1 + int(segment_count) + N_LAYOUT_TAIL
@@ -116,6 +154,7 @@ def layout_params_for_log(layout: dict[str, float]) -> dict[str, Any]:
 def search_space_summary(
     segment_count: int,
     *,
+    experience_stream: str = "full",
     r_lo: float | None = None,
     r_hi: float | None = None,
     r_otsu_ref: float | None = None,
@@ -129,15 +168,37 @@ def search_space_summary(
             "otsu_ref": round(float(r_otsu_ref), 4) if r_otsu_ref is not None else None,
             "ceiling_ref": round(float(r_ceiling_ref), 4) if r_ceiling_ref is not None else None,
         }
-    return {
-        "segment_count": segment_count,
-        "search_dim": search_dim(segment_count),
-        "layout_variables": [
+    if experience_stream == "k":
+        dim = k_stream_dim()
+    elif experience_stream == "d":
+        dim = d_stream_dim()
+    elif experience_stream == "layout":
+        dim = layout_stream_dim(segment_count)
+    else:
+        dim = search_dim(segment_count)
+    layout_vars = (
+        ["order only — k_y/offsets/layout/r_surface frozen from Stream K handoff"]
+        if experience_stream == "d"
+        else ["k_y_frac only — offsets/layout/r_surface frozen from Stream L handoff"]
+        if experience_stream == "k"
+        else [
+            "per_ring_offsets (A/B offsets) — k_y frozen from SAM4Tun prior",
+            *[f"{p.name} ({p.lo}–{p.hi}, default={p.default})" for p in LAYOUT_RECOVERY_PARAMS],
+            "r_surface_min (ring-adaptive r_lo–r_hi)",
+        ]
+        if experience_stream == "layout"
+        else [
             "k_y (K position)",
             "per_ring_offsets (A/B offsets)",
             *[f"{p.name} ({p.lo}–{p.hi}, default={p.default})" for p in LAYOUT_RECOVERY_PARAMS],
-            f"r_surface_min (ring-adaptive r_lo–r_hi)",
-        ],
+            "r_surface_min (ring-adaptive r_lo–r_hi)",
+        ]
+    )
+    return {
+        "segment_count": segment_count,
+        "experience_stream": experience_stream,
+        "search_dim": dim,
+        "layout_variables": layout_vars,
         "excluded": "preprocessing, binary_threshold, full SAM4Tun space",
         "r_surface_min_bounds": r_bounds,
         "params": [

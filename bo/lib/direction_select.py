@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from lib.ceiling_gate import REPO_ROOT, SEG_CLI, VENV_PY
+from lib.guardrail_utils import apply_guardrail_fields, guardrail_passed
 
 BRANCHES = ("plus", "minus")
 BRANCH_ARTIFACTS: dict[str, tuple[str, str]] = {
@@ -137,7 +138,7 @@ def composite_branch_score(metrics: dict[str, Any]) -> float:
     if gap is not None:
         score += 0.001 * min(float(gap), 500.0)
 
-    if metrics.get("det_guardrail_passed"):
+    if guardrail_passed(metrics):
         score += 0.25
 
     score -= 0.25 * int(metrics.get("seg_missing_class_count", 0))
@@ -146,7 +147,7 @@ def composite_branch_score(metrics: dict[str, Any]) -> float:
 
 def score_branch(ring_dir: Path, segment_count: int = 7) -> dict[str, Any]:
     extract_detection_metrics = _import_extract_metrics()
-    raw = extract_detection_metrics(str(ring_dir))
+    raw = apply_guardrail_fields(extract_detection_metrics(str(ring_dir)))
     missing = _seg_missing_class_count(ring_dir)
     profile = _arc_width_profile(ring_dir)
     tmpl = 0.0
@@ -200,6 +201,32 @@ def _archive_branch_outputs(ring_dir: Path, branch: str) -> None:
         shutil.copy2(meta, ring_dir / f"segment_completion_meta_direction_{branch}.json")
 
 
+def _gt_miou_from_branch_final(ring_dir: Path, branch: str, max_class: int) -> float | None:
+    path = ring_dir / f"final_direction_{branch}.csv"
+    if not path.is_file():
+        return None
+    df = pd.read_csv(path)
+    if "segment" not in df.columns or "pred" not in df.columns:
+        return None
+    tmp = df[["segment", "pred"]].dropna(subset=["segment", "pred"]).copy()
+    if tmp.empty:
+        return None
+    gt = pd.to_numeric(tmp["segment"], errors="coerce").fillna(0).astype(int).to_numpy()
+    pred = pd.to_numeric(tmp["pred"], errors="coerce").fillna(0).astype(int).to_numpy()
+    valid = (gt >= 0) & (gt <= max_class) & (pred >= 0) & (pred <= max_class)
+    gt, pred = gt[valid], pred[valid]
+    if gt.size == 0:
+        return None
+    labels = sorted(set(gt.tolist()) | set(pred.tolist()))
+    ious = []
+    for cls in labels:
+        g, p = gt == cls, pred == cls
+        union = np.logical_or(g, p).sum()
+        if union:
+            ious.append(float(np.logical_and(g, p).sum() / union))
+    return float(np.mean(ious)) if ious else None
+
+
 def select_direction_and_segment(
     *,
     tunnel_id: str,
@@ -209,6 +236,8 @@ def select_direction_and_segment(
     tag: str,
     prefer_branch: str = "plus",
     segment_count: int = 7,
+    force_branch: str | None = None,
+    log_twin_gt_miou: bool = False,
 ) -> dict[str, Any]:
     """Score plus/minus, run seg on both, commit winner to canonical outputs."""
     ring_dir = Path(ring_dir)
@@ -265,9 +294,19 @@ def select_direction_and_segment(
 
     prefer = prefer_branch if prefer_branch in BRANCHES else "plus"
     if tmpl_minus > tmpl_plus + TEMPLATE_SWITCH_MARGIN:
-        selected = "minus"
+        intrinsic_selected = "minus"
     else:
-        selected = prefer
+        intrinsic_selected = prefer
+
+    if force_branch in BRANCHES:
+        selected = force_branch
+    else:
+        selected = intrinsic_selected
+
+    gt_miou_plus = gt_miou_minus = None
+    if log_twin_gt_miou:
+        gt_miou_plus = _gt_miou_from_branch_final(ring_dir, "plus", segment_count)
+        gt_miou_minus = _gt_miou_from_branch_final(ring_dir, "minus", segment_count)
 
     activate_branch_artifacts(ring_dir, selected)
     winner_final = ring_dir / f"final_direction_{selected}.csv"
@@ -286,6 +325,7 @@ def select_direction_and_segment(
     selection = {
         "status": "ok",
         "selected_branch": selected,
+        "intrinsic_selected_branch": intrinsic_selected,
         "score_plus": score_plus,
         "score_minus": score_minus,
         "margin": margin,
@@ -294,6 +334,12 @@ def select_direction_and_segment(
         "low_confidence": margin < LOW_CONFIDENCE_MARGIN,
         "direction_select_enabled": True,
         "branches": branch_results,
+        "template_match_score_plus": tmpl_plus,
+        "template_match_score_minus": tmpl_minus,
+        "gt_miou_plus": gt_miou_plus,
+        "gt_miou_minus": gt_miou_minus,
+        "force_branch": force_branch,
+        "prefer_branch": prefer_branch,
     }
     (ring_dir / SELECTION_FILENAME).write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
     return selection

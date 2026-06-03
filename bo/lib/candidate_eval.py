@@ -11,8 +11,29 @@ import numpy as np
 import pandas as pd
 
 from lib.ceiling_gate import REPO_ROOT, setup_sandbox
+from lib.guardrail_utils import apply_guardrail_fields
 from lib.feature_catalog import PRE7_FEATURES, SEG_REPLAY_FEATURES
-from lib.layout_bo import EXCLUDED_TRIAL_METRICS, RingContext, build_ring_context, decode_x, evaluate_trial
+from lib.layout_bo import (
+    EXCLUDED_TRIAL_METRICS,
+    RingContext,
+    build_ring_context,
+    decode_x,
+    evaluate_trial,
+)
+from lib.direction_select import DIRECTION_META, SELECTION_FILENAME, direction_hypotheses_available
+
+# Logged on every held-out / Stage-A candidate eval (intrinsic branch scorer).
+DIRECTION_PROXY_FIELDS = (
+    "order_branch",
+    "branch_is_minus",
+    "direction_select_enabled",
+    "direction_score_plus",
+    "direction_score_minus",
+    "direction_margin",
+    "template_margin_minus_plus",
+    "template_match_score_plus",
+    "template_match_score_minus",
+)
 from lib.pre_depth_qa import load_depth_3a
 from lib.v5_proxy_features import compute_v5_proxy_features, prefix_features
 
@@ -82,8 +103,13 @@ def metrics_to_proxy_row(metrics: dict[str, Any], pre7: dict[str, Any]) -> dict[
             row[k] = v
     row["gt_miou"] = metrics.get("gt_miou", 0.0)
     row["agent_error"] = metrics.get("agent_error", True)
-    row["order_branch"] = metrics.get("order_branch", "plus")
-    row["det_guardrail_passed"] = metrics.get("det_guardrail_passed", False)
+    for key in DIRECTION_PROXY_FIELDS:
+        if key in metrics:
+            row[key] = metrics[key]
+    if "order_branch" not in row:
+        row["order_branch"] = metrics.get("order_branch", "plus")
+    row["det_guardrail_passed"] = apply_guardrail_fields(metrics)["det_guardrail_passed"]
+    row["det_ready_for_segmentation"] = metrics.get("det_ready_for_segmentation")
     row["det_y_coverage_pct"] = metrics.get("det_y_coverage_pct")
     return row
 
@@ -94,8 +120,12 @@ def evaluate_candidate(
     *,
     candidate_id: int,
     pre7: dict[str, Any] | None = None,
+    prefer_branch: str = "plus",
 ) -> dict[str, Any]:
-    """Run full pipeline for one search_x vector; return metrics + proxy features."""
+    """Run det → intrinsic direction_select (plus/minus) → seg; return proxy features.
+
+    Held-out and Stage-A scoring must use this path — not raw seg on a single branch.
+    """
     x = np.asarray(search_x, dtype=float)
     k_y, offsets, layout, r_surface_min = decode_x(ctx, x)
     tag = f"cand{candidate_id:02d}"
@@ -106,11 +136,12 @@ def evaluate_candidate(
         layout,
         r_surface_min,
         tag=tag,
-        order_branch="plus",
+        order_branch=prefer_branch,
     )
     for k in list(metrics.keys()):
         if k in EXCLUDED_TRIAL_METRICS:
             metrics.pop(k)
+    metrics = apply_guardrail_fields(metrics)
 
     if not metrics.get("agent_error"):
         try:
@@ -129,7 +160,43 @@ def evaluate_candidate(
     proxy_row["candidate_id"] = candidate_id
     proxy_row["k_center_norm"] = float(k_y / max(ctx.H, 1))
     proxy_row["layout_k_center_norm"] = proxy_row["k_center_norm"]
+    proxy_row["direction_hypotheses_present"] = direction_hypotheses_available(ctx.sandbox_ring)
+    sel_path = ctx.out_dir / SELECTION_FILENAME
+    if sel_path.is_file():
+        proxy_row["direction_selection_path"] = str(sel_path)
     return proxy_row
+
+
+def check_direction_select_eval(df: pd.DataFrame, ring_dir: Path) -> dict[str, Any]:
+    """Gate: held-out candidate eval used intrinsic dual-branch direction_select."""
+    criteria: dict[str, bool] = {}
+    if df.empty:
+        return {"passed": False, "criteria": {"non_empty": False}, "details": {}}
+    criteria["non_empty"] = True
+    if "direction_select_enabled" in df.columns:
+        ok = df["direction_select_enabled"].fillna(False).astype(bool)
+        criteria["direction_select_enabled_all"] = bool(ok.all())
+    else:
+        criteria["direction_select_enabled_all"] = False
+    if "direction_score_plus" in df.columns and "direction_score_minus" in df.columns:
+        scored = df[~df["agent_error"].astype(bool)] if "agent_error" in df.columns else df
+        criteria["branch_scores_logged"] = bool(
+            len(scored) > 0
+            and scored["direction_score_plus"].notna().any()
+            and scored["direction_score_minus"].notna().any()
+        )
+    else:
+        criteria["branch_scores_logged"] = False
+    meta = ring_dir / DIRECTION_META
+    criteria["direction_hypotheses_meta"] = meta.is_file()
+    criteria["order_branch_logged"] = "order_branch" in df.columns
+    passed = all(criteria.values())
+    return {
+        "passed": passed,
+        "criteria": criteria,
+        "n_candidates": int(len(df)),
+        "direction_meta_path": str(meta) if meta.is_file() else None,
+    }
 
 
 def load_ring_context(

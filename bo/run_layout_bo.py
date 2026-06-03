@@ -17,6 +17,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 _BO_DIR = Path(__file__).resolve().parent
 REPO_ROOT = _BO_DIR.parent
 if str(_BO_DIR) not in sys.path:
@@ -27,6 +29,7 @@ from lib.layout_bo import (  # noqa: E402
     run_iterative_ceiling_push,
     run_ring_bo,
     write_panel_ceiling_push_summary,
+    write_ring_regular_manifest,
 )
 from lib.manifest import (  # noqa: E402
     load_manifest_rings,
@@ -171,9 +174,20 @@ def cmd_experience(args: argparse.Namespace) -> int:
         seg = entry.get("segment_count") or args.segment_count
         n_evals = n_evals_for_ring_entry(entry, default=args.n_evals) if entry.get("diversity_slot") else args.n_evals
         mode_label = "GT-anchor" if args.warm_anchor == "gt_derived" else "Honest"
-        print(f"\n{'=' * 60}\n{mode_label} experience BO: {ring_key} (n_evals={n_evals})\n{'=' * 60}")
+        stream_note = f", stream={args.stream}" if args.stream != "full" else ""
+        print(f"\n{'=' * 60}\n{mode_label} experience BO: {ring_key} (n_evals={n_evals}{stream_note})\n{'=' * 60}")
         prior_root = None if args.warm_anchor == "gt_derived" else (
             Path(args.prior_root).resolve() if args.prior_root else None
+        )
+        layout_handoff = (
+            Path(args.layout_handoff_root).resolve()
+            if getattr(args, "layout_handoff_root", None)
+            else None
+        )
+        k_handoff = (
+            Path(args.k_handoff_root).resolve()
+            if getattr(args, "k_handoff_root", None)
+            else None
         )
         result = run_ring_bo(
             tunnel_id,
@@ -187,11 +201,16 @@ def cmd_experience(args: argparse.Namespace) -> int:
             order_branch=branch,
             prior_root=prior_root,
             warm_anchor=args.warm_anchor,
+            experience_stream=args.stream,
+            layout_handoff_root=layout_handoff,
+            k_handoff_root=k_handoff,
         )
         gate = result["gate"]
         best = result["bo_result"]["best_payload"]
+        ctx = result["ctx"]
         summaries.append({
             "ring_key": ring_key,
+            "ring_is_regular": bool(ctx.ring_is_regular),
             "n_trials": gate["n_evals"],
             "ceiling_reference": gate.get("ceiling_miou_reference"),
             "best_bo_miou": gate["best_bo_miou"],
@@ -203,6 +222,12 @@ def cmd_experience(args: argparse.Namespace) -> int:
             "r_surface_min_ceiling_ref": best.get("r_surface_min_ceiling_ref"),
             "best_k_y": best.get("best_k_y"),
         })
+
+    if args.stream == "k" and summaries:
+        write_ring_regular_manifest(
+            run_root,
+            [{"case_id": s["ring_key"], "ring_is_regular": s["ring_is_regular"]} for s in summaries],
+        )
 
     gt_gate_args: dict[str, int | None] = {}
     if args.only_ring and summaries:
@@ -248,17 +273,121 @@ def cmd_experience(args: argparse.Namespace) -> int:
                 "evidence_path": str(run_root / "single_instance_gate.json"),
             }
         else:
+            stream_k_extra: dict = {}
+            stream_d_extra: dict = {}
+            if args.stream == "d":
+                t, r = gate["ring_key"].split("/")
+                trials_path = run_root / t / r / "bo_trials.csv"
+                stream_k_best = 0.691
+                sk_path = (
+                    Path(args.k_handoff_root).resolve()
+                    / t
+                    / r
+                    / "k_best_for_stream_d.json"
+                )
+                if sk_path.is_file():
+                    stream_k_best = float(json.loads(sk_path.read_text())["best_bo_miou"])
+                twin_spread = 0.0
+                if trials_path.is_file():
+                    tdf = pd.read_csv(trials_path)
+                    base = tdf[tdf["kind"] == "twin_baseline"]
+                    if not base.empty and "gt_miou_plus" in base.columns:
+                        row = base.iloc[0]
+                        mp, mm = row.get("gt_miou_plus"), row.get("gt_miou_minus")
+                        if pd.notna(mp) and pd.notna(mm):
+                            twin_spread = abs(float(mp) - float(mm))
+                    oracle_best = None
+                    if "gt_miou_plus" in tdf.columns and "gt_miou_minus" in tdf.columns:
+                        oracle_best = float(
+                            tdf[["gt_miou_plus", "gt_miou_minus"]]
+                            .apply(pd.to_numeric, errors="coerce")
+                            .max(axis=1)
+                            .max()
+                        )
+                stream_d_extra = {
+                    "twin_miou_spread": twin_spread,
+                    "stream_k_best_miou_ref": stream_k_best,
+                    "oracle_branch_miou_max": oracle_best,
+                    "best_bo_beats_stream_k": bool(
+                        gate["best_bo_miou"] >= stream_k_best
+                        or (oracle_best is not None and oracle_best >= stream_k_best)
+                    ),
+                }
+            if args.stream == "k":
+                trials_path = run_root / gate["ring_key"].split("/")[0] / (
+                    gate["ring_key"].split("/")[1]
+                ) / "bo_trials.csv"
+                stream_l_best = 0.345
+                sam_smoke = 0.083
+                sl_best_path = (
+                    Path(args.layout_handoff_root).resolve()
+                    / gate["ring_key"].split("/")[0]
+                    / gate["ring_key"].split("/")[1]
+                    / "layout_best_for_stream_k.json"
+                )
+                if sl_best_path.is_file():
+                    stream_l_best = float(
+                        json.loads(sl_best_path.read_text())["best_bo_miou"]
+                    )
+                sam_path = (
+                    Path(args.prior_root).resolve()
+                    / gate["ring_key"].replace("/", "_")
+                    / "sam4tun_prior.json"
+                )
+                if sam_path.is_file():
+                    sam_smoke = float(json.loads(sam_path.read_text()).get("smoke_gt_miou", sam_smoke))
+                k_std = gate.get("miou_std", 0.0)
+                if trials_path.is_file():
+                    tdf = pd.read_csv(trials_path)
+                    if "k_y_frac" in tdf.columns:
+                        k_std = float(tdf["k_y_frac"].std())
+                stream_k_extra = {
+                    "k_y_frac_std": k_std,
+                    "stream_l_best_miou_ref": stream_l_best,
+                    "sam_smoke_miou_ref": sam_smoke,
+                    "best_bo_beats_stream_l": bool(gate["best_bo_miou"] > stream_l_best),
+                    "best_bo_beats_sam_smoke": bool(gate["best_bo_miou"] > sam_smoke),
+                }
             single = {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "case_id": gate["ring_key"],
-                "command": "bo/run_layout_bo.py experience --only-ring ... --run-root logs/bo_experience_v4_sam4tun_prior",
+                "command": (
+                    f"bo/run_layout_bo.py experience --stream {args.stream} "
+                    f"--warm-anchor {args.warm_anchor} --only-ring {gate['ring_key']} "
+                    f"--run-root {run_root}"
+                ),
+                "experience_stream": args.stream,
+                "warm_anchor": args.warm_anchor,
                 "target_n_evals": gate["n_trials"],
                 "experience_gate": gate,
                 "honesty_gate": panel_gate,
+                "stream_k_checks": stream_k_extra,
+                "stream_d_checks": stream_d_extra,
                 "pass_criterion": "experience_gate_passed and honesty_gate_passed and zero gt_layout trials",
                 "passed": bool(gate["experience_gate_passed"] and panel_gate.get("passed")),
                 "evidence_path": str(run_root / "single_instance_gate.json"),
             }
+            if args.stream == "d" and stream_d_extra:
+                single["pass_criterion"] = (
+                    "experience_gate_passed and honesty_gate_passed; "
+                    "twin spread>=0.02; best or oracle-branch mIoU >= stream_k"
+                )
+                single["passed"] = bool(
+                    single["passed"]
+                    and stream_d_extra.get("twin_miou_spread", 0) >= 0.02
+                    and stream_d_extra.get("best_bo_beats_stream_k")
+                )
+            if args.stream == "k" and stream_k_extra:
+                single["pass_criterion"] = (
+                    "experience_gate_passed and honesty_gate_passed; "
+                    "k_y_frac_std>0.05; best>mIoU stream_l and sam smoke"
+                )
+                single["passed"] = bool(
+                    single["passed"]
+                    and stream_k_extra.get("k_y_frac_std", 0) > 0.05
+                    and stream_k_extra.get("best_bo_beats_stream_l")
+                    and stream_k_extra.get("best_bo_beats_sam_smoke")
+                )
         (run_root / "single_instance_gate.json").write_text(json.dumps(single, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(single, indent=2))
         return 0 if single["passed"] else 1
@@ -322,7 +451,7 @@ def main() -> int:
     exp.add_argument("--order-branch", default="plus", choices=["plus", "minus"])
     exp.add_argument(
         "--prior-root",
-        default=str(REPO_ROOT / "logs" / "sam4tun_prior_v1"),
+        default=str(REPO_ROOT / "logs" / "proxy4tun" / "sam4tun_prior"),
         help="SAM4Tun prior JSON root from build_sam4tun_prior.py (ignored when --warm-anchor gt_derived)",
     )
     exp.add_argument(
@@ -330,6 +459,22 @@ def main() -> int:
         default="sam4tun",
         choices=["sam4tun", "geometric", "gt_derived"],
         help="Warm-start policy: sam4tun (v4), geometric (v3), gt_derived (v5 GT-anchor)",
+    )
+    exp.add_argument(
+        "--stream",
+        default="full",
+        choices=["full", "layout", "k", "d"],
+        help="full: joint BO; layout: Stream L; k: Stream K; d: Stream D (order, frozen L+K)",
+    )
+    exp.add_argument(
+        "--layout-handoff-root",
+        default=str(REPO_ROOT / "logs" / "proxy4tun" / "stream_l"),
+        help="Stream L handoff root (layout_best_for_stream_k.json per ring)",
+    )
+    exp.add_argument(
+        "--k-handoff-root",
+        default=str(REPO_ROOT / "logs" / "proxy4tun" / "stream_k"),
+        help="Stream K handoff root (k_best_for_stream_d.json per ring)",
     )
     exp.set_defaults(func=cmd_experience)
 

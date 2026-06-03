@@ -34,6 +34,7 @@ bo/
 
 **Warm-start kinds:** `geometric_0`, `geometric_1`, `intrinsic_r_otsu`, `random`  
 **Every trial:** detection → `direction_select` (plus/minus) → segmentation  
+**Held-out / Stage-A:** `run_held_out_score.py` → `candidate_eval.evaluate_candidate` (same path; per-ring `direction_select_gate.json`)  
 **Canonical pool:** `logs/bo_experience_v3/bo_trials.csv` (480 trials, 0 oracle)
 
 ## Search space (Step 2)
