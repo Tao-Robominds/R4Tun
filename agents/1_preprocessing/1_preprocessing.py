@@ -37,6 +37,8 @@ from _ring_enhancing import run_ring_enhancing  # noqa: E402
 from _ring_unfolding import unfold_single_ring  # noqa: E402
 
 RESOLUTION_M = 0.005
+DEFAULT_NUM_NEIGHBORS = 20
+_LEGACY_NEIGHBOR_KEYS = ("curvature_neighbors", "outlier_neighbors")
 
 
 def load_parameters(
@@ -140,6 +142,12 @@ def ensure_ring_pointcloud(tunnel_id: str, ring_id: int, base_dir: str) -> Path:
 
 
 def build_enhancing_params(p: Dict[str, Any]) -> Dict[str, Any]:
+    for key in _LEGACY_NEIGHBOR_KEYS:
+        if key in p:
+            raise ValueError(
+                f"Deprecated preprocessing key {key!r}; use num_neighbors only "
+                f"(run agents/1_preprocessing/scripts/migrate_num_neighbors_only.py)."
+            )
     td = p["target_distances"]
     return {
         "upsampling_stage1_target_distance": float(td[0]),
@@ -156,7 +164,7 @@ def build_enhancing_params(p: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "n_segment_start": int(p.get("n_segment_start", -1)),
         "n_segment_end": int(p.get("n_segment_end", -1)),
-        "num_neighbors": int(p.get("num_neighbors", p.get("curvature_neighbors", 20))),
+        "num_neighbors": int(p.get("num_neighbors", DEFAULT_NUM_NEIGHBORS)),
         "num_interpolations": int(p.get("outlier_num_interpolations", p.get("num_interpolations", 2))),
         "resolution": float(p.get("depth_map_resolution", RESOLUTION_M)),
         "window_size": int(p.get("interpolation_window", 9)),

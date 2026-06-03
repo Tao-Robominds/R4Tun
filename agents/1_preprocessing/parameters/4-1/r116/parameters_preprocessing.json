@@ -1,5 +1,4 @@
 {
-  "curvature_neighbors": 6,
   "depth_map_resolution": 0.005,
   "double_zero_cutoff": false,
   "gradient_threshold": 10.0,
@@ -14,7 +13,6 @@
   "outlier_high_density_ring_end": 5,
   "outlier_high_density_ring_start": 0,
   "outlier_interpolation_radius": 0.06,
-  "outlier_neighbors": 20,
   "outlier_num_interpolations": 2,
   "radius_max": 4.2,
   "radius_min": 3.0,
@@ -26,5 +24,6 @@
     0.040398614615177304,
     0.02
   ],
-  "tunnel_diameter": 7.5
+  "tunnel_diameter": 7.5,
+  "num_neighbors": 6
 }

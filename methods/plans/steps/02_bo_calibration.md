@@ -35,7 +35,7 @@ Record sensitivity for both deterministic-baseline parameters and parameters alr
 
 - preprocessing geometry: `tunnel_diameter`, `radius_min`, `radius_max`;
 - preprocessing sampling/enhancement: `target_distances`, `interpolation_window`;
-- outlier/depth cleanup: `outlier_neighbors`, `outlier_depth_threshold_low`, `outlier_depth_threshold_high`, `outlier_high_density_ring_start`, `outlier_high_density_ring_end`, `outlier_interpolation_radius`;
+- outlier/depth cleanup: `num_neighbors`, `outlier_depth_threshold_low`, `outlier_depth_threshold_high`, `outlier_high_density_ring_start`, `outlier_high_density_ring_end`, `outlier_interpolation_radius`;
 - fixed preprocessing/controller context: `gravity_anchor`, `depth_height_mode`, `n_segment_start`, `n_segment_end`;
 - K/order candidate controls: `regular_k_prior_low_frac`, `regular_k_prior_high_frac`, `regular_k_prior_low_ring_parity`, `anchor_frac`, `branch`, `rotation_shift`.
 

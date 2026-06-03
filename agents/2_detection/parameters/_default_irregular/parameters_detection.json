@@ -1,4 +1,8 @@
 {
+  "detector_mode": "single_ring_regular_prior",
+  "regular_k_prior_low_frac": 0.367834,
+  "regular_k_prior_high_frac": 0.791648,
+  "regular_k_prior_low_ring_parity": 0,
   "binary_threshold": 139,
   "hough_threshold": 37,
   "hough_min_length": 31,

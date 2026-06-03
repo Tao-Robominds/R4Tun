@@ -23,7 +23,6 @@
     0.035,
     0.018
   ],
-  "curvature_neighbors": 20,
   "interpolation_window": 9,
   "curvature_threshold_enh": 0.005,
   "depth_threshold_low": 0.005,
@@ -36,7 +35,6 @@
   "num_interpolations": 2,
   "outlier_high_density_ring_start": -1,
   "outlier_high_density_ring_end": -1,
-  "outlier_neighbors": 20,
   "max_outlier_points": 5000,
   "outlier_interpolation_radius": 0.03,
   "outlier_num_interpolations": 2,

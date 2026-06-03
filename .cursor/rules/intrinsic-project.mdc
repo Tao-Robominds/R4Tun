@@ -48,7 +48,7 @@ alwaysApply: true
    - Offline audits must report lift against Arm B (`lift_vs_arm_b`), not only against local iteration 0.
    - If any selected Arm C+ result is below Arm B in offline audit, mark the run as selector failure and block rollout until fixed.
 
-11. **AGENTS-IMMUTABILITY (HARD RULE — agents code is frozen).** As of 2026-05-29 the `agents/**` pipeline (`1_preprocessing`, `2_detection`, `3_segmentation`, and their shared modules) is **frozen** and must NOT be edited. Validation confirmed the workflow is **capability-sufficient**: with frozen preprocessing and searchable layout knobs (`k_y_positions`, `per_ring_offsets`, `r_surface_min`, `segment_count`, `enabled_blocks`), the pipeline reaches near the GT-derived ceiling without code changes.
+11. **AGENTS-IMMUTABILITY (HARD RULE — agents code is frozen).** As of 2026-06-03 the `agents/**` pipeline (`1_preprocessing`, `2_detection`, `3_segmentation`, and their shared modules) is **frozen** again and must NOT be edited (last approved change: `num_neighbors`-only preprocessing + regular-prior default/widened K fractions in detection defaults). Validation confirmed the workflow is **capability-sufficient**: with frozen preprocessing and searchable layout knobs (`k_y_positions`, `per_ring_offsets`, `r_surface_min`, `segment_count`, `enabled_blocks`), the pipeline reaches near the GT-derived ceiling without code changes.
 
    - **Single-instance proof:** `1-1/r18` — ceiling **0.882**, BO-reached **0.823**, regret **0.059** (≤ 0.1); evidence `logs/aboffset_capability_v1/single_instance_gate.json`.
    - **Mechanism:** GT-derived optimal K + A/B offsets → agents det+seg; ceiling uses GT-best `r_surface_min` sweep (design-time only).

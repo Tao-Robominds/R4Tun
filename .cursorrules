@@ -55,10 +55,11 @@ asks to regenerate the corpus.
 
 ## 3b) AGENTS-IMMUTABILITY (HARD RULE)
 
-As of 2026-05-29, `agents/**` is FROZEN. Validation confirmed capability-
-sufficiency: frozen preprocessing + searchable K/A/B offsets reaches near the
-GT-derived ceiling (1-1/r18: ceiling 0.882, BO 0.823, regret 0.059;
-`logs/aboffset_capability_v1/single_instance_gate.json`). Locked corpora:
+As of 2026-06-03, `agents/**` is FROZEN again (last approved edits: `num_neighbors`-only
+preprocessing; detection default `single_ring_regular_prior` with widened
+`regular_k_prior_low_frac`/`regular_k_prior_high_frac` 0.368–0.792). Prior freeze
+2026-05-29; capability-sufficiency unchanged (1-1/r18: ceiling 0.882, BO 0.823,
+regret 0.059; `logs/aboffset_capability_v1/single_instance_gate.json`). Locked corpora:
 `data/bo_calibration/` (6/6 ceiling pass) and `data/held-out/` (50/50 ceiling pass) —
 read-only; never modify for BO trials or ablation — copy into `logs/<run_id>/` sandboxes only. Preprocessing QA:
 3a intrinsic guardrails + 3b ceiling ≥ 0.85 (`agents/1_preprocessing/knowledge.md`,
