@@ -237,6 +237,8 @@ def build_ring_context(
         ctx = _init_k_stream(ctx)
     elif experience_stream == "d":
         ctx = _init_d_stream(ctx)
+    elif experience_stream == "full":
+        ctx = _init_full_stream_k_anchors(ctx)
     return ctx
 
 
@@ -326,6 +328,21 @@ def _init_d_stream(ctx: RingContext) -> RingContext:
     if "ring_is_regular" in handoff:
         ctx.ring_is_regular = bool(handoff["ring_is_regular"])
     ctx.direction_tier_gt = _direction_tier_gt(ctx)
+    return ctx
+
+
+def _init_full_stream_k_anchors(ctx: RingContext) -> RingContext:
+    """Load SAM/line K anchors for k_anchor_dist_* logging on joint (--stream full) trials."""
+    prior_root = _resolve_prior_root(ctx)
+    if prior_root is not None:
+        full_x = load_prior_x_for_ring(prior_root, ctx.case_id)
+        if full_x is not None:
+            ctx.sam_k_y_frac = float(_coerce_full_search_x(ctx, full_x)[0])
+        prior_json = prior_root / ctx.case_id.replace("/", "_") / "sam4tun_prior.json"
+        if prior_json.is_file():
+            pj = json.loads(prior_json.read_text(encoding="utf-8"))
+            k_y = float(pj.get("k_y", 0))
+            ctx.line_k_y_frac = float(k_y % ctx.H / max(ctx.H, 1))
     return ctx
 
 
@@ -855,7 +872,7 @@ def evaluate_trial(
     k_frac = float((k_y % H) / max(H, 1))
 
     extra: dict[str, Any] = {}
-    if ctx.experience_stream == "k":
+    if ctx.experience_stream in ("k", "full"):
         from lib.line_reliability import compute_line_evidence  # noqa: WPS433
 
         line_counts = _parse_det_line_counts(log)

@@ -69,7 +69,9 @@ Trials/ring: L=64, K=48, D=32×2 branches (manifest sparse slots may override vi
 | 1 Stream L | `logs/proxy4tun/stream_l/` | execute |
 | 2 Stream K | `logs/proxy4tun/stream_k/` | **done** (496 trials, 6/6 honesty) |
 | 3 Stream D | `logs/proxy4tun/stream_d/` | **done** (368 trials, 6/6 honesty) |
-| 4 v6 bank | `logs/proxy4tun/experience_v6/` | `bo/build_experience_bank.py`; promote to `methods/paper/experience/` only with user approval |
+| 3b Stream full (joint L+K) | `logs/proxy4tun/stream_full/` | **done** (480 trials, 6/6 honesty, K columns logged) |
+| 4 Proxy train L/K/L+K | `logs/proxy4tun/proxy_train_lk_v1/` | **done** — see gate below |
+| 5 v6 bank | `logs/proxy4tun/experience_v6/` | `bo/build_experience_bank.py`; promote to `methods/paper/experience/` only with user approval |
 
 ## Handoff L → K → D
 
@@ -126,6 +128,77 @@ Mean best mIoU matches Stream K (**0.442**) — order axis confirms branch choic
   --run-root logs/proxy4tun/stream_d
 ./venv/bin/python bo/analyze_stream_d_proxy_v1.py --run-root logs/proxy4tun/stream_d
 ```
+
+## Proxy train (Ridge on `gt_miou`)
+
+**Sandbox:** `logs/proxy4tun/proxy_train_lk_v1/`
+
+| Model | Training pool | Notes |
+|-------|---------------|--------|
+| `proxy_L` | `stream_l/bo_trials.csv` | layout/form only |
+| `proxy_K` | `stream_k/bo_trials.csv` | K + anchor features |
+| `proxy_LK_concat` | stream_l ∪ stream_k (`axis_source`) | sequential-axis blocked design |
+| `proxy_LK_joint` | `stream_full/bo_trials.csv` | joint L+K search; **not** v4 (missing K columns / protocol) |
+| **D** | — | deploy `direction_select` only |
+
+**Logging:** `experience_stream in ("k", "full")` emits `k_anchor_dist_*`, `rho_K`, etc. (`bo/lib/layout_bo.py`).
+
+**Commands:**
+
+```bash
+# Joint pool (single-instance 4-6/r283 then panel)
+./venv/bin/python bo/run_layout_bo.py experience --stream full \
+  --prior-root logs/proxy4tun/sam4tun_prior \
+  --run-root logs/proxy4tun/stream_full
+./venv/bin/python bo/check_experience_honesty_gate.py --run-root logs/proxy4tun/stream_full
+
+./venv/bin/python bo/analyze_stream_l_proxy_v1.py --run-root logs/proxy4tun/stream_l
+./venv/bin/python bo/train_proxy4tun_axis_v1.py \
+  --stream-l-root logs/proxy4tun/stream_l \
+  --stream-k-root logs/proxy4tun/stream_k \
+  --stream-full-root logs/proxy4tun/stream_full \
+  --out-dir logs/proxy4tun/proxy_train_lk_v1
+```
+
+**Artifacts:** `models/proxy_{L,K,LK_concat,LK_joint}.json`, `proxy_training_gate.json`, `PROXY4TUN_MANIFEST.json`.
+
+### Proxy train results (LORO OOF, 6-ring calib)
+
+| Model | OOF Spearman ρ | Mean regret vs oracle | Gate |
+|-------|---------------:|----------------------:|------|
+| `proxy_L` | 0.011 | 0.194 | fail (ρ &lt; 0.20) |
+| `proxy_K` | **0.609** | **0.089** | **pass** |
+| `proxy_LK_concat` | **0.365** | **0.089** | **pass** |
+| `proxy_LK_joint` | −0.135 | 0.188 | fail (ρ &lt; 0.35) |
+
+**Deploy:** K → `proxy_K`; combined L+K ranking → **`proxy_LK_concat` (v1, k=4)**; D → `direction_select` only.
+
+**v4 exclusion:** `logs/bo_experience_v4_sam4tun_prior` lacks Stream-K proxy columns and uses a different BO protocol — do not use for Proxy4Tun Ridge fit.
+
+### Proxy train v2 — enriched L+K (v5 + seg, top-k 4 / 8 / 12)
+
+**Sandbox:** `logs/proxy4tun/proxy_train_lk_v2/`
+
+Replay: [`bo/enrich_proxy4tun_trials_v1.py`](bo/enrich_proxy4tun_trials_v1.py) + [`bo/run_proxy4tun_enrich_full_v1.sh`](bo/run_proxy4tun_enrich_full_v1.sh) → `records_{L,K,LK_concat,LK_joint}_enriched.csv` (v5_*, seg_*, feat_intrinsic_*).
+
+Train (LK only; L/K unchanged at v1):
+
+```bash
+./venv/bin/python bo/train_proxy4tun_axis_v1.py --mode lk-enriched \
+  --out-dir logs/proxy4tun/proxy_train_lk_v2 --top-k-sweep 4,8,12
+```
+
+| Model | Enriched | k | OOF ρ | Regret | vs v1 concat/joint |
+|-------|----------|---|------|--------|-------------------|
+| LK_concat (v1) | no | 4 | **0.365** | **0.089** | baseline |
+| LK_concat_k12 | yes | 12 | 0.196 | 0.300 | ρ −0.17, worse regret |
+| LK_joint (v1) | no | 4 | −0.135 | 0.188 | baseline |
+| LK_joint_k8 | yes | 8 | 0.185 | **0.141** | ρ +0.32, regret −0.05 |
+| LK_joint_k12 | yes | 12 | 0.148 | 0.205 | mixed |
+
+**Conclusion:** Enriched v5/seg features **do not beat v1 `proxy_LK_concat`** on LORO ρ or regret. **Joint** enriched models turn ρ positive and cut regret vs v1 joint, but still underperform v1 concat. **Deploy L+K ranking: keep v1 `proxy_LK_concat_k4`**; optional experiment: `LK_joint_k8` for joint-only pools.
+
+**Artifacts:** `topk_comparison.csv`, `PROXY4TUN_V2_MANIFEST.json`, `models/proxy_LK_{concat,joint}_k{4,8,12}.json`.
 
 ## Evidence (read-only)
 
