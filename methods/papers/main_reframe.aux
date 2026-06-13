@@ -1,0 +1,201 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\creditauthor{Conceptualization, Methodology, Software, Writing -- original draft}{Xinghui Tao}
+\csgdef{mark@corau2}{1}
+\emailauthor{gw462@cam.ac.uk}{Guangming Wang}
+\creditauthor{Supervision, Writing -- review \& editing}{Guangming Wang}
+\creditauthor{Supervision, Writing -- review \& editing}{Jelena Nini\'{c}}
+\creditauthor{Supervision, Funding acquisition, Project administration}{Brian Sheil}
+\NewLabel{cor1}{1}
+\citation{attard2018}
+\citation{weidner2024generalized}
+\citation{huang2021bim,sjolander2023towards}
+\citation{montero2015,strauss2020sensing}
+\citation{weidner2024generalized}
+\citation{duan2023high,cha2024deep,su2024review}
+\citation{bommasani2021foundation,kirillov2023sam}
+\citation{ye2025sam4tun}
+\citation{kirillov2023sam}
+\citation{bran2024chemcrow}
+\citation{qian2024chatdev,hong2024metagpt,chen2024comm}
+\citation{garcia2024manufacturing}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{Introduction}{section.1}{}}
+\citation{fischler1981ransac}
+\citation{ester1996dbscan}
+\citation{pauly2002}
+\citation{weidner2024generalized}
+\citation{qi2017pointnet}
+\citation{hu2020randla}
+\citation{schult2023mask3d}
+\citation{kolodiazhnyi2024td3d}
+\citation{su2024review}
+\citation{cha2024deep}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Automated segmentation approaches arranged by their adaptation mechanisms. R4Tun extends the foundation-model pipeline by adding LLM-guided \texthl  {bounded} parameter adaptation \texthl  {using structured context and encoded expert knowledge during deployment}.}}{2}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:paradigms}{{1}{2}{Automated segmentation approaches arranged by their adaptation mechanisms. R4Tun extends the foundation-model pipeline by adding LLM-guided \hl {bounded} parameter adaptation \hl {using structured context and encoded expert knowledge during deployment}}{figure.caption.1}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related work}{2}{section.2}\protected@file@percent }
+\newlabel{sec:related}{{2}{2}{Related work}{section.2}{}}
+\citation{camuffo2022recent,liu2023openshape,guo2023pointbind,xu2024pointllm}
+\citation{caron2021dino,franceschelli2024training}
+\citation{kirillov2023sam}
+\citation{ravi2024sam2}
+\citation{zou2023segment}
+\citation{ge2024cracksam}
+\citation{wang2024omni,pan2024zero}
+\citation{ye2025sam4tun}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The R4Tun multi-agent architecture for tunnel segmentation. Four stage agents (unfolding, denoising, enhancing, and segmenting) adapt their parameters through LLM reasoning to generate segmentation.}}{3}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:architecture}{{2}{3}{The R4Tun multi-agent architecture for tunnel segmentation. Four stage agents (unfolding, denoising, enhancing, and segmenting) adapt their parameters through LLM reasoning to generate segmentation}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Feature engineering versus deep learning}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Foundation-model pipelines}{3}{subsection.2.2}\protected@file@percent }
+\citation{ouyang2022training,deepseek2025analysis,chua2025deepseek,xiang2025metacot,openai2025o3,openai2025reasoningbestpractices}
+\citation{wei2023cot,kojima2023zeroshot}
+\citation{hong2024metagpt,qian2024chatdev,chen2024comm,zhang2023igniting,zhang2024chain}
+\citation{xu2024retrieval,mei2025survey,anthropic2025context}
+\citation{ye2025sam4tun}
+\citation{fischler1981ransac}
+\citation{ester1996dbscan}
+\citation{duda1972hough}
+\citation{kirillov2023sam}
+\citation{duda1972hough}
+\citation{kirillov2023sam}
+\citation{duda1972hough}
+\citation{kirillov2023sam}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}LLM reasoning}{4}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{4}{section.3}\protected@file@percent }
+\newlabel{sec:methods}{{3}{4}{Methodology}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Task definition}{4}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:problem-def}{{3.1}{4}{Task definition}{subsection.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}R4Tun}{4}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:method}{{3.2}{4}{R4Tun}{subsection.3.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Stage 1-Unfolding. Left: fitted tunnel cross-section used to determine the reference centre and radius for cylindrical unfolding. Centre: 2D panoramic depth map derived from the 3D point cloud. Right: zoomed region of the unfolded map showing radial-distance encoding.}}{5}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:stage-u}{{3}{5}{Stage 1-Unfolding. Left: fitted tunnel cross-section used to determine the reference centre and radius for cylindrical unfolding. Centre: 2D panoramic depth map derived from the 3D point cloud. Right: zoomed region of the unfolded map showing radial-distance encoding}{figure.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Stage 2-Denoising. Left: radial-distance distribution used to filter points outside the expected tunnel lining surface. Centre: unfolded 2D depth map after filtering, showing the cleaned point distribution. Right: zoomed region of the denoised map.}}{5}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:stage-d}{{4}{5}{Stage 2-Denoising. Left: radial-distance distribution used to filter points outside the expected tunnel lining surface. Centre: unfolded 2D depth map after filtering, showing the cleaned point distribution. Right: zoomed region of the denoised map}{figure.caption.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Agent design}{5}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:agent-design}{{3.3}{5}{Agent design}{subsection.3.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Stage 3-Enhancing. Left: curvature-guided surface and boundary interpolation along the tunnel lining, showing original sampling, curvature-guided insertion, and progressive three-stage upsampling. Centre: unfolded 2D depth map after enhancement, where inserted points improve geometric continuity; the red box highlights a local region of interest. Right: zoomed views of the highlighted region, showing added points and pixel-level interpolation.}}{6}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:stage-e}{{5}{6}{Stage 3-Enhancing. Left: curvature-guided surface and boundary interpolation along the tunnel lining, showing original sampling, curvature-guided insertion, and progressive three-stage upsampling. Centre: unfolded 2D depth map after enhancement, where inserted points improve geometric continuity; the red box highlights a local region of interest. Right: zoomed views of the highlighted region, showing added points and pixel-level interpolation}{figure.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Stage~4---Segmenting. The segmenting stage applies Hough-transform line detection~\cite  {duda1972hough} to identify ring boundaries, then constructs template-based prompts and feeds them to SAM~\cite  {kirillov2023sam}. SAM produces 2D segment masks that are reprojected into 3D. (Note: rotation is shown for visualisation purposes only.)}}{6}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:stage-p}{{6}{6}{Stage~4---Segmenting. The segmenting stage applies Hough-transform line detection~\cite {duda1972hough} to identify ring boundaries, then constructs template-based prompts and feeds them to SAM~\cite {kirillov2023sam}. SAM produces 2D segment masks that are reprojected into 3D. (Note: rotation is shown for visualisation purposes only.)}{figure.caption.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces The left column (a) shows R4Tun stage agent architecture. Each agent maintains a shared and cumulative context that informs an LLM analyst component performing CoT reasoning. The right column (b) shows the five CoT phases: (1) Referencing, (2) Diagnostic inspection, (3) Parameter adaptation, (4) Validation, and (5) JSON output.}}{7}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:agent-design}{{7}{7}{The left column (a) shows R4Tun stage agent architecture. Each agent maintains a shared and cumulative context that informs an LLM analyst component performing CoT reasoning. The right column (b) shows the five CoT phases: (1) Referencing, (2) Diagnostic inspection, (3) Parameter adaptation, (4) Validation, and (5) JSON output}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Context design}{7}{subsubsection.3.3.1}\protected@file@percent }
+\newlabel{sec:context-comp}{{3.3.1}{7}{Context design}{subsubsection.3.3.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}CoT design}{7}{subsubsection.3.3.2}\protected@file@percent }
+\newlabel{sec:cot}{{3.3.2}{7}{CoT design}{subsubsection.3.3.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Experimental setup}{8}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:exp-setup}{{3.4}{8}{Experimental setup}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.1}Dataset}{8}{subsubsection.3.4.1}\protected@file@percent }
+\newlabel{sec:dataset}{{3.4.1}{8}{Dataset}{subsubsection.3.4.1}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces LLM-driven Parameter Adaptation via CoT}}{8}{algorithm.1}\protected@file@percent }
+\newlabel{alg:cot_adaptation}{{1}{8}{LLM-driven Parameter Adaptation via CoT}{algorithm.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.2}Experimental design}{8}{subsubsection.3.4.2}\protected@file@percent }
+\newlabel{sec:comparators}{{3.4.2}{8}{Experimental design}{subsubsection.3.4.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Tunnel lining pattern categories. From left to right: regular (staggered) tunnels exhibit a repeating ring-to-ring pattern; regular (continuous) tunnels maintain a fixed segment order around each ring; complex tunnels show no consistent repeating pattern.}}{9}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:tunnel_type}{{8}{9}{Tunnel lining pattern categories. From left to right: regular (staggered) tunnels exhibit a repeating ring-to-ring pattern; regular (continuous) tunnels maintain a fixed segment order around each ring; complex tunnels show no consistent repeating pattern}{figure.caption.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Dataset properties.}}{9}{table.caption.9}\protected@file@percent }
+\newlabel{tab:dataset}{{1}{9}{Dataset properties}{table.caption.9}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Ablation conditions.}}{10}{table.caption.10}\protected@file@percent }
+\newlabel{tab:ablation}{{2}{10}{Ablation conditions}{table.caption.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces LLM configuration.}}{10}{table.caption.11}\protected@file@percent }
+\newlabel{tab:llm-config}{{3}{10}{LLM configuration}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.3}Evaluation metrics}{10}{subsubsection.3.4.3}\protected@file@percent }
+\newlabel{sec:metrics}{{3.4.3}{10}{Evaluation metrics}{subsubsection.3.4.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.4.4}Sensitivity analysis}{10}{subsubsection.3.4.4}\protected@file@percent }
+\newlabel{sec:sensitivity-method}{{3.4.4}{10}{Sensitivity analysis}{subsubsection.3.4.4}{}}
+\newlabel{eq:cv}{{3}{10}{Sensitivity analysis}{equation.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results}{10}{section.4}\protected@file@percent }
+\newlabel{sec:results}{{4}{10}{Results}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Overall performance}{10}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:main-results}{{4.1}{10}{Overall performance}{subsection.4.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Point-cloud visualisation for the tunnels with the largest mIoU gain in each category: regular (staggered; 2-2), regular (continuous; 3-3-1), and complex (5-5). Top (a): SAM4Tun baseline; bottom (b): LLM-adapted pipeline (m+s+k, Opus-4.6). Colours indicate classes; red denotes error; mIoU is shown per example.}}{11}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:ablation_point}{{9}{11}{Point-cloud visualisation for the tunnels with the largest mIoU gain in each category: regular (staggered; 2-2), regular (continuous; 3-3-1), and complex (5-5). Top (a): SAM4Tun baseline; bottom (b): LLM-adapted pipeline (m+s+k, Opus-4.6). Colours indicate classes; red denotes error; mIoU is shown per example}{figure.caption.12}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Ablation analysis}{12}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:ablation}{{4.2}{12}{Ablation analysis}{subsection.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Cross-model consistency}{12}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:consistency}{{4.3}{12}{Cross-model consistency}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Parameter sensitivity}{12}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:sensitivity}{{4.4}{12}{Parameter sensitivity}{subsection.4.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Error analysis}{12}{subsection.4.5}\protected@file@percent }
+\newlabel{sec:error-analysis}{{4.5}{12}{Error analysis}{subsection.4.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Step-wise adaptation results split by tunnel categories. Bars left to right: \mbox  {SAM4Tun} (static baseline), \mbox  {\textit  {Non-LLM}} (rule-based adaptation), \mbox  {m}, \mbox  {m+s}, \mbox  {m+s+k}. The rule baseline closes part of the gap on complex tunnels but stays flat on regular tunnels; LLM (\mbox  {m+s+k}) is highest in both categories. Error bars are bootstrap 95\% CIs.}}{13}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:ablation-bar}{{10}{13}{Step-wise adaptation results split by tunnel categories. Bars left to right: \mbox {SAM4Tun} (static baseline), \mbox {\textit {Non-LLM}} (rule-based adaptation), \mbox {m}, \mbox {m+s}, \mbox {m+s+k}. The rule baseline closes part of the gap on complex tunnels but stays flat on regular tunnels; LLM (\mbox {m+s+k}) is highest in both categories. Error bars are bootstrap 95\% CIs}{figure.caption.13}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Overall segmentation results ($n=30$): mean mIoU and paired $\Delta $mIoU vs. baseline with $p$-values, effect sizes, and bootstrap 95\% CIs. $\Delta $ is paired against \mbox  {\texttt  {SAM4Tun}}. OA is reported as a secondary metric, shown as the first line in each condition block.}}{14}{table.caption.14}\protected@file@percent }
+\newlabel{tab:main-results}{{4}{14}{Overall segmentation results ($n=30$): mean mIoU and paired $\Delta $mIoU vs. baseline with $p$-values, effect sizes, and bootstrap 95\% CIs. $\Delta $ is paired against \mbox {\texttt {SAM4Tun}}. OA is reported as a secondary metric, shown as the first line in each condition block}{table.caption.14}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Cumulative mIoU contribution (mean $\Delta $ vs. previous level).}}{14}{table.caption.15}\protected@file@percent }
+\newlabel{tab:cumulative_miou}{{5}{14}{Cumulative mIoU contribution (mean $\Delta $ vs. previous level)}{table.caption.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Cross-model summary (m+s+k vs baseline, overall).}}{14}{table.caption.16}\protected@file@percent }
+\newlabel{tab:cross-model}{{6}{14}{Cross-model summary (m+s+k vs baseline, overall)}{table.caption.16}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Critical parameters identified across all three LLMs (18 total). \emph  {Tunnel-responsive} parameters ($\text  {CV} \geq 0.06$) vary with tunnel geometry; \emph  {baseline corrections} ($\text  {CV} \approx 0$) take near-identical values across tunnels.}}{15}{table.caption.17}\protected@file@percent }
+\newlabel{tab:critical-params}{{7}{15}{Critical parameters identified across all three LLMs (18 total). \emph {Tunnel-responsive} parameters ($\text {CV} \geq 0.06$) vary with tunnel geometry; \emph {baseline corrections} ($\text {CV} \approx 0$) take near-identical values across tunnels}{table.caption.17}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Discussion}{15}{section.5}\protected@file@percent }
+\newlabel{sec:discussion}{{5}{15}{Discussion}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Key findings}{15}{subsection.5.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces \texthl  {FP/FN error map drawn as a ring-by-\mbox  {$\theta $} raster: each horizontal row is one ring, \mbox  {$\theta $} is the circumferential angle, and every point is coloured only as correct, false negative (\mbox  {block$\rightarrow $background}), false positive (\mbox  {background$\rightarrow $block}), or class swap. The grey sidebar shows points per ring; the black plus and purple cross mark the ground-truth and predicted key-block (K) position on each ring. This layout makes the four causes of error directly visible: the single-peaked density sidebar (one preprocessing setting cannot fit every ring); the spread of the K marks across \mbox  {$\theta $} (a staggered anchor that must be re-found per ring), with rows where the predicted K departs from the ground-truth K turning almost entirely to class swap (a mis-located K rotates the whole ring); swaps concentrating toward the \mbox  {$\theta $} extremes of a row (fixed-offset drift far from K); and occasional fully mirrored rows (reversed handedness). Regular tunnel 1-1 (top) is dominated by within-ring class swaps that adaptation reduces from 39\% to 13\%, while complex tunnel 4-1 (bottom) is dominated by baseline under-segmentation (FN 70\%) that adaptation converts into recovered-but-mislabelled blocks (swap 41\%). Unmapped and synthetic points are excluded.}}}{16}{figure.caption.18}\protected@file@percent }
+\newlabel{fig:error-map}{{11}{16}{\hl {FP/FN error map drawn as a ring-by-\mbox {$\theta $} raster: each horizontal row is one ring, \mbox {$\theta $} is the circumferential angle, and every point is coloured only as correct, false negative (\mbox {block$\rightarrow $background}), false positive (\mbox {background$\rightarrow $block}), or class swap. The grey sidebar shows points per ring; the black plus and purple cross mark the ground-truth and predicted key-block (K) position on each ring. This layout makes the four causes of error directly visible: the single-peaked density sidebar (one preprocessing setting cannot fit every ring); the spread of the K marks across \mbox {$\theta $} (a staggered anchor that must be re-found per ring), with rows where the predicted K departs from the ground-truth K turning almost entirely to class swap (a mis-located K rotates the whole ring); swaps concentrating toward the \mbox {$\theta $} extremes of a row (fixed-offset drift far from K); and occasional fully mirrored rows (reversed handedness). Regular tunnel 1-1 (top) is dominated by within-ring class swaps that adaptation reduces from 39\% to 13\%, while complex tunnel 4-1 (bottom) is dominated by baseline under-segmentation (FN 70\%) that adaptation converts into recovered-but-mislabelled blocks (swap 41\%). Unmapped and synthetic points are excluded.}}{figure.caption.18}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces \texthl  {Why class confusion arises. (a) Blocks are labelled by position: detect the key block K, then place all other blocks by a fixed angular offset shared across rings and tunnels. (b) Within one tunnel, ring point density varies by 17--40\,$\times $ in a single-peaked scanner profile, so no single preprocessing setting fits both the densest and sparsest rings. (c) The K anchor is not fixed: staggered assembly shifts its circumferential position from ring to ring, by up to a third of the arc on a regular tunnel and three quarters on a complex one. (d) Resulting failures: a mis-located K rotates the whole ring's labels, the fixed sector drifts for blocks far from K, and a reversed ring handedness mirrors the labels.}}}{17}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:error-mechanism}{{12}{17}{\hl {Why class confusion arises. (a) Blocks are labelled by position: detect the key block K, then place all other blocks by a fixed angular offset shared across rings and tunnels. (b) Within one tunnel, ring point density varies by 17--40\,$\times $ in a single-peaked scanner profile, so no single preprocessing setting fits both the densest and sparsest rings. (c) The K anchor is not fixed: staggered assembly shifts its circumferential position from ring to ring, by up to a third of the arc on a regular tunnel and three quarters on a complex one. (d) Resulting failures: a mis-located K rotates the whole ring's labels, the fixed sector drifts for blocks far from K, and a reversed ring handedness mirrors the labels.}}{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Limitations}{17}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:limitations}{{5.2}{17}{Limitations}{subsection.5.2}{}}
+\bibstyle{model1-num-names}
+\bibdata{references}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusions}{18}{section.6}\protected@file@percent }
+\newlabel{sec:conclusions}{{6}{18}{Conclusions}{section.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Baseline parameter tables}{19}{appendix.A}\protected@file@percent }
+\newlabel{app:params}{{A}{19}{Baseline parameter tables}{appendix.A}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Characteriser fields}{19}{appendix.B}\protected@file@percent }
+\newlabel{app:chars}{{B}{19}{Characteriser fields}{appendix.B}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Context components: denoising agent example}{19}{appendix.C}\protected@file@percent }
+\newlabel{app:context}{{C}{19}{Context components: denoising agent example}{appendix.C}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {C.1}Memory: reference vs target raw characteristics}{19}{subsection.C.1}\protected@file@percent }
+\newlabel{app:context-memory}{{C.1}{19}{Memory: reference vs target raw characteristics}{subsection.C.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {C.2}State: cumulative outputs of upstream stages}{19}{subsection.C.2}\protected@file@percent }
+\newlabel{app:context-state}{{C.2}{19}{State: cumulative outputs of upstream stages}{subsection.C.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {C.3}Knowledge: parameter semantics, ranges, and constraints}{19}{subsection.C.3}\protected@file@percent }
+\newlabel{app:context-knowledge}{{C.3}{19}{Knowledge: parameter semantics, ranges, and constraints}{subsection.C.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Unfolding parameters (sam4tun baseline).}}{19}{table.caption.24}\protected@file@percent }
+\newlabel{tab:unfold-params}{{8}{19}{Unfolding parameters (sam4tun baseline)}{table.caption.24}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Denoising parameters (sam4tun baseline).}}{19}{table.caption.25}\protected@file@percent }
+\newlabel{tab:denoise-params}{{9}{19}{Denoising parameters (sam4tun baseline)}{table.caption.25}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Enhancing parameters (sam4tun baseline).}}{19}{table.caption.26}\protected@file@percent }
+\newlabel{tab:enhance-params}{{10}{19}{Enhancing parameters (sam4tun baseline)}{table.caption.26}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Detecting parameters (sam4tun baseline).}}{20}{table.caption.27}\protected@file@percent }
+\newlabel{tab:detect-params}{{11}{20}{Detecting parameters (sam4tun baseline)}{table.caption.27}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {12}{\ignorespaces Characteriser fields by stage. Raw fields are available to all stages; each subsequent group becomes available after the corresponding stage completes.}}{20}{table.caption.28}\protected@file@percent }
+\newlabel{tab:chars}{{12}{20}{Characteriser fields by stage. Raw fields are available to all stages; each subsequent group becomes available after the corresponding stage completes}{table.caption.28}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}Worked CoT trace}{20}{appendix.D}\protected@file@percent }
+\newlabel{app:cot}{{D}{20}{Worked CoT trace}{appendix.D}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {13}{\ignorespaces Memory excerpt (raw characteristics). Reference is the expert-tuned tunnel; target is tunnel~4-1.}}{20}{table.caption.29}\protected@file@percent }
+\newlabel{tab:context-memory}{{13}{20}{Memory excerpt (raw characteristics). Reference is the expert-tuned tunnel; target is tunnel~4-1}{table.caption.29}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {14}{\ignorespaces State excerpt (unfolded characteristics, after the unfolding stage).}}{20}{table.caption.30}\protected@file@percent }
+\newlabel{tab:context-state}{{14}{20}{State excerpt (unfolded characteristics, after the unfolding stage)}{table.caption.30}{}}
+\@writefile{toc}{\contentsline {paragraph}{Step~1 --- Referencing.}{20}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step~2 --- Diagnostic inspection.}{20}{section*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step~3 --- Parameter adaptation.}{20}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step~4 --- Validation.}{20}{section*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Step~5 --- JSON output.}{20}{section*.35}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {15}{\ignorespaces Worked example output (denoising agent, tunnel~4-1, m+s+k, Opus~4.6).}}{21}{table.caption.36}\protected@file@percent }
+\newlabel{tab:cot-example}{{15}{21}{Worked example output (denoising agent, tunnel~4-1, m+s+k, Opus~4.6)}{table.caption.36}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {16}{\ignorespaces On-site rules baseline: inputs and rule-driven parameters.}}{21}{table.caption.37}\protected@file@percent }
+\newlabel{tab:rules-spec}{{16}{21}{On-site rules baseline: inputs and rule-driven parameters}{table.caption.37}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}On-site rules baseline specification}{21}{appendix.E}\protected@file@percent }
+\newlabel{app:rules}{{E}{21}{On-site rules baseline specification}{appendix.E}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {17}{\ignorespaces Runtime, API calls, and per-tunnel API cost. Token counts are as reported by each vendor API; USD figures use vendor list prices at submission and are indicative.}}{21}{table.caption.38}\protected@file@percent }
+\newlabel{tab:practical}{{17}{21}{Runtime, API calls, and per-tunnel API cost. Token counts are as reported by each vendor API; USD figures use vendor list prices at submission and are indicative}{table.caption.38}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {18}{\ignorespaces Per-class IoU---Regular tunnels ($n=13$, 6-class, Opus~4.6).}}{21}{table.caption.39}\protected@file@percent }
+\newlabel{tab:perclass-regular}{{18}{21}{Per-class IoU---Regular tunnels ($n=13$, 6-class, Opus~4.6)}{table.caption.39}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {F}Runtime, API calls, and cost}{21}{appendix.F}\protected@file@percent }
+\newlabel{app:practical}{{F}{21}{Runtime, API calls, and cost}{appendix.F}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {G}Per-class IoU breakdown}{21}{appendix.G}\protected@file@percent }
+\newlabel{app:perclass}{{G}{21}{Per-class IoU breakdown}{appendix.G}{}}
+\csxdef{lastpage}{22}
+\@writefile{lot}{\contentsline {table}{\numberline {19}{\ignorespaces Per-class IoU---Complex tunnels ($n=17$, 7-class, Opus~4.6). Rules include 3 failed tunnels scored as zero.}}{22}{table.caption.40}\protected@file@percent }
+\newlabel{tab:perclass-complex}{{19}{22}{Per-class IoU---Complex tunnels ($n=17$, 7-class, Opus~4.6). Rules include 3 failed tunnels scored as zero}{table.caption.40}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {20}{\ignorespaces Performance distribution (mean across 3 LLMs).}}{22}{table.caption.41}\protected@file@percent }
+\newlabel{tab:distribution}{{20}{22}{Performance distribution (mean across 3 LLMs)}{table.caption.41}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {H}Performance distribution}{22}{appendix.H}\protected@file@percent }
+\newlabel{app:distribution}{{H}{22}{Performance distribution}{appendix.H}{}}
+\gdef \@abspage@last{23}

@@ -1,0 +1,54 @@
+{
+  "llm": "Anthropic Opus 4.6",
+  "metrics_source": "methods/journals/comparison_anthropic.md (per-tunnel mIoU)",
+  "panels": [
+    {
+      "category": "Staggered (regular)",
+      "tunnel_id": "2-2",
+      "sam4tun_miou": 0.347,
+      "best_condition": "memory+state+knowledge",
+      "best_miou": 0.685,
+      "delta_miou": 0.338
+    },
+    {
+      "category": "Continuous",
+      "tunnel_id": "3-1-1",
+      "sam4tun_miou": 0.05,
+      "best_condition": "memory+state",
+      "best_miou": 0.336,
+      "delta_miou": 0.286
+    },
+    {
+      "category": "Complex",
+      "tunnel_id": "5-5",
+      "sam4tun_miou": 0.04,
+      "best_condition": "memory+state+knowledge",
+      "best_miou": 0.342,
+      "delta_miou": 0.302
+    }
+  ],
+  "selected": [
+    {
+      "category": "Staggered",
+      "tunnel_id": "2-2",
+      "condition": "memory+state+knowledge",
+      "miou": 0.685
+    },
+    {
+      "category": "Continuous",
+      "tunnel_id": "3-1-1",
+      "condition": "memory+state",
+      "miou": 0.336
+    },
+    {
+      "category": "Complex",
+      "tunnel_id": "5-5",
+      "condition": "memory+state+knowledge",
+      "miou": 0.342
+    }
+  ],
+  "source": "data/ablation_anthropic",
+  "html": "/home/boringtao/Projects/R4Tun/skills/3d/best_categories_anthropic.html",
+  "caption_short": "Qualitative comparison on three Seg2Tunnel-style subsets: staggered regular (2-2), continuous (3-1-1), and complex (5-5). Top: SAM4Tun baseline; bottom: best Anthropic Opus 4.6 R4Tun ablation run per column (memory+state+knowledge for 2-2 and 5-5; memory+state for 3-1-1). Points are colored by predicted class; salmon indicates disagreement with ground truth. Mean IoU (mIoU) on the full cloud is 0.347\u21920.685 (2-2), 0.050\u21920.336 (3-1-1), and 0.040\u21920.342 (5-5). Displays are subsampled for clarity with extra points on 5-5 and on bottom-row 2-2 so panels are visually comparable.",
+  "caption_long": "Figure: Segmental tunnel lining segmentation before and after LLM-guided adaptation. Each column is one real tunnel subset spanning three difficulty regimes: alternated/staggered regular geometry (2-2), continuous ring geometry (3-1-1), and a complex scenario (5-5). The top row shows the fixed expert-tuned SAM4Tun pipeline; the bottom row shows, for the same tunnel, the strongest R4Tun configuration found in our Anthropic Opus 4.6 ablation over context design\u2014full memory+state+knowledge (m+s+k) for 2-2 and 5-5, and memory+state (m+s) for 3-1-1, where adding knowledge did not improve mIoU. Per-point colors encode the predicted segment label; salmon highlights prediction errors relative to ground truth, so dense salmon regions correspond to systematic failures of the baseline that adaptation reduces. Reported mean Intersection-over-Union (mIoU), averaged over classes on the complete point cloud, is (baseline \u2192 adapted) 0.347 \u2192 0.685 on 2-2, 0.050 \u2192 0.336 on 3-1-1, and 0.040 \u2192 0.342 on 5-5 (see repository metrics table). The renderings use random subsampling for interactive viewing; sampling caps are raised for tunnel 5-5 and for the adapted 2-2 panel so apparent point density is not dominated by differing cloud extent or row-wise proportioning."
+}

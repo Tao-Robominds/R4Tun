@@ -1,0 +1,298 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: A4; margin: 20mm 16mm; }
+  body { font-family: "Noto Serif", "DejaVu Serif", serif; font-size: 11pt; line-height: 1.35; color: #111; }
+  h1 { font-size: 18pt; margin: 0 0 10pt 0; }
+  h2 { font-size: 14pt; margin: 14pt 0 8pt 0; }
+  h3 { font-size: 12pt; margin: 10pt 0 6pt 0; }
+  p { margin: 0 0 8pt 0; }
+  ul, ol { margin: 0 0 8pt 20pt; }
+  li { margin: 2pt 0; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 10pt; background: #f3f3f3; padding: 1px 3px; border-radius: 2px; }
+  pre { background: #f3f3f3; padding: 8pt; border-radius: 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>R4Tun Combined Grouped Review (Deduplicated)</h1>
+
+<p>Source basis:</p>
+<ul>
+<li>`r4tun_final_manuscript_sentence_review.md`</li>
+<li>`r4tun_review_v4_pre_submission_review.md`</li>
+</ul>
+
+<p>Scope: deduplicated, grouped, non-redundant issue list that preserves all unique points raised across both reviews.</p>
+
+<h2>1) Numerical And Consistency Issues (Highest Priority)</h2>
+
+<h3>1. Abstract OA clause is grammatically incomplete</h3>
+<p><strong>Original</strong></p>
+<p>&gt; ... increased mean mIoU by at least 110.7% and 26.8% Overall Accuracy (OA).</p>
+
+<p><strong>Issue</strong></p>
+<p>Reads as if OA itself is 26.8% rather than OA improvement.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>&gt; ... increased mean mIoU by 110.7%–128.0% and overall accuracy (OA) by 26.8%–34.1% relative to the static SAM4Tun baseline.</p>
+
+<h3>2. Relative-improvement ranges conflict across sections</h3>
+<p><strong>Issue</strong></p>
+<p>Conclusions reports values recomputed from rounded numbers, while Highlights/Abstract/Results use unrounded values.</p>
+
+<p><strong>Conflicts to align</strong></p>
+<ul>
+<li>Overall: `113.3%–126.7%` vs `110.7%–128.0%`</li>
+<li>Regular: `+72.4%–86.2%` vs `+70.0%–83.8%`</li>
+<li>Complex: `+350.0%–375.0%` vs `+323.1%–361.7%`</li>
+</ul>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use one canonical set everywhere (preferably Section 4.1 values from unrounded means).</p>
+
+<h3>3. Four-stage description conflicts with five API calls</h3>
+<p><strong>Original</strong></p>
+<ul>
+<li>Four stage agents are described in methodology.</li>
+<li>Appendix reports `LLM API calls per tunnel: 5` and totals based on 5.</li>
+</ul>
+
+<p><strong>Issue</strong></p>
+<p>Either an unmentioned stage exists (e.g., detecting), or API-call counts are incorrect.</p>
+
+<p><strong>Suggested revision</strong></p>
+<ul>
+<li>If four adapted stages: `4 calls per tunnel`, `120 per condition per LLM`.</li>
+<li>If five adapted stages: explicitly add the fifth stage in architecture/method sections and figures.</li>
+</ul>
+
+<h3>4. Reference diameter definitions are inconsistent (5.5 / 5.60 / 5.32)</h3>
+<p><strong>Issue</strong></p>
+<p>Nominal and estimated diameters are mixed without explicit definition, which also causes <code>+34%</code> vs <code>+39%</code> confusion.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Define once:</p>
+<ul>
+<li>Nominal diameter = design value (e.g., 5.60, 7.50)</li>
+<li>Estimated diameter = measured from point-cloud processing (e.g., 5.32, 7.41)</li>
+</ul>
+
+<h3>5. Parameter-count drift (&quot;approximately 80&quot; vs &quot;81&quot;)</h3>
+<p><strong>Issue</strong></p>
+<p>TeX and PDF differ.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use one exact count and cross-check against appendix parameter tables.</p>
+
+<h3>6. &quot;Default API configuration&quot; conflicts with `Temperature = 0`</h3>
+<p><strong>Issue</strong></p>
+<p>Temperature zero is an explicit override.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>&gt; Other than setting temperature to 0, all other API settings used vendor defaults.</p>
+
+<h3>7. Citation [50] does not support all listed models</h3>
+<p><strong>Issue</strong></p>
+<p>[50] is GPT-4o system card, while table lists Opus-4.6, GPT-5.4, Gemini-3-Flash.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Remove [50] from that sentence, or add correct per-vendor references.</p>
+
+<h3>8. Terminology and formatting drift</h3>
+<p><strong>Issue</strong></p>
+<p>Inconsistent use of:</p>
+<ul>
+<li>`Non-LLM` vs `non-LLM`</li>
+<li>`tunnel family` vs `tunnel category`</li>
+<li>`regular-category` vs `regular category`</li>
+<li>`95 %` vs `95%`</li>
+</ul>
+
+<p><strong>Suggested revision</strong></p>
+<p>Standardize globally (recommended: <code>non-LLM</code>, <code>tunnel category</code>, noun form without hyphen, compact <code>%</code>).</p>
+
+<h2>2) Overstatements To Soften</h2>
+
+<h3>9. &quot;strong adaptability&quot; and similar broad claims</h3>
+<p><strong>Original</strong></p>
+<p>&gt; Existing tunnel-segmentation approaches do not jointly provide strong adaptability...</p>
+
+<p><strong>Issue</strong></p>
+<p>Too categorical/subjective.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>&gt; ...have not yet demonstrated, in a single workflow, both robust adaptation to changed conditions and an auditable adaptation process.</p>
+
+<h3>10. &quot;self-verifying intermediate steps&quot;</h3>
+<p><strong>Issue</strong></p>
+<p>Overstates reliability and conflicts with later caveat that constraints are not guaranteed.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use &quot;prompted consistency checks&quot; and acknowledge probabilistic nature.</p>
+
+<h3>11. &quot;objective tunnel conditions&quot; in cross-model analysis</h3>
+<p><strong>Issue</strong></p>
+<p>Cannot isolate &quot;objective condition&quot; causality from shared prompt/knowledge/model priors.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Phrase as consistency under same inputs/prompt structure.</p>
+
+<h3>12. &quot;context design is shown to help&quot;</h3>
+<p><strong>Issue</strong></p>
+<p>Too assertive for evidence level.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use &quot;ablation results indicate/suggest&quot;.</p>
+
+<h3>13. LLM-vs-rule conclusion hedging is inconsistent</h3>
+<p><strong>Issue</strong></p>
+<p>Some sections use cautious wording (&quot;consistent with additional contribution&quot;), others sound definitive.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use cautious causal language throughout.</p>
+
+<h3>14. Practical-impact sentence sounds promotional</h3>
+<p><strong>Original</strong></p>
+<p>&quot;reallocates expert effort&quot;, &quot;one-off authoring step&quot;, &quot;affordable APIs&quot;.</p>
+
+<p><strong>Issue</strong></p>
+<p>Reads as promotional and overgeneralized.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use &quot;may shift&quot; language; call API costs &quot;indicative under tested settings&quot;.</p>
+
+<h2>3) Internal Logic / Reasoning Consistency</h2>
+
+<h3>15. &quot;strictly bounded&quot; conflicts with &quot;does not guarantee constraints&quot;</h3>
+<p><strong>Issue</strong></p>
+<p>Deterministic wording clashes with non-deterministic implementation.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Replace &quot;strictly bounded&quot; with &quot;instructed to stay within&quot; and clarify non-guaranteed enforcement.</p>
+
+<h3>16. Convergence sentence is internally mixed</h3>
+<p><strong>Original</strong></p>
+<p>Claims rule+LLM &quot;converge&quot; yet &quot;LLMs still score higher&quot; in same long sentence.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Split into two sentences:</p>
+<ul>
+<li>Both remain low in absolute performance on complex category.</li>
+<li>LLM still has small mean advantage.</li>
+</ul>
+
+<h2>4) AI-Like / Vague / Promotional Phrasing</h2>
+
+<h3>17. Replace vague or hype-like wording</h3>
+<p>Target phrases:</p>
+<ul>
+<li>&quot;handle varying tunnel conditions&quot;</li>
+<li>&quot;degrades silently&quot;</li>
+<li>&quot;diagnostic feedback&quot;</li>
+<li>&quot;explicit rationale&quot;</li>
+<li>&quot;leverage ... foundation models&quot;</li>
+<li>&quot;actual geometric reality&quot;</li>
+<li>&quot;the agent attempts to...&quot;</li>
+</ul>
+
+<p><strong>Suggested style</strong></p>
+<p>Use concrete, observable language tied to measured effects and pipeline behavior.</p>
+
+<h3>18. Circular wording in dataset description</h3>
+<p><strong>Original</strong></p>
+<p>&gt; complex interleaved key-block arrangement</p>
+
+<p><strong>Issue</strong></p>
+<p>&quot;complex&quot; for complex category is circular.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>&gt; interleaved key-block arrangement that does not repeat ring-to-ring.</p>
+
+<h2>5) Repetition To Reduce</h2>
+
+<h3>19. Repeated triplet and near-identical claims</h3>
+<p>Repeated heavily:</p>
+<ul>
+<li>&quot;memory, state, and knowledge&quot;</li>
+<li>&quot;reference configuration&quot;</li>
+<li>&quot;per-tunnel expert re-tuning/retuning&quot;</li>
+<li>duplicated &quot;state provides quantitative evidence...&quot; sentence</li>
+<li>duplicated per-class IoU summary sentence</li>
+</ul>
+
+<p><strong>Suggested revision</strong></p>
+<p>Define once, then use shorthand (<code>m+s+k</code>) and cross-references.</p>
+
+<h3>20. Keep one strong version of each finding</h3>
+<p>Examples:</p>
+<ul>
+<li>keep per-class summary once in Results, brief reference in Conclusions.</li>
+<li>keep state-mechanism explanation once in Ablation, brief callback in Discussion.</li>
+</ul>
+
+<h2>6) Grammar, Typo, And Formatting Fixes</h2>
+
+<h3>21. Typo and spacing</h3>
+<ul>
+<li>`JSON ouput` -&gt; `JSON output`</li>
+<li>`protocol(Algorithm 1)` -&gt; `protocol (Algorithm 1)`</li>
+<li>`The mean increment are narrow` -&gt; `The mean increments are small`</li>
+</ul>
+
+<h3>22. Figure 6 caption grammar</h3>
+<p><strong>Issue</strong></p>
+<p>Missing grammatical subject for &quot;constructs&quot; / &quot;feeds&quot;.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Use a clear subject and two-step sentence structure.</p>
+
+<h3>23. Appendix heading grammar</h3>
+<p><code>Non-LLM rules-based</code> -&gt; <code>Non-LLM rule-based</code>.</p>
+
+<h3>24. Unit and symbols</h3>
+<ul>
+<li>`pts/m3` -&gt; `pts/m³` (or journal-preferred equivalent)</li>
+<li>normalize `%` spacing</li>
+<li>verify math rendering in PDF (`ar{v}`, summation bounds) is typographically correct.</li>
+</ul>
+
+<h3>25. Source artefact in TeX</h3>
+<p>Remove stray <code>t d</code> in the sentence beginning &quot;The pipeline contains...&quot;.</p>
+
+<h2>7) Structure And Organization Fixes</h2>
+
+<h3>26. Move metrics/sensitivity out of Non-LLM subsection</h3>
+<p><strong>Issue</strong></p>
+<p><code>3.5.1 Evaluation metrics</code> and <code>3.5.2 Sensitivity analysis</code> are global methods, not specific to non-LLM baseline.</p>
+
+<p><strong>Suggested revision</strong></p>
+<p>Renumber as standalone methodology subsections.</p>
+
+<h3>27. Align Highlights and Contributions</h3>
+<p>Use identical headline claims and numbers in both places after numeric reconciliation.</p>
+
+<h3>28. Verify Algorithm 1 float placement/caption</h3>
+<p>Ensure caption and body render together and are not detached across columns/pages.</p>
+
+<h2>8) Consolidated High-Quality Abstract (Optional Replacement)</h2>
+
+<p>&gt; Automated inspection of segmental tunnel linings requires segmentation pipelines that adapt to varying point-cloud geometry, yet expert-tuned pipelines often degrade when tunnel conditions depart from the reference setting. This paper presents R4Tun, a large language model (LLM)-driven adaptation framework that extends an expert-designed pipeline (SAM4Tun) with bounded parameter tuning informed by structured context (memory, state, and knowledge; m+s+k). On 30 selected Seg2Tunnel subsets (13 regular, 17 complex) and three LLMs (Opus-4.6, GPT-5.4, Gemini-3-Flash), the m+s+k design increased mean Intersection-over-Union (mIoU) from 0.150 to 0.316–0.342 (+110.7%–128.0%) and overall accuracy (OA) from 0.411 to 0.522–0.552 (+26.8%–34.1%). On regular tunnels mIoU rose from 0.291 to 0.495–0.535 (+70.0%–83.8%); on complex tunnels mIoU rose from 0.042 to 0.178–0.194 (+323.1%–361.7%). Across 270 adapted runs (30 tunnels × 3 LLMs × 3 context settings), the three LLMs followed similar parameter-adjustment trends and consistently selected a shared set of critical parameters. These results suggest that LLM-driven adaptation supplied with structured context can improve transfer of a fixed segmentation pipeline across changed tunnel conditions and reduce the need for per-tunnel expert retuning, particularly when target tunnels remain close to the reference configuration.</p>
+
+<h2>9) One-Pass Final Checklist</h2>
+
+<ol>
+<li>Unify all numeric ranges in Highlights/Abstract/Results/Conclusions.</li>
+<li>Resolve 4-vs-5 stage inconsistency and update architecture, methods, tables.</li>
+<li>Define nominal vs estimated diameter once and reuse consistently.</li>
+<li>Standardize terms/capitalization/percent style globally.</li>
+<li>Replace unsupported or mismatched citations.</li>
+<li>Soften overstatements; keep causal claims cautious.</li>
+<li>Remove duplicated wording; keep one canonical statement per finding.</li>
+<li>Apply typo/grammar/unit/math-format fixes.</li>
+<li>Reorganize subsection numbering for methodological clarity.</li>
+<li>Verify final PDF rendering (figures, algorithm floats, equations).</li>
+</ol>
+</body>
+</html>
