@@ -91,7 +91,15 @@ PYTHON = sys.executable
 def _setup_env() -> dict[str, str]:
     os.environ["R4TUN_PIPELINE_OUT_PREFIX"] = f"data/ablation/{ABLATION_FOLDER}"
     os.environ["R4TUN_ABLATION_TUNNEL_SUBROOT"] = ABLATION_FOLDER
-    os.environ["PYTHONPATH"] = "."
+    root = Path(__file__).resolve().parent
+    venv_site = root / "venv" / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+    sam_root = root / "sam4tun" / "segment-anything"
+    pp = ["."]
+    if venv_site.is_dir():
+        pp.append(str(venv_site))
+    if sam_root.is_dir():
+        pp.append(str(sam_root))
+    os.environ["PYTHONPATH"] = os.pathsep.join(pp)
     return os.environ.copy()
 
 
@@ -142,6 +150,7 @@ def call_gpt(prompt: str, model_tag: str, dry_run: bool = False) -> str:
             response = client.responses.create(
                 model=api_model,
                 reasoning={"effort": "high"},
+                temperature=0,
                 input=[{"role": "user", "content": prompt}],
             )
         except APIStatusError as e:

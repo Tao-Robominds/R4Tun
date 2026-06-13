@@ -1,0 +1,12 @@
+{
+  "preprocessing": {
+    "binary_threshold": 120,
+    "dilation_kernel_size": 4,
+    "dilation_iterations": 3
+  },
+  "hough_oblique": {
+    "threshold": 64,
+    "min_length": 131,
+    "max_gap": 36
+  }
+}

@@ -18,15 +18,17 @@
 
 ---
 
-## Experiment 2: LLM stochasticity (PAUSED --- API intensive)
+## Experiment 2: LLM stochasticity (IN PROGRESS --- 2-run protocol)
 
 **Purpose:** Quantify within-LLM variance in parameter inference.
 
-**Method:** Re-run LLM parameter inference 3 times for each of 3 LLMs under m_s_k on all 30 tunnels, then run pipeline and evaluate.
+**Method:** Run 1 = primary params (snapshot). Run 2 = one fresh m+s+k inference per tunnel×LLM (temperature 0), with run 1 seeded to skip GPU when params match. See `methods/plans/repeatability_run2_plan.md`.
 
-**Cost:** 1,350 API calls + 270 pipeline runs.
+**Scripts:** `bootstrap_repeatability_run1.py`, `run_repeatability.py`, `reproducibility_analysis.py --layout repeatability`.
 
-**Deliverable:** Per-tunnel, per-LLM mIoU distribution. CV. Confirm cross-LLM convergence exceeds within-LLM variance.
+**Status:** 9/90 pairs from harvested complex-tunnel reruns (Appendix I); remaining 81 via `run_repeatability.py --skip-existing`.
+
+**Deliverable:** `methods/papers/output/repeatability_summary.md`, Appendix I Table.
 
 ---
 

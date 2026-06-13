@@ -57,7 +57,7 @@
 % ─── Abstract ─────────────────────────────────────────────────────────────
 
 \begin{abstract}
-Automated inspection of segmental tunnel linings requires adaptive segmentation from 3D point clouds, \hl{yet expert-tuned pipelines often degrade when tunnel conditions vary.} This limits robust deployment of automated inspection across tunnel networks. This paper presents R4Tun, a large language model (LLM)-driven adaptation framework that extends an expert-designed pipeline (SAM4Tun) with bounded parameter tuning informed by structured context comprising memory, state, and knowledge. \hl{Evaluated on 30 selected Seg2Tunnel subsets (13 regular, 17 complex) across three LLMs, the full memory\,+\,state\,+\,knowledge design increased overall mean mIoU from 0.150 to 0.313--0.328. Regular tunnels improved from 0.291 to 0.495--0.535, and complex tunnels improved from 0.042 to 0.169--0.177. Across 270 adapted runs, the LLMs exhibited similar parameter-adjustment trends and consistently adjusted a small set of critical parameters.} These results suggest that structured context helps LLMs adapt a fixed segmentation pipeline to unseen tunnel conditions and reduce the need for per-tunnel expert retuning.
+Automated inspection of segmental tunnel linings requires adaptive segmentation from 3D point clouds, \hl{yet expert-tuned pipelines often degrade when tunnel conditions vary.} This limits robust deployment of automated inspection across tunnel networks. This paper presents R4Tun, a large language model (LLM)-driven adaptation framework that extends an expert-designed pipeline (SAM4Tun) with bounded parameter tuning informed by structured context comprising memory, state, and knowledge. \hl{Evaluated on 30 selected Seg2Tunnel subsets (13 regular, 17 complex) across three LLMs, the full memory\,+\,state\,+\,knowledge design increased overall mean mIoU from 0.150 to 0.316--0.342. Regular tunnels improved from 0.291 to 0.495--0.535, and complex tunnels improved from 0.042 to 0.178--0.194. Across 270 adapted runs, the LLMs exhibited similar parameter-adjustment trends and consistently adjusted a small set of critical parameters.} These results suggest that structured context helps LLMs adapt a fixed segmentation pipeline to unseen tunnel conditions and reduce the need for per-tunnel expert retuning.
 \end{abstract}
 
 % ─── Highlights ───────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ R4Tun complements rather than replaces SAM4Tun~\cite{ye2025sam4tun}. The baselin
 \label{fig:stage-p}
 \end{figure*}
 
-The pipeline contains approximately 80 tuneable processing parameters. All parameters were expert-tuned on a reference tunnel (diameter 5.60\,m, density 2{,}466\,pts/m$^3$, mIoU\,=\,0.531); full parameter tables are provided in Appendix~\ref{app:params}. In this study, the underlying pipeline stages remain fixed across all conditions; only the parameter values change. The \texttt{sam4tun} baseline applies this single expert-tuned configuration uniformly to all 30 tunnels without per-tunnel adaptation, serving as the fixed-parameter reference against which all adaptive conditions are measured.
+t dThe pipeline contains approximately 80 tuneable processing parameters. All parameters were expert-tuned on a reference tunnel (diameter 5.60\,m, density 2{,}466\,pts/m$^3$, mIoU\,=\,0.531); full parameter tables are provided in Appendix~\ref{app:params}. In this study, the underlying pipeline stages remain fixed across all conditions; only the parameter values change. The \texttt{sam4tun} baseline applies this single expert-tuned configuration uniformly to all 30 tunnels without per-tunnel adaptation, serving as the fixed-parameter reference against which all adaptive conditions are measured.
 
 \subsubsection{On-site rules baseline}\label{sec:rules-baseline}
 
@@ -296,7 +296,7 @@ Failure handling & JSON extraction fail $\rightarrow$ log \& error \\
 
 
 
-Pipeline execution used a single NVIDIA RTX~5060 GPU. Adapted parameter files and CoT reasoning traces were logged for all runs, enabling post-hoc sensitivity analysis (Section~\ref{sec:sensitivity-method}).
+Pipeline execution used a single NVIDIA RTX~5060 GPU. Adapted parameter files and CoT reasoning traces were logged for all runs, enabling post-hoc sensitivity analysis (Section~\ref{sec:sensitivity-method}). Wall-clock runtime, API-call counts, and per-tunnel input/output token usage with the corresponding indicative USD cost for each LLM under \texttt{m+s+k} are reported in Appendix~\ref{app:practical} (Table~\ref{tab:practical}).
 
 \subsubsection{Evaluation metrics}\label{sec:metrics}
 
@@ -328,7 +328,7 @@ where $\bar{v} = \frac{1}{N}\sum_{i=1}^{N} v_i$ and $s = \sqrt{\frac{1}{N-1}\sum
 
 \subsection{Overall performance}\label{sec:main-results}
 
-Table~\ref{tab:main-results} summarises mean mIoU across conditions and LLMs. Under the full memory+state+knowledge (m+s+k) design, overall mIoU rises from 0.150 (baseline) to 0.313--0.328 across the three LLMs ($p < 0.0001$, paired Cohen's $d = 1.44$--$1.94$). The improvement holds across both tunnel families (Fig.~\ref{fig:ablation-bar}). Regular tunnels improve from 0.291 to 0.495--0.535 (effect sizes $d = 1.4$--$2.2$). Complex tunnels---where the baseline drops to mIoU\,=\,0.042 because several pipeline assumptions no longer match the tunnel conditions---improve to 0.169--0.177 ($d = 1.2$--$2.4$), an absolute increase of 0.127--0.135 mIoU. Per-class IoU analysis (Appendix~\ref{app:perclass}) supports broad improvement across structural classes for regular tunnels and progressive recovery from near-zero baselines for complex tunnels.
+Table~\ref{tab:main-results} summarises mean mIoU across conditions and LLMs. Under the full memory+state+knowledge (m+s+k) design, overall mIoU rises from 0.150 (baseline) to 0.316--0.342 across the three LLMs (relative increase: 110.6\%--127.9\%; $p < 0.0001$, paired Cohen's $d = 1.51$--$1.95$). Overall OA also rises from 0.411 to 0.522--0.552 (relative increase: 26.8\%--34.1\%). The improvement holds across both tunnel families (Fig.~\ref{fig:ablation-bar}). Regular tunnels improve from 0.291 to 0.495--0.535 (relative increase: 70.0\%--83.8\%; effect sizes $d = 1.4$--$2.4$), with OA increasing from 0.509 to 0.668--0.709 (31.3\%--39.2\%). Complex tunnels---where the baseline drops to mIoU\,=\,0.042 because several pipeline assumptions no longer match the tunnel conditions---improve to 0.178--0.194 (relative increase: 323.1\%--361.7\%; $d = 2.0$--$2.4$), an absolute increase of 0.136--0.152 mIoU; complex-tunnel OA increases from 0.337 to 0.410--0.431 (21.6\%--28.2\%). Per-class IoU analysis (Appendix~\ref{app:perclass}) supports broad improvement across structural classes for regular tunnels and progressive recovery from near-zero baselines for complex tunnels.
 
 \begin{table*}[t]
 \caption{Overall segmentation results ($n=30$): mean mIoU and paired $\Delta$mIoU vs baseline with $p$-values, effect sizes, and bootstrap 95\% CIs.}\label{tab:main-results}
@@ -353,18 +353,18 @@ Baseline (sam4tun) & Mean mIoU & 0.150 & 0.150 & 0.150 \\
   & 95\% CI & $[-0.027,\; 0.014]$ & $[0.005,\; 0.058]$ & $[0.006,\; 0.101]$ \\
 \midrule
 \multirow{5}{*}{m+s}
-  & Mean mIoU & 0.312 & 0.299 & 0.302 \\
-  & Mean $\Delta$ & $+0.162$ & $+0.149$ & $+0.152$ \\
+  & Mean mIoU & 0.320 & 0.300 & 0.302 \\
+  & Mean $\Delta$ & $+0.170$ & $+0.150$ & $+0.152$ \\
   & $p$-value & $<0.0001$ & $<0.0001$ & $<0.0001$ \\
-  & Cohen's $d$ & 1.61 & 1.32 & 1.46 \\
-  & 95\% CI & $[0.126,\; 0.198]$ & $[0.110,\; 0.190]$ & $[0.117,\; 0.189]$ \\
+  & Cohen's $d$ & 1.77 & 1.33 & 1.47 \\
+  & 95\% CI & $[0.137,\; 0.204]$ & $[0.111,\; 0.191]$ & $[0.118,\; 0.189]$ \\
 \midrule
 \multirow{5}{*}{m+s+k}
-  & \textbf{Mean mIoU} & \textbf{0.328} & \textbf{0.321} & \textbf{0.313} \\
-  & Mean $\Delta$ & $+0.178$ & $+0.171$ & $+0.163$ \\
+  & \textbf{Mean mIoU} & \textbf{0.342} & \textbf{0.321} & \textbf{0.316} \\
+  & Mean $\Delta$ & $+0.192$ & $+0.171$ & $+0.166$ \\
   & $p$-value & $<0.0001$ & $<0.0001$ & $<0.0001$ \\
-  & Cohen's $d$ & 1.61 & 1.94 & 1.44 \\
-  & 95\% CI & $[0.139,\; 0.216]$ & $[0.140,\; 0.203]$ & $[0.122,\; 0.203]$ \\
+  & Cohen's $d$ & 1.95 & 1.95 & 1.51 \\
+  & 95\% CI & $[0.158,\; 0.227]$ & $[0.141,\; 0.203]$ & $[0.126,\; 0.204]$ \\
 \bottomrule
 \end{tabular*}
 \end{table*}
@@ -397,21 +397,21 @@ Transition & Opus-4.6 & GPT-5.4 & Gemini-3-Flash \\
 \midrule
 Baseline $\rightarrow$ Rules & \multicolumn{3}{c}{$+0.051$ ($n=30$; 3 failures\,$=$\,0)} \\
 Baseline $\rightarrow$ m & $-0.006$ & $+0.032$ & $+0.049$ \\
-m $\rightarrow$ m+s & $+0.168$ & $+0.117$ & $+0.103$ \\
-\textbf{m+s $\rightarrow$ m+s+k} & $\mathbf{+0.016}$ & $\mathbf{+0.022}$ & $\mathbf{+0.011}$ \\
+m $\rightarrow$ m+s & $+0.176$ & $+0.118$ & $+0.103$ \\
+\textbf{m+s $\rightarrow$ m+s+k} & $\mathbf{+0.022}$ & $\mathbf{+0.021}$ & $\mathbf{+0.014}$ \\
 \bottomrule
 \end{tabular*}
 \end{table}
 
-\textbf{The on-site rules baseline} achieves mean mIoU\,=\,0.201 ($n=30$; 3 complex tunnels failed due to detection row-count mismatch under default Hough thresholds and are counted as mIoU\,=\,0). On regular tunnels, rules provide negligible improvement over sam4tun ($\Delta = -0.005$, $p = 0.79$), because the sam4tun defaults were already tuned for the 5.5\,m family. On complex tunnels, rules improve substantially ($\Delta = +0.095$, $p = 0.0001$, $d = 1.23$) by correcting the gross diameter and family mismatch, but 3 of 17 tunnels fail outright. Fig.~\ref{fig:rules-comparison} ranks all five conditions by their 3-model-average mIoU: on complex tunnels, rules (0.137) sit between m (0.081) and m+s+k (0.173), while on regular tunnels rules (0.286) trail all LLM conditions beyond memory alone. The LLM conditions produce their largest gains on regular tunnels (mean mIoU 0.495--0.535 vs rules 0.286), where characteriser-state-driven parameters (Hough thresholds, denoising masks tuned to $p_{10}$/$p_{99}$, upsampling targets) provide the additional lift.
+\textbf{The on-site rules baseline} achieves mean mIoU\,=\,0.201 ($n=30$; 3 complex tunnels failed due to detection row-count mismatch under default Hough thresholds and are counted as mIoU\,=\,0). On regular tunnels, rules provide negligible improvement over sam4tun ($\Delta = -0.005$, $p = 0.79$), because the sam4tun defaults were already tuned for the 5.5\,m family. On complex tunnels, rules improve substantially ($\Delta = +0.095$, $p = 0.0001$, $d = 1.23$) by correcting the gross diameter and family mismatch, but 3 of 17 tunnels fail outright. Fig.~\ref{fig:rules-comparison} ranks all five conditions by their 3-model-average mIoU: on complex tunnels, rules (0.137) sit between m (0.081) and m+s+k (0.184), while on regular tunnels rules (0.286) trail all LLM conditions beyond memory alone. The LLM conditions produce their largest gains on regular tunnels (mean mIoU 0.495--0.535 vs rules 0.286), where characteriser-state-driven parameters (Hough thresholds, denoising masks tuned to $p_{10}$/$p_{99}$, upsampling targets) provide the additional lift.
 
 \textbf{Memory alone} provides an initial reference but is insufficient, and in some settings it degrades performance. On regular tunnels, especially the staggered subsets, memory alone degrades mIoU by $-0.035$ to $-0.055$. Without intermediate feedback, the agent attempts to adapt parameters but cannot verify whether adjustments improve or degrade the pipeline outputs.
 
-\textbf{State is associated with the largest cumulative improvement.} The m+s condition yields the strongest gain relative to baseline across all three LLMs (all $p < 0.0001$; paired Cohen's $d = 1.32$--$1.61$), and because the memory-only condition is small or inconsistent, most of this cumulative gain appears to be attributable to state. State provides the agent with explicit quantitative evidence of how each stage has transformed the data---radial percentiles for mask bounds, retention rates for denoising aggressiveness, coverage uniformity for upsampling targets. Without state, the agent has only pre-pipeline statistics that may not reflect conditions after unfolding, denoising, or enhancing.
+\textbf{State is associated with the largest cumulative improvement.} The m+s condition yields the strongest gain relative to baseline across all three LLMs (all $p < 0.0001$; paired Cohen's $d = 1.33$--$1.77$), and because the memory-only condition is small or inconsistent, most of this cumulative gain appears to be attributable to state. State provides the agent with explicit quantitative evidence of how each stage has transformed the data---radial percentiles for mask bounds, retention rates for denoising aggressiveness, coverage uniformity for upsampling targets. Without state, the agent has only pre-pipeline statistics that may not reflect conditions after unfolding, denoising, or enhancing.
 
 The gain associated with state likely depends on a model's ability to interpret raw numeric summaries (percentiles, counts, ratios) in the context of parameter semantics and map them to appropriate parameter values. We did not test alternative mapping strategies (e.g., regression models or heuristic rules); however, the continuous, multidimensional nature of the characteristic space and the non-trivial parameter interactions suggest that capturing this mapping through static rules alone would require substantial manual engineering effort per tunnel family.
 
-\textbf{Knowledge appears to provide targeted improvements in a subset of tunnels.} Knowledge provides a mean increment of $+0.011$ to $+0.022$ (Cohen's $d = 0.11$--$0.31$, ``small''). Bootstrap CIs on the mean increment straddle zero for all three LLMs. However, 21/30 tunnels show positive increments for Opus~4.6 and GPT-5.4 (one-sided binomial $p = 0.021$), and on complex tunnels 15/17 are positive for GPT ($p = 0.001$). Knowledge is most valuable where it supplies tunnel-family-specific configuration that neither memory nor state can provide (e.g., \texttt{ring\_spacing\_constant}\,=\,1.8 vs 1.2, 7~segments per ring, 7.5/5.5 scaling).
+\textbf{Knowledge appears to provide targeted improvements in a subset of tunnels.} Knowledge provides a mean increment of $+0.014$ to $+0.022$ (Cohen's $d = 0.13$--$0.43$). Bootstrap CIs on the mean increment straddle zero for GPT-5.4 and Gemini-3-Flash; for Opus-4.6 the CI narrowly excludes zero ($[0.003, 0.039]$). However, 23/30 tunnels show positive increments for Opus~4.6 ($p = 0.003$) and 21/30 for Gemini-3-Flash ($p = 0.021$), and on complex tunnels 16/17 are positive for Gemini ($p < 0.001$). Knowledge is most valuable where it supplies tunnel-family-specific configuration that neither memory nor state can provide (e.g., \texttt{ring\_spacing\_constant}\,=\,1.8 vs 1.2, 7~segments per ring, 7.5/5.5 scaling).
 
 \subsection{Cross-model consistency}\label{sec:consistency}
 
@@ -423,9 +423,9 @@ To assess whether the adaptation is model-dependent or driven by objective tunne
 \toprule
 LLM & Mean $\Delta$mIoU & 95\% CI & Cohen's $d$ \\
 \midrule
-Opus-4.6 & $+0.178$ & $[0.139,\; 0.216]$ & 1.61 \\
-GPT-5.4 & $+0.171$ & $[0.140,\; 0.203]$ & 1.94 \\
-Gemini-3-Flash & $+0.163$ & $[0.122,\; 0.203]$ & 1.44 \\
+Opus-4.6 & $+0.192$ & $[0.158,\; 0.227]$ & 1.95 \\
+GPT-5.4 & $+0.171$ & $[0.141,\; 0.203]$ & 1.95 \\
+Gemini-3-Flash & $+0.166$ & $[0.126,\; 0.204]$ & 1.51 \\
 \bottomrule
 \end{tabular*}
 \end{table}
@@ -475,7 +475,7 @@ Segmenting & \texttt{processing.padding} & Responsive & 29/30 & 0.265 & [160, 41
 
 \subsection{Key findings}
 
-The consistency of improvement across three LLMs and two tunnel families suggests that the context design, rather than model-specific capabilities, is an important contributor to adaptation. State information contributes the largest gains ($+0.103$ to $+0.168$ mIoU), because it provides explicit quantitative evidence of how each pipeline stage has transformed the data. Memory alone proves insufficient: without intermediate feedback, agents make premature adjustments. Domain knowledge yields targeted rather than uniform improvements, and is most valuable for complex tunnels requiring family-specific configuration.
+The consistency of improvement across three LLMs and two tunnel families suggests that the context design, rather than model-specific capabilities, is an important contributor to adaptation. State information contributes the largest gains ($+0.103$ to $+0.176$ mIoU), because it provides explicit quantitative evidence of how each pipeline stage has transformed the data. Memory alone proves insufficient: without intermediate feedback, agents make premature adjustments. Domain knowledge yields targeted rather than uniform improvements, and is most valuable for complex tunnels requiring family-specific configuration.
 
 \subsection{Role of LLM reasoning}
 
@@ -488,7 +488,7 @@ In practice, a domain expert calibrates the pipeline on a single reference tunne
 
 \subsection{Limitations}\label{sec:limitations}
 
-R4Tun was evaluated exclusively on the SAM4Tun pipeline and the Seg2Tunnel dataset; as a result, its transferability to other point-cloud processing pipelines and datasets requires further testing. All adaptation is referenced to a single expert-tuned parameter set. Although this increases complex-tunnel mIoU to 0.169--0.177, absolute performance remains low, suggesting that a single reference configuration cannot fully compensate for the extent of geometric departure in these cases. Iterative optimisation approaches such as Bayesian optimisation or grid search, which could explore the parameter space more systematically at higher computational cost, were not benchmarked. The auditability of the generated reasoning traces has not been validated through a formal user study with practising engineers. Finally, parameters are adapted in a single forward pass without iterative self-correction, leaving potential gains from closed-loop refinement unexplored.
+R4Tun was evaluated exclusively on the SAM4Tun pipeline and the Seg2Tunnel dataset; as a result, its transferability to other point-cloud processing pipelines and datasets requires further testing. All adaptation is referenced to a single expert-tuned parameter set. Although this increases complex-tunnel mIoU to 0.178--0.194, absolute performance remains low, suggesting that a single reference configuration cannot fully compensate for the extent of geometric departure in these cases. Iterative optimisation approaches such as Bayesian optimisation or grid search, which could explore the parameter space more systematically at higher computational cost, were not benchmarked. The auditability of the generated reasoning traces has not been validated through a formal user study with practising engineers. Finally, parameters are adapted in a single forward pass without iterative self-correction, leaving potential gains from closed-loop refinement unexplored.
 
 
 % ══════════════════════════════════════════════════════════════════════════
@@ -497,7 +497,7 @@ R4Tun was evaluated exclusively on the SAM4Tun pipeline and the Seg2Tunnel datas
 
 Reliable segmentation of segmental tunnel linings from point clouds remains challenging when tunnel conditions diverge from the expert-tuned reference. This paper presented R4Tun, a multi-agent framework that extends a fixed segmentation pipeline with LLM-driven parameter adaptation. Rather than replacing the underlying geometric operators, R4Tun adapts their parameters by comparing each new tunnel with the reference configuration and by using compact summaries of intermediate pipeline outputs. This design preserves the deterministic structure of the original pipeline while supporting post-hoc review and revision of parameter changes.
 
-Evaluated on 30 subsets spanning 13 regular and 17 complex tunnels with three independent LLMs, the full memory\,+\,state\,+\,knowledge design improved mean mIoU from 0.150 to 0.313--0.328 (bootstrap 95\,\% CIs exclude zero for all three LLMs). The ablation study suggested that state is an important contributor to improvement (memory+state vs. baseline: paired Cohen's $d > 1.3$), with all three LLMs placing consistent emphasis on a similar subset of critical parameters and tunnel-family adaptation patterns. Comparison with a deterministic rules baseline restricted to field-observable inputs (mIoU\,=\,0.201, $n=30$ with 3 failures counted as zero) confirmed that the LLM conditions' gains on regular tunnels are specifically attributable to characteriser-state reasoning, not family-level corrections alone. Per-class IoU analysis supports broad gains across structural classes for regular tunnels and progressive recovery from near-zero baselines for complex tunnels.
+Evaluated on 30 subsets spanning 13 regular and 17 complex tunnels with three independent LLMs, the full memory\,+\,state\,+\,knowledge design improved mean mIoU from 0.150 to 0.316--0.342 (bootstrap 95\,\% CIs exclude zero for all three LLMs). The ablation study suggested that state is an important contributor to improvement (memory+state vs. baseline: paired Cohen's $d > 1.3$), with all three LLMs placing consistent emphasis on a similar subset of critical parameters and tunnel-family adaptation patterns. Comparison with a deterministic rules baseline restricted to field-observable inputs (mIoU\,=\,0.201, $n=30$ with 3 failures counted as zero) confirmed that the LLM conditions' gains on regular tunnels are specifically attributable to characteriser-state reasoning, not family-level corrections alone. Per-class IoU analysis supports broad gains across structural classes for regular tunnels and progressive recovery from near-zero baselines for complex tunnels.
 
 Several directions for future work follow from the limitations above. First, encoding multiple expert-designed reference configurations could improve adaptation to atypical tunnels. Second, applying reflection to multi-stage intrinsic criteria ( jointly considering coverage, class balance, and geometric continuity) may capture aspects that a single coverage signal misses. Third, validation on broader tunnel typologies and acquisition conditions would strengthen generalisability claims.
 

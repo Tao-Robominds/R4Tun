@@ -357,7 +357,7 @@ For each condition and LLM, paired differences Δᵢ = mIoU_condition_i − mIoU
 
 ### 3.6 Evaluation metrics
 
-Segmentation quality is measured by mean Intersection-over-Union (mIoU): IoU_c = TP_c / (TP_c + FP_c + FN_c), mIoU = (1/C) Σ IoU_c, where C = 6 (regular) or 7 (complex). Overall accuracy (OA) and macro F1 are also computed; mIoU is the primary metric.
+Segmentation quality is measured by mean Intersection-over-Union (mIoU): IoU_c = TP_c / (TP_c + FP_c + FN_c), mIoU = (1/C) Σ IoU_c, where C = 6 (regular) or 7 (complex). Overall accuracy (OA) is also reported as OA = (Σ_c TP_c) / N, where N is the total number of points. OA captures global point-wise correctness but can be dominated by majority classes; therefore mIoU remains the primary metric. Macro F1 is reported as a complementary class-balanced score.
 
 ### 3.7 Sensitivity analysis
 

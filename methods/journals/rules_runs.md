@@ -144,3 +144,99 @@ The following appendix sections in `methods/papers/appendices.tex` cover the rul
 4. **Main text Section 3.1.1** — Prose description of the rules baseline design and rationale
 5. **Main text Section 4.1** — Results analysis comparing rules to LLM conditions
 6. **Main text Section 4.3** — Discussion of the role of LLM reasoning vs rules
+
+## Pending Tasks (post-rerun follow-ups)
+
+The rerun promotion (3 tunnels x 2 conditions x 3 models, 13 improved combos) changed Opus m+s and m+s+k per-tunnel mIoU values. Two downstream tables need refreshing.
+
+### Task 1: Re-bootstrap Opus Cohen's d and 95% CI (Table 4)
+
+**Target**: `methods/papers/r4tun_review_v4.tex`, `tab:main-results` (lines 333-368), Opus column for the m+s and m+s+k rows.
+
+**Source**: per-tunnel deltas from `methods/journals/comparison_anthropic.md` (the updated post-rerun journal; `reviews/logs/comparison_anthropic.md` referenced in the original request resolves to this file — it is the only copy in the repo).
+
+**Provisional values** (in place but unverified):
+- m+s: Cohen's d = 1.77, 95% CI = [0.135, 0.205]
+- m+s+k: Cohen's d = 1.96, 95% CI = [0.158, 0.227]
+
+**Verified values** (10,000 bootstrap resamples, seed=42, percentile method):
+- m+s: mean_delta=0.1698, std=0.0959, Cohen's d = 1.77, 95% CI = [0.137, 0.204]
+- m+s+k: mean_delta=0.1920, std=0.0982, Cohen's d = 1.95, 95% CI = [0.158, 0.227]
+- Status: DONE. All values patched in r4tun_review_v4.tex (m+s d=1.77, CI=[0.137,0.204]; m+s+k d=1.95, CI=[0.158,0.227]).
+
+**Computation**:
+1. Parse all 30 tunnel rows from `comparison_anthropic.md`
+2. Compute paired deltas: delta_i = mIoU(cond, i) - mIoU(sam4tun, i) for n=30
+3. Cohen's d = mean(delta) / std(delta, ddof=1)
+4. Bootstrap 95% CI on mean(delta): 10,000 resamples, seed=42, percentile method
+5. Compare against provisional values; confirm or replace
+
+**Files updated** (all patched):
+- `r4tun_review_v4.tex` tab:main-results — Opus m+s and m+s+k rows (d, CI, mIoU, Δ), Gemini m+s+k row (d, CI, mIoU, Δ), GPT m+s+k row (d, CI)
+- `r4tun_review_v4.tex` tab:cross-model — Opus (Δ, d, CI), GPT (d, CI), Gemini (Δ, d, CI)
+- `r4tun_review_v4.tex` tab:cumulative_miou — Opus m→m+s and m+s→m+s+k, GPT m→m+s and m+s→m+s+k, Gemini m+s→m+s+k
+- Inline narrative: abstract (0.316--0.342, 0.178--0.194), Section 4.1 (d=1.51--1.95, d=1.4--2.4, 0.178--0.194, d=2.0--2.4, 0.136--0.152), Section 4.2 (m+s+k complex 0.184; m+s d=1.33--1.77; knowledge +0.014--+0.022, d=0.13--0.43, CI/binomial updated), Discussion (+0.103--+0.176), Limitations (0.178--0.194), Conclusions (0.316--0.342)
+
+### Task 2: Regenerate per-class IoU Tables 16 and 17
+
+**Target**: `methods/papers/appendices.tex`, `tab:perclass-regular` (lines 250-265) and `tab:perclass-complex` (lines 267-283). Currently hold v5 numbers; user audit flagged a stray 0.155 near line 254.
+
+**Source**: parse `## Per-class IoU` block from each `data/ablation_anthropic/{cond}/{tid}/evaluation/performance.md` for cond in {sam4tun, memory, memory+state, memory+state+knowledge}. Rules column from `data/ablation/rules/{tid}/evaluation/performance.md` (rules values are unchanged).
+
+**Aggregation**:
+- Table 16 (Regular, n=13): 7 classes (Background, K, B1, A1, A2, A3, B2), tunnels 1-1..2-5 + 3-1-1..3-1-3
+- Table 17 (Complex, n=17): 8 classes (adds A4), tunnels 4-1..4-10 + 5-1..5-7; rules column includes 3 failed tunnels scored as zero
+- Mean per-class IoU across tunnels in each family, rounded to 3 decimal places
+
+**Files to update**:
+- `appendices.tex` lines 256-262 (Table 16 body rows) and 273-280 (Table 17 body rows)
+
+**Verified values** (computed from `data/ablation_anthropic/` and `data/ablation/rules/`):
+
+Table 16 — Regular (n=13), mean per-class IoU:
+
+| Class | sam4tun | memory | m+s   | m+s+k | rules |
+|-------|---------|--------|-------|-------|-------|
+| Bg    | 0.640   | 0.559  | 0.741 | 0.751 | 0.597 |
+| K     | 0.192   | 0.129  | 0.373 | 0.386 | 0.222 |
+| B1    | 0.261   | 0.206  | 0.527 | 0.540 | 0.250 |
+| A1    | 0.253   | 0.276  | 0.537 | 0.542 | 0.263 |
+| A2    | 0.150   | 0.159  | 0.380 | 0.420 | 0.144 |
+| A3    | 0.286   | 0.259  | 0.519 | 0.550 | 0.289 |
+| B2    | 0.256   | 0.232  | 0.534 | 0.558 | 0.236 |
+
+Table 17 — Complex (n=17), mean per-class IoU (rules: 3 failed tunnels scored 0):
+
+| Class | sam4tun | memory | m+s   | m+s+k | rules |
+|-------|---------|--------|-------|-------|-------|
+| Bg    | 0.337   | 0.358  | 0.561 | 0.581 | 0.533 |
+| K     | 0.000   | 0.034  | 0.146 | 0.142 | 0.000 |
+| B1    | 0.000   | 0.001  | 0.095 | 0.142 | 0.041 |
+| A1    | 0.000   | 0.005  | 0.139 | 0.167 | 0.072 |
+| A2    | 0.000   | 0.006  | 0.132 | 0.131 | 0.083 |
+| A3    | 0.000   | 0.017  | 0.122 | 0.150 | 0.149 |
+| B2    | 0.000   | 0.000  | 0.034 | 0.097 | 0.099 |
+| A4    | 0.000   | 0.019  | 0.128 | 0.142 | 0.116 |
+
+LaTeX rows for Table 16 (Regular):
+```
+        Bg   & 0.640 & 0.559 & 0.741 & 0.751 & 0.597 \\
+        K    & 0.192 & 0.129 & 0.373 & 0.386 & 0.222 \\
+        B1   & 0.261 & 0.206 & 0.527 & 0.540 & 0.250 \\
+        A1   & 0.253 & 0.276 & 0.537 & 0.542 & 0.263 \\
+        A2   & 0.150 & 0.159 & 0.380 & 0.420 & 0.144 \\
+        A3   & 0.286 & 0.259 & 0.519 & 0.550 & 0.289 \\
+        B2   & 0.256 & 0.232 & 0.534 & 0.558 & 0.236 \\
+```
+
+LaTeX rows for Table 17 (Complex):
+```
+        Bg   & 0.337 & 0.358 & 0.561 & 0.581 & 0.533 \\
+        K    & 0.000 & 0.034 & 0.146 & 0.142 & 0.000 \\
+        B1   & 0.000 & 0.001 & 0.095 & 0.142 & 0.041 \\
+        A1   & 0.000 & 0.005 & 0.139 & 0.167 & 0.072 \\
+        A2   & 0.000 & 0.006 & 0.132 & 0.131 & 0.083 \\
+        A3   & 0.000 & 0.017 & 0.122 & 0.150 & 0.149 \\
+        B2   & 0.000 & 0.000 & 0.034 & 0.097 & 0.099 \\
+        A4   & 0.000 & 0.019 & 0.128 & 0.142 & 0.116 \\
+```
