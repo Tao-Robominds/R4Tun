@@ -1,0 +1,682 @@
+\UseRawInputEncoding
+%% R4Tun — Automation in Construction (cas-dc double-column template)
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+\usepackage[numbers]{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+% Better line breaks for long URLs (esp. in two-column bibliographies)
+\usepackage{xurl}
+\usepackage{hyperref}
+\usepackage{placeins}
+\usepackage{caption}
+\usepackage{balance}
+\usepackage[normalem]{ulem}
+\usepackage{soul} % for \\hl
+% Allow soul highlighting to contain common cross-reference commands
+\soulregister\ref7
+\soulregister\pageref7
+\soulregister\eqref7
+% Highlight helper that also works in math mode (e.g., $+36\%$)
+\newcommand{\hlpct}[1]{\ifmmode\mbox{\hl{#1}}\else\hl{#1}\fi}
+\usepackage[most]{tcolorbox} % for section-wide highlighting
+
+\providecommand{\printorcid}{}
+\providecommand{\printfacebook}{}
+\providecommand{\printtwitter}{}
+\providecommand{\printlinkedin}{}
+\providecommand{\printgplus}{}
+\providecommand{\printinstagram}{}
+\providecommand{\printemails}{}
+\providecommand{\printurls}{}
+% \usepackage{lineno} % (disabled) line numbers
+% \linenumbers       % (disabled) line numbers
+
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+
+
+% ────────────────────────────── Front matter ──────────────────────────────
+
+{\shorttitle{R4Tun: LLM-guided adaptive tunnel segmentation}
+\shortauthors{X.\ Tao et~al.}
+
+\title[mode=title]{R4Tun: LLM-guided adaptive segmental tunnel lining segmentation in point clouds}
+
+\author[1]{Xinghui Tao}
+\credit{Conceptualization, Methodology, Software, Writing -- original draft}
+
+\author[1]{Guangming Wang}
+\cormark[1]
+\ead{gw462@cam.ac.uk}
+\credit{Supervision, Writing -- review \& editing}
+
+\author[2]{Jelena Nini\'{c}}
+\credit{Supervision, Writing -- review \& editing}
+
+\author[1]{Brian Sheil}
+\credit{Supervision, Funding acquisition, Project administration}
+
+\cortext[cor1]{Corresponding author}
+
+\affiliation[1]{organization={Construction Engineering, University of Cambridge},
+    addressline={Trumpington Street},
+    city={Cambridge},
+    postcode={CB2 1PZ},
+    country={United Kingdom}}
+
+\affiliation[2]{organization={Department of Engineering, Durham University},
+    addressline={Stockton Road},
+    city={Durham},
+    postcode={DH1 3LE},
+    country={United Kingdom}}
+
+% ─── Abstract ─────────────────────────────────────────────────────────────
+
+
+\begin{abstract}
+Automated inspection of segmental tunnel linings requires adaptive segmentation from 3D point clouds, yet expert-tuned pipelines often degrade when tunnel conditions vary. This paper presents R4Tun, a large language model (LLM)-driven adaptation framework that extends an expert-designed pipeline (SAM4Tun) with bounded parameter tuning informed by structured context: memory ($m$), state ($s$), and knowledge ($k$). Evaluated on 30 selected Seg2Tunnel subsets (13 regular, 17 complex) across three LLMs, the full $m+s+k$ design \hl{raised mean Intersection-over-Union (mIoU) from 0.15 to 0.32--0.34 and overall accuracy (OA) from 0.41 to 0.52--0.55 relative to the static SAM4Tun baseline (paired Cohen's \mbox{$d$} = 1.51--1.95, \mbox{$p<0.0001$}; corresponding relative increases of 110.7\%--128.0\% and 26.8\%--34.1\%)}. On complex tunnels, mIoU \hl{rose from 0.04 to 0.18--0.19, an absolute gain of 0.14--0.15 mIoU (a 323.1\%--361.7\% relative increase)}. Across 270 (30 tunnels $\times$ 3 different LLMs $\times$ 3 context settings) runs, the LLMs showed similar parameter-adjustment trends and consistently adjusted a shared set of critical parameters. \hl{We frame R4Tun as a mechanism contribution rather than a performance contribution: a controlled, cross-model, zero-label demonstration that structured context---intermediate pipeline state in particular---causally and reproducibly enables auditable, retraining-free adaptation of a frozen expert pipeline, with large paired effect sizes. The absolute segmentation ceiling is set by the fixed SAM4Tun substrate and its single expert reference, which we hold constant by design; we therefore report it as an explicit, separately addressable limitation rather than as a property of the adaptation mechanism.} These results suggest that LLM-guided adaptation with structured context can \st{improve transfer of a fixed segmentation pipeline across changed tunnel conditions and} reduce manual per-tunnel re-tuning \hl{during deployment}, particularly for tunnels close to the reference configuration.
+\end{abstract}
+
+
+% ─── Highlights ───────────────────────────────────────────────────────────
+
+\begin{highlights}
+\item Introduce R4Tun that tunes tunnel lining segmentation when conditions shift.
+\item Stage agents adapt expert pipeline parameters using memory (m), state (s), and knowledge (k).
+\item Across 30 tunnel subsets, \mbox{$m+s+k$} raised \hl{overall mean mIoU from 0.150 to 0.316--0.342}.
+\item Ablations show state drives most gains; knowledge helps complex tunnels.
+\item R4Tun \hl{supports controlled, cross-LLM, zero-label adaptation at test time without expert tuning.}
+\end
+{highlights}
+
+% ─── Keywords ─────────────────────────────────────────────────────────────
+
+\begin{keywords}
+Segmental tunnel lining \sep Point cloud segmentation \sep Tunnel inspection \sep Large language models \sep Parameter adaptation \sep Multi-agent systems
+\end{keywords}
+\date{\today}
+
+\maketitle
+
+\smallskip
+% ─────────────────────────────────────────────────────────────────────────
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Introduction}\label{sec:intro}
+% ══════════════════════════════════════════════════════════════════════════
+
+
+Automated inspection of segmental tunnel linings is required to support structural health assessment and long-term operational safety, given the scale, frequency, and access constraints of modern tunnel networks~\cite{attard2018,yue2024automatic,yue2024damage}. In practice, engineers routinely encounter projects in which tunnel geometry, lining properties, and data acquisition settings vary~\cite{weidner2024generalized}. Furthermore, although modern laser scanning enables high-fidelity tunnel capture, the resulting measurements often contain mixed structural elements, occlusions, and noise, making direct extraction of lining components challenging~\cite{huang2021bim,sjolander2023towards}. Consequently, segmentation methods need to be adaptive enough to handle this complexity and variability~\cite{montero2015, strauss2020sensing}. 
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figs/ai_paradigms.pdf}
+\caption{Automated segmentation approaches arranged by their adaptation mechanisms. R4Tun extends the foundation-model pipeline by adding LLM-guided \hl{bounded} parameter adaptation \hl{using structured context and encoded expert knowledge during deployment}.}
+\label{fig:paradigms}
+\end{figure*}
+
+
+
+% Tunnel point-cloud segmentation methods in this study are grouped into three broad categories
+Existing tunnel point-cloud segmentation methods are grouped into three broad categories: feature engineering, deep learning and foundation-model pipelines
+(see Fig.~\ref{fig:paradigms} and Section~\ref{sec:related}). Feature engineering rules are interpretable but lack robustness under changed conditions~\citep{weidner2024generalized}. Supervised deep-learning models generalise through data but require large labelled datasets and periodic retraining, while lacking auditability~\citep{duan2023high, cha2024deep, su2024review}. Foundation-model pipelines bypass annotation by using models pre-trained on large datasets~\citep{bommasani2021foundation, kirillov2023sam}, but remain sensitive to expert-tuned processing parameters. Existing tunnel-segmentation approaches have not yet demonstrated, in a single workflow, both robust adaptation to changed conditions and an auditable adaptation process. Among foundation-model pipelines, SAM4Tun~\citep{ye2025sam4tun} combines point-cloud preprocessing with SAM-based prompting~\citep{kirillov2023sam} and has shown strong performance under expert tuning. However, the pipeline is highly sensitive to its many processing parameters. When tunnel geometry or scanning conditions depart from the tuning reference, performance can degrade, and identifying which parameters need adjustment can require repeated expert intervention. \hl{R4Tun shifts expert input from repeated per-tunnel manual tuning to an offline preparation stage, where reference parameters, parameter bounds, and stage-specific knowledge documents are defined once and then reused by the LLM-guided adaptation.}
+
+Given that recent LLMs can follow multi-step instructions over structured inputs, parameter adaptation can be formulated as a diagnostic task in which the model receives context and proposes bounded adjustments. LLMs have been applied to engineering workflows including chemical synthesis planning~\citep{bran2024chemcrow}, multi-agent coordination for complex project tasks~\citep{qian2024chatdev, hong2024metagpt, chen2024comm}, and manufacturing decision support~\citep{garcia2024manufacturing}. However, these studies do not address parameter adaptation in infrastructure inspection pipelines. In this study, we propose R4Tun, an LLM-guided adaptation system that extends the SAM4Tun pipeline by adjusting stage parameters in response to changing tunnel conditions. The framework provides each agent with structured context $m+s+k$ (memory, state, and knowledge), from which it produces bounded parameter updates via stepwise prompting. We evaluate whether this contextual information improves segmentation adaptability across both regular and complex tunnels, and whether the resulting adaptation behaviour is consistent across LLMs. To isolate the contribution of the LLM beyond deterministic tuning, we also benchmark R4Tun against a rule-based adaptation derived from the same per-stage knowledge documents.
+
+\hl{We position R4Tun as a mechanism contribution rather than a performance contribution. The object of study is the adaptation layer---whether structured context lets an LLM re-parameterise a frozen expert pipeline under controlled, auditable, label-free conditions---and not the absolute segmentation accuracy of the underlying SAM4Tun operators, which we hold fixed throughout. Absolute accuracy is bounded by this fixed substrate and by anchoring all adaptation to a single expert reference; we treat that ceiling as a deliberately fixed experimental control and a separately addressable variable, distinct from the validity of the adaptation mechanism itself.}
+
+This paper makes the following contributions:
+\begin{enumerate}
+\item A framework design in which LLM agents adapt the parameters of the SAM4Tun pipeline using structured context $m+s+k$: memory of the reference configuration, state from intermediate pipeline outputs, and a knowledge document of tunnel category-specific configuration shared across all tunnels.
+\item Empirical evidence from cumulative ablation across 30 tunnels suggesting that intermediate pipeline state is an important contributor to adaptation, while the knowledge component adds a smaller increment concentrated on the complex category.
+\item Cross-LLM validation showing that three different LLMs (Opus-4.6, GPT-5.4, Gemini-3-Flash) follow similar adaptation patterns on a consistent subset of critical parameters.
+\item Evidence that the observed mIoU increase cannot be reproduced by a deterministic, rule-based adaptation, and is therefore consistent with an additional contribution from the LLM-based adaptation process.
+\end{enumerate}
+
+The rest of this paper is organised as follows. Section~\ref{sec:related} reviews related work. Section~\ref{sec:methods} presents methodology, including the R4Tun architecture, dataset, experimental design, and evaluation. Section~\ref{sec:results} reports results. Section~\ref{sec:discussion} discusses findings, implications, and limitations. Section~\ref{sec:conclusions} concludes.
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Related work}\label{sec:related}
+% ══════════════════════════════════════════════════════════════════════════
+\hl{This section reviews related work on tunnel point-cloud segmentation. It first contrasts feature-engineered approaches with supervised deep-learning methods, then reviews foundation-model pipelines that reduce annotation demand but remain sensitive to preprocessing and prompting choices. Finally, it discusses LLM-based reasoning as a mechanism for bounded parameter adaptation, motivating the gap addressed by R4Tun.}
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/r4tun_pipeline.pdf}
+\caption{The R4Tun multi-agent architecture for tunnel segmentation. Four stage agents (unfolding, denoising, enhancing, and segmenting) adapt their parameters through LLM reasoning to generate segmentation.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Feature engineering versus deep learning}
+
+Tunnel point-cloud segmentation has advanced through two generations of methods, which trade off between auditability and adaptability. Feature-engineering approaches encode domain knowledge into deterministic geometric rules: centreline fitting via RANSAC~\cite{fischler1981ransac}, density-based surface clustering~\cite{ester1996dbscan}, and point-sampled surface processing (e.g., simplification and resampling)~\cite{pauly2002}. Those methods remain widely used in safety-critical inspection because their logic is explicit and auditable~\cite{weidner2024generalized}. However, each rule embeds assumptions about tunnel geometry and point-cloud characteristics (diameter, ring spacing, joint pattern, point density), and changing any of these requires manual reconfiguration by a domain expert. Supervised deep-learning methods, such as PointNet++~\cite{qi2017pointnet}, RandLA-Net~\cite{hu2020randla}, Mask3D~\cite{schult2023mask3d}, and TD3D~\cite{kolodiazhnyi2024td3d}, learn features directly from annotated point clouds and can generalise across similar conditions present in the training set. \hl{Recent work has also extended tunnel and infrastructure segmentation through transformer-based point-cloud models, geometric tunnel extraction, and image-based defect segmentation}~\cite{wang2026serialformer, wang2025automated, yang2024yologsd, liang2026ecayolo}. Yet they require large labelled tunnel datasets that remain scarce~\cite{su2024review}, demand retraining for new tunnel conditions, and provide no mechanism for an engineer to trace or override a segmentation decision~\cite{cha2024deep}.
+
+Therefore, for inspection operators, deploying to a new tunnel type requires either re-engineering rules, collecting new training data, or accepting degraded performance without a systematic diagnostic mechanism.
+
+\subsection{Foundation-model pipelines}
+
+To the best of our knowledge, direct 3D point-cloud segmentation of infrastructure at tunnel scene scale remains an open challenge for current foundation models. Existing 3D foundation models target common object recognition on curated datasets and do not transfer to large, noisy tunnel point clouds~\cite{camuffo2022recent, liu2023openshape, guo2023pointbind, xu2024pointllm}. As a result, practical tunnel pipelines often project 3D data into 2D representations to use mature vision foundation models pre-trained on large-scale image datasets, thereby bypassing the annotation bottleneck~\cite{caron2021dino, franceschelli2024training}. SAM~\cite{kirillov2023sam} performs class-agnostic segmentation from spatial prompts without task-specific training, and extensions such as SAM2~\cite{ravi2024sam2} for temporal consistency and SEEM~\cite{zou2023segment} for natural-language-guided segmentation are broadening prompt-based segmentation further. These models have been adopted in infrastructure contexts including crack detection~\cite{ge2024cracksam} and Scan-to-BIM workflows~\cite{wang2024omni, pan2024zero}.
+
+For tunnel linings, SAM4Tun~\cite{ye2025sam4tun} combines geometric preprocessing (unfolding, denoising, enhancing) with foundation-model 2D segmentation, achieving strong segmentation without training data. However, this pipeline depends on numerous stage-specific parameters that encode assumptions about the reference tunnel's diameter, ring length, point density, and joint patterns. When a new tunnel departs from the reference, these parameters become misspecified and the pipeline can degrade without indicating which parameters fail or why. This sensitivity is not unique to SAM4Tun: most multi-stage pipelines that chain domain-specific preprocessing with a foundation model tend to inherit it. While foundation models have reduced reliance on labelled data, they have made the pipeline's dependence on hand-tuned parameters more explicit, without removing the need for expert parameter tuning.
+
+\subsection{LLM reasoning}
+
+Recent LLM advances have introduced explicit reasoning capabilities relevant to the parameter-adaptation problem. Reasoning-oriented training~\cite{ouyang2022training, deepseek2025analysis, chua2025deepseek, xiang2025metacot, openai2025o3, openai2025reasoningbestpractices} produces models capable of decomposing complex problems and performing prompted consistency checks. Chain-of-thought (CoT) reasoning~\cite{wei2023cot, kojima2023zeroshot} enables step-by-step logical traces. Multi-agent architectures coordinate specialised roles through shared context~\cite{hong2024metagpt, qian2024chatdev, chen2024comm, zhang2023igniting, zhang2024chain}, and context engineering influences reasoning quality through the careful design of information provided to models~\cite{xu2024retrieval, mei2025survey, anthropic2025context}.
+
+In tunnelling segmentation, however, no prior work has applied LLM-based reasoning to a challenge in expert-designed pipelines: re-tuning a parameter-sensitive system to new conditions while preserving the engineer's ability to inspect and override each decision. We therefore introduce an LLM-based reasoning framework that retunes parameter-sensitive pipelines per tunnel using expert-guided context and a logged rationale for each proposed change. Meanwhile, whether LLM reasoning produces gains beyond what hand-coded rules can deliver from the same knowledge text remains an open question. Our experimental design therefore tests this directly by including a deterministic rule-based adaptation of those documents as a non-LLM control.
+
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Methodology}\label{sec:methods}
+% ══════════════════════════════════════════════════════════════════════════
+
+\hl{This section describes the task, the fixed SAM4Tun pipeline, the R4Tun adaptation layer using structured context, and finally the experimental design used to evaluate bounded parameter adaptation, including the dataset, baselines, ablation settings, metrics, and sensitivity analysis.}
+
+\subsection{Task definition}\label{sec:problem-def}
+
+The task is semantic segmentation of segmental tunnel linings from terrestrial laser scanning (TLS) point clouds. Given a raw point cloud of a tunnel section, the goal is to assign each point a structural label: background, key block~(K), base blocks (B1,~B2), and adjacent blocks (A1--A3), with an additional A4 class for 7-segment complex tunnels. The unit of analysis is a tunnel subset spanning multiple rings selected from the Seg2Tunnel benchmark. 
+
+A key limitation is that the fixed configuration of the open-source SAM4Tun achieves a mean mIoU of 0.29 on regular tunnels, but only 0.04 on complex tunnels whose geometry departs from the tuning reference. As noted above, the pipeline provides no built-in signal indicating which parameters become misspecified.
+
+\subsection{R4Tun}\label{sec:method}
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/stage_u.pdf}
+\caption{Stage 1-Unfolding. Left: fitted tunnel cross-section used to determine the reference centre and radius for cylindrical unfolding. Centre: 2D panoramic depth map derived from the 3D point cloud. Right: zoomed region of the unfolded map showing radial-distance encoding.}
+\label{fig:stage-u}
+\end{figure*}
+
+R4Tun supplements the SAM4Tun pipeline ~\cite{ye2025sam4tun} with an LLM-guided adaptation layer that adjusts parameters per tunnel without modifying the underlying algorithms (Fig.~\ref{fig:architecture}). Given a new tunnel point cloud, a characteriser first extracts raw geometric properties (diameter, density, coordinate ranges; full field list in Appendix~\ref{app:chars}). Each of the four stages (unfolding, denoising, enhancing, and segmenting) has a dedicated LLM agent that adapts its parameters. In the segmenting stage, the adapted prompts are passed to SAM, and the resulting 2D masks are reprojected onto the 3D point cloud without further LLM intervention.
+
+
+
+
+\textbf{Stage~1-Unfolding} (Fig.~\ref{fig:stage-u}) establishes a cylindrical coordinate system for the tunnel. It slices the point cloud at regular longitudinal intervals, fits an ellipse to each cross-section via RANSAC~\cite{fischler1981ransac}, and selects the model with the highest inlier support. The per-slice ellipse centres are interpolated into a smooth centreline that defines the cylindrical frame~$(r, \theta, h)$. The 3D tunnel surface is then projected into a 2D panoramic image in which each pixel encodes the radial distance to the centreline, producing a stable depth representation for downstream filtering and segmentation.
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/stage_d.pdf}
+\caption{Stage 2-Denoising. Left: radial-distance distribution used to filter points outside the expected tunnel lining surface. Centre: unfolded 2D depth map after filtering, showing the cleaned point distribution. Right: zoomed region of the denoised map.}
+\label{fig:stage-d}
+\end{figure*}
+
+
+
+\textbf{Stage~2-Denoising} (Fig.~\ref{fig:stage-d}) removes non-structural artefacts (rails, cables, and scattered points) that would otherwise interfere with segmentation. The algorithm applies grid-based radial-density filtering inspired by the DBSCAN clustering principle~\cite{ester1996dbscan}, grouping points by local density in cylindrical coordinates. Dense, connected regions are retained as tunnel surfaces while isolated points are rejected as noise. A pair of radial masks~($R_\mathrm{low}$, $R_\mathrm{high}$) constrains filtering to the expected tunnel radius, preserving joint boundaries and ring edges while discarding outliers beyond the lining surface. The result is a clean, continuous surface representation suitable for curvature analysis and interpolation in the next stage. 
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[width=0.9\textwidth]{figs/stage_e.pdf}
+\caption{Stage 3-Enhancing. Left: curvature-guided surface and boundary interpolation along the tunnel lining, showing original sampling, curvature-guided insertion, and progressive three-stage upsampling. Centre: unfolded 2D depth map after enhancement, where inserted points improve geometric continuity; the red box highlights a local region of interest. Right: zoomed views of the highlighted region, showing added points and pixel-level interpolation.}
+\label{fig:stage-e}
+\end{figure*}
+
+\textbf{Stage~3-Enhancing} (Fig.~\ref{fig:stage-e}) improves geometric continuity and surface completeness before projection into the 2D depth map. Local curvature is estimated on neighbourhood points to guide point insertion: new points are placed between neighbours whose curvature difference is small (smooth panel regions), while high-curvature areas (joint boundaries and ring edges) are preserved intact. A three-stage progressive upsampling scheme inserts additional points at progressively finer resolutions to maintain surface continuity without blurring structural boundaries. Pixel-level interpolation then refines outlier points at joint locations. The enhanced surface is projected into a panoramic depth map that balances smooth panel regions with sharply defined joint boundaries. 
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/stage_p.pdf}
+\caption{Stage~4---Segmenting. The segmenting stage applies Hough-transform line detection~\cite{duda1972hough} to identify ring boundaries, then constructs template-based prompts and feeds them to SAM~\cite{kirillov2023sam}. SAM produces 2D segment masks that are reprojected into 3D. (Note: rotation is shown for visualisation purposes only.)}
+\label{fig:stage-p}
+\end{figure*}
+
+\textbf{Stage~4-Segmenting} (Fig.~\ref{fig:stage-p}) combines boundary detection and SAM segmentation into a single workflow. First, a Hough-transform-based detector~\cite{duda1972hough} extracts linear features from the enhanced depth map that correspond to ring joint boundaries. Detected lines are filtered by orientation (oblique, horizontal, vertical) with separate Hough thresholds and merged when closer than a distance tolerance. The confirmed boundaries are then used to construct template-based prompts for key, base, and adjacent segments, which are passed to SAM~\cite{kirillov2023sam}. SAM produces 2D segment masks on the panoramic image, which are reprojected into 3D point labels via the stored pixel-to-point mapping from Stage~1. 
+
+
+
+The pipeline contains 81 tunable processing parameters, spanning geometric defaults, filtering and interpolation settings, and boundary-detection thresholds. All parameters were expert-tuned on a reference tunnel (diameter 5.60\,m, density 2{,}466\,pts/m$^{3}$, mIoU\,=\,0.531); full parameter tables are provided in Appendix~\ref{app:params}. In this study, the underlying pipeline stages remain fixed across all conditions; only the parameter values change. The SAM4Tun baseline applies this single expert-tuned configuration uniformly to all 30 tunnels without per-tunnel adaptation, serving as the static baseline against which LLM-guided adaptation is measured.
+
+\subsection{Agent design}\label{sec:agent-design}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/agent_design.pdf}
+\caption{The left column (a) shows R4Tun stage agent architecture. Each agent maintains a shared and cumulative context that informs an LLM analyst component performing CoT reasoning. The right column (b) shows the five CoT phases: (1) Referencing, (2) Diagnostic inspection, (3) Parameter adaptation, (4) Validation, and (5) JSON output.}
+\label{fig:agent-design}
+\end{figure*}
+
+Each of the four stage agents is a self-contained unit comprising (i)~a \emph{context} (Section~\ref{sec:context-comp}; Fig.~\ref{fig:agent-design}a) and (ii)~a Python \textit{analyst} that constructs the full LLM prompt and parses the returned JSON. For each agent-driven stage, the analyst assembles a prompt from the current context level, calls one of the selected LLM APIs (Opus-4.6, GPT-5.4, or Gemini-3-Flash) to follow a five-step CoT protocol (Section~\ref{sec:cot}; Fig.~\ref{fig:agent-design}b): referencing, diagnostic inspection, parameter adaptation, validation, and JSON output. Each agent returns a single schema-conformant parameter JSON, which the corresponding pipeline stage executes unchanged. A characteriser plugin then extracts statistics from the stage output, updating the cumulative state available to subsequent stages. Each stage's parameters are adapted from the expert-tuned reference configuration together with this cumulative state; the stage scripts and evaluation code are identical across all ablation conditions, with only the parameter JSONs changing. Because every parameter change is logged alongside a generated textual rationale, engineers can review and, where necessary, override adaptation decisions. A worked example is provided in Appendix~\ref{app:cot}. After the final segmentation, per-point labels are evaluated against ground truth using mean Intersection over Union (mIoU) as the primary metric.
+
+
+
+
+\subsubsection{Context design}\label{sec:context-comp}
+
+Each stage agent receives structured context comprising three components: memory, state and knowledge (Fig.~\ref{fig:agent-design}a). A worked example of the three components for the denoising agent is given in Appendix~\ref{app:context}.
+
+\textbf{Memory} (Appendix~\ref{app:context-memory}) stores the reference tunnel's characteristics (a JSON file containing geometry, point density, coordinate ranges, nearest-neighbour distances) alongside the expert-tuned reference parameters. The agent compares the current tunnel's characteristics against this reference to quantify deviation and adjust its parameters via CoT reasoning (Section~\ref{sec:cot}). Memory is static: it does not change between stages.
+
+
+\textbf{State} (Appendix~\ref{app:context-state}) captures cumulative geometric and statistical properties after each pipeline stage executes. These JSON summaries are injected into subsequent agents' prompts, and the state grows as stages execute. Importantly, state alone does not prescribe parameter changes: the numeric summaries of the actual point distribution after upstream processing must be interpreted in the context of parameter semantics and tunnel conditions before they can inform parameter updates.
+
+
+\textbf{Knowledge} (Appendix~\ref{app:context-knowledge}) supplies domain-specific guidance in human-readable markdown documents. Each stage has its own knowledge document covering three types of guidance: (i) cross-tunnel variation, which describes common lining layouts and structural conditions; (ii) parameter notes, which define each tunable parameter, its empirically validated range, and proven defaults; and (iii) diagnostic rules, which provide constrained guidelines for recommended parameter adjustments. Knowledge is authored once and shared across all tunnels. 
+
+% tunnel-type taxonomy; parameter semantics and empirically validated ranges; and diagnostic rules linking characteristics to parameter adjustments. 
+
+
+\subsubsection{CoT design}\label{sec:cot}
+
+CoT reasoning provides the analytical structure for each agent's decision-making (Fig.~\ref{fig:agent-design}b). The agent is prompted to follow a five-step protocol (Algorithm~\ref{alg:cot_adaptation}). A worked example of the full five-step trace is provided in Appendix~\ref{app:cot}.
+
+\begin{enumerate}
+    \item \emph{Referencing:} The agent compares the current tunnel's characteristics against the stored reference to quantify deviation (e.g., $+36\%$ diameter increase).
+    \item \emph{Diagnostic inspection:} The agent attributes the deviation to a plausible cause and identifies which specific tunable parameters are implicated. If signals conflict, the agent is instructed to prioritise \emph{State} over \emph{Memory}, as State summarises geometry after upstream processing.
+    \item \emph{Parameter adaptation:} The agent proposes updates for the implicated parameters. These updates are instructed to stay within the empirical ranges defined in the \emph{Knowledge} component.
+    \item \emph{Validation:} A self-correction step performs a consistency check to confirm that the proposed values satisfy logical constraints (e.g. a radius lower bound must be smaller than the corresponding upper bound). If a constraint is violated, the value is prompted to move toward to the nearest valid bound. This check-and-correction is executed as an LLM reasoning step, rather than a deterministic software routine, and therefore does not guarantee constraint satisfaction.
+    \item \emph{JSON output:} The selected parameters and their reasoning trace are packaged into a single schema-conformant JSON object.
+\end{enumerate}
+
+% Reviewer #2: clarify how the LLM converts characteristics, reference parameters,
+% intermediate state, and knowledge into bounded updates, and how this differs from
+% deterministic rule-based adjustment.
+\hl{This protocol transduces the four inputs into a bounded value through inference rather than table lookup, which is what distinguishes it from the deterministic rule baseline (Appendix~\ref{app:rules}). Three steps require reasoning that a fixed rule table cannot reproduce. First, parameter selection: which knobs are implicated is diagnosed from the observed deviation and the most recent state, rather than enumerated in advance, so conditions the rule table never anticipated can still be addressed. Second, conflict resolution: when intermediate state contradicts the static memory (e.g., post-unfolding percentiles differ from the raw-geometry expectation), the agent reconciles them by conditioning on the live, post-stage state---a signal the rule baseline, which bins each tunnel into a discrete family from raw characteristics alone, does not observe. Third, value selection: the chosen value is interpolated from continuous post-stage statistics and then clipped to the empirical range in the knowledge document, rather than read from a per-family constant. This continuous, state-conditioned interpolation is the mechanism behind the empirical gap in Section~\ref{sec:results}: on regular tunnels the rule table cannot improve on the static baseline, whereas the state-conditioned LLM can, and adding state is the single largest ablation increment.}
+
+\noindent\textbf{Notation for Algorithm~\ref{alg:cot_adaptation}.} $C_{\text{target}}$ denotes the raw characteristics of the current tunnel, while $M$ stores the reference configuration $(C_{\text{ref}}, P_{\text{ref}})$. $S$ is the cumulative pipeline state, and $S_{\text{current}}$ is its most recent summary. $K$ is a shared knowledge document that encodes parameter semantics, per-parameter admissible bounds $B$, and cross-parameter constraints $R$. The adaptation procedure computes a geometric deviation descriptor $\Delta_{\text{geom}}$, selects an implicated parameter subset $P_{\text{implicated}}$, proposes an updated parameter map $P_{\text{proposed}}$ (indexed as $P_{\text{proposed}}[p]$), and finally returns the schema-formatted JSON object $P_{\text{adapted}}$.
+
+\begin{algorithm}[ht]
+\caption{LLM-driven Parameter Adaptation via CoT}\label{alg:cot_adaptation}
+\begin{algorithmic}[1]
+\Require Target tunnel raw characteristics $C_{\text{target}}$
+\Require Memory $M$ (reference characteristics $C_{\text{ref}}$, reference parameters $P_{\text{ref}}$)
+\Require State $S$ (cumulative pipeline outputs / intermediate summaries)
+\Require Knowledge $K$ (parameter semantics, tunable bounds $B$, and cross-parameter constraints $R$)
+\Ensure Adapted stage parameter JSON $P_{\text{adapted}}$
+\State \textbf{Phase 1: Referencing}
+\State $\Delta_{\text{geom}} \gets \text{Compare}(C_{\text{target}}, C_{\text{ref}})$ \Comment{Quantify deviation from reference}
+\State \textbf{Phase 2: Diagnostic inspection}
+\State $S_{\text{current}} \gets \text{ExtractLatest}(S)$ \Comment{Most recent stage statistics}
+\State \textit{Reconciliation:} If $S_{\text{current}}$ conflicts with $M$, prioritise $S_{\text{current}}$
+\State $P_{\text{implicated}} \gets \text{IdentifyParameters}(\Delta_{\text{geom}}, S_{\text{current}}, K)$ \Comment{Select parameters relevant to observed deviations}
+\State \textbf{Phase 3: Parameter adaptation}
+\State $P_{\text{proposed}} \gets \emptyset$
+\For{each parameter $p \in P_{\text{implicated}}$}
+    \State $P_{\text{proposed}}[p] \gets \text{Adjust}(p, \Delta_{\text{geom}}, S_{\text{current}}, K)$ \Comment{Propose new value within $B$ guided by $K$}
+\EndFor
+\State \textbf{Phase 4: Validation}
+\For{each parameter $p \in P_{\text{proposed}}$}
+    \State $P_{\text{proposed}}[p] \gets \text{SelfValidate}\big(P_{\text{proposed}}[p],\, p,\, K\big)$
+    \Comment{Execute an LLM internal reasoning step conditioned on $K$ (semantics, bounds spec $B$, constraints $R$).}
+\EndFor
+\State \textbf{Phase 5: JSON output}
+\State $P_{\text{adapted}} \gets \text{FormatAsJSON}(P_{\text{proposed}})$
+\State \Return $P_{\text{adapted}}$
+\end{algorithmic}
+\end{algorithm}
+
+
+\subsection{Experimental setup}\label{sec:exp-setup}
+
+\subsubsection{Dataset}\label{sec:dataset}
+
+We selected 30 tunnel subsets from the Seg2Tunnel benchmark (Table~\ref{tab:dataset}). These subsets cover the main variations in segmental tunnel geometry (diameter, ring length, segment count, key-block layout, and point-density distribution), providing a controlled basis for evaluating adaptation across tunnel categories.
+
+As shown in Fig.~\ref{fig:tunnel_type}, staggered and continuous tunnels are grouped as ``regular'' ($n = 13$): they share the 5.60\,m nominal diameter, 1.2\,m ring spacing, six segments per ring, and, most importantly, regular patterns of key-block positions similar to the reference. Complex tunnels ($n = 17$) depart from that reference in multiple coupled ways: nominal inner diameter increases by 34\% (5.60\,m $\rightarrow$ 7.50\,m), ring length by 50\% (1.2\,m $\rightarrow$ 1.8\,m), and each ring adds a seventh segment with an interleaved key-block arrangement that does not repeat ring-to-ring. In addition, off-axis scanning yields non-uniform sampling, partial circumferential coverage, and angle-dependent range and incidence. Together, these differences alter both the geometry visible in the point cloud and the semantic targets the pipeline must recover. Consequently, a fixed parameter set cannot be assumed to transfer from the regular reference; these conditions constitute the primary stress test for whether R4Tun can adapt the same algorithmic pipeline to off-design tunnel conditions. Ground-truth labels are per-point structural class annotations provided by the Seg2Tunnel benchmark; they are used for evaluation only and are not provided to the LLM or pipeline during adaptation.
+
+% ; estimated: 5.32\,m $\rightarrow$ 7.41\,m, $\hlpct{+39\%}$
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/dataset.pdf}
+\caption{Tunnel lining pattern categories. From left to right: regular (staggered) tunnels exhibit a repeating ring-to-ring pattern; regular (continuous) tunnels maintain a fixed segment order around each ring; complex tunnels show no consistent repeating pattern.}
+\label{fig:tunnel_type}
+\end{figure*}
+
+\begin{table*}[t]
+\caption{Dataset properties.}\label{tab:dataset}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l l l @{}}
+\toprule
+ & \multicolumn{2}{c}{Regular (T1, T2, T3)} & Complex (T4, T5) \\
+\cmidrule(lr){2-3}\cmidrule(l){4-4}
+Property & Staggered (T1, T2) & Continuous (T3) & \\
+\midrule
+Inner diameter & 5.60\,m & 5.60\,m & 7.5\,m \\
+Ring length & 1.2\,m & 1.2\,m & 1.8\,m \\
+Segments/ring & 6 & 6 & 7 \\
+Joint type & Staggered & Continuous & Complex interleaved \\
+Key-block position & \parbox[t]{0.30\textwidth}{\raggedright A ring-to-ring repeating pattern} & \parbox[t]{0.20\textwidth}{\raggedright A fixed ring-wise order} & \parbox[t]{0.20\textwidth}{\raggedright No repeating pattern} \\
+Scanning & Single-station & Multi-station & Single-station, offset \\
+Eval.\ schema & 6-class & 6-class & 7-class \\
+Count & 10 subsets & 3 subsets & 17 subsets \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\subsubsection{Experimental design}\label{sec:comparators}
+
+The experiment follows a cumulative ablation design with four conditions, each adding one context component (Table~\ref{tab:ablation}). This design isolates the cumulative contribution of each component while maintaining a controlled comparison. Level~0 (SAM4Tun) is the fixed expert-tuned baseline with no LLM involvement. Levels~1--3 progressively provide the LLM with richer context, enabling the cumulative ablation to attribute improvements to specific components. A separate \mbox{\emph{Non-LLM}} condition (level~0a in Table~\mbox{\ref{tab:ablation}}) is included as the Non-LLM adaptive control, allowing the LLMs' contribution to be read directly from the gap between the \mbox{\emph{Non-LLM}} column and the LLM columns of Table~\mbox{\ref{tab:main-results}}. We codified the per-stage knowledge documents into a deterministic Python rule table as a non-LLM baseline. It maps characterisation fields (e.g., diameter, ring length, segments-per-ring, joint type, point density, and station configuration) to the 18 critical parameters adjusted by the LLMs (Table~\ref{tab:critical-params}) using explicit ``if\,\ldots\ then\,\ldots'' rules. The table and script are fixed for all 30 tunnels (regular and complex), with no evaluation-set tuning or subset-specific settings, isolating the value of LLM per-tunnel reasoning. The complete rule specification is provided in Appendix~\ref{app:rules}.
+
+\begin{table}[ht]
+\caption{Ablation conditions.}\label{tab:ablation}
+\begin{tabular*}{\tblwidth}{@{} c l l >{\raggedright\arraybackslash}p{2.75cm} @{\hspace{0.7em}}@{}}
+\toprule
+Level & Code & Condition & What the LLM sees \\
+\midrule
+0 & SAM4Tun & Baseline & Default parameters \\
+0a & Non-LLM & Rule table & 18 parameters set by lookup \\
+1 & m & Memory & Reference characteristics + parameters \\
+2 & m+s & Memory+State & + intermediate pipeline outputs \\
+3 & m+s+k & \begin{tabular}[t]{@{}l@{}}Memory + State + \\ Knowledge\end{tabular} & + domain knowledge \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+
+To assess whether adaptation behaviour depends on a specific LLM, each condition was run with three different LLMs (Opus-4.6, GPT-5.4, and Gemini-3-Flash) under identical prompts. Across models, the pipeline code, evaluation scripts, and prompt structure were held constant, while the context content varied by ablation level. Other than setting temperature to 0 to minimise stochasticity (Table~\ref{tab:llm-config}), all other API settings used vendor defaults. Each of the three ablation conditions was run once per LLM for all 30 tunnels, yielding $3 \times 3 \times 30 = 270$ pipeline executions plus 30 baseline runs with fixed parameters. Reported results should therefore be interpreted as single-run outcomes under these settings; stochastic variability across repeated calls was not characterised. All three LLMs were accessed via their respective commercial APIs (Table~\ref{tab:llm-config}). No model-specific prompt tuning was performed.
+
+\begin{table}[ht]
+\caption{LLM configuration.}\label{tab:llm-config}
+\begin{tabular*}{\tblwidth}{@{} l l @{}}
+\toprule
+Setting & Value \\
+\midrule
+Models & Opus-4.6, GPT-5.4, Gemini-3-Flash \\
+Max tokens & 16{,}384 \\
+Temperature & 0 (override to minimise stochasticity) \\
+Timeout & 300\,s per call \\
+Prompt format & Markdown with JSON code \\
+Failure handling & JSON extraction failure \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+Pipeline execution used a single NVIDIA RTX~5060 GPU. Adapted parameter files and CoT reasoning traces were logged for all runs, enabling post-hoc sensitivity analysis (Section~\ref{sec:sensitivity-method}).
+
+\subsubsection{Evaluation metrics}\label{sec:metrics}
+
+Segmentation quality is measured primarily by mean Intersection-over-Union (mIoU). For class $c$,
+\begin{equation}
+\text{IoU}_c = \frac{\text{TP}_c}{\text{TP}_c + \text{FP}_c + \text{FN}_c}, \qquad
+\text{mIoU} = \frac{1}{C} \sum_{c=1}^{C} \text{IoU}_c,
+\end{equation}
+where $C$ is the number of segmental blocks (classes) within one ring ($C=6$ for regular tunnels; $C=7$ for complex tunnels). As a complementary global metric we also report overall accuracy (OA),
+\begin{equation}
+\text{OA} = \frac{\sum_{c=1}^{C} \text{TP}_c}{N},
+\end{equation}
+where $N$ is the total number of points. Because OA can be dominated by majority classes, we treat mIoU as the primary score. We also report per-class IoU to assess whether improvements are broad or concentrated in specific structural classes.
+
+For each condition and LLM, we computed paired per-tunnel improvements as $\Delta_i = \mathrm{mIoU}_{\text{condition},i} - \mathrm{mIoU}_{\text{baseline},i}$, with $n=13$ for regular tunnels, $n=17$ for complex tunnels, and $n=30$ overall. We summarise these paired improvements using three standard statistics: (i) two-sided paired $t$-test $p$-values ($\alpha = 0.05$) for statistical significance, (ii) paired Cohen's \mbox{$d$} for effect size, and (iii) bootstrap 95\% confidence intervals (CIs) for the mean improvement.
+
+\subsubsection{Sensitivity analysis}\label{sec:sensitivity-method}
+
+To assess the robustness of adapted parameters, for each parameter, we report the \emph{coefficient of variation}~(CV):
+\begin{equation}\label{eq:cv}
+\text{CV} = \frac{s}{\lvert\bar{v}\rvert},
+\end{equation}
+where $\bar{v} = \frac{1}{N}\sum_{i=1}^{N} v_i$ and $s = \sqrt{\frac{1}{N-1}\sum_{i=1}^{N}(v_i - \bar{v})^2}$ are the mean and standard deviation of the adapted values $\{v_i\}_{i=1}^{N}$ across $N = 30$~tunnels. CV measures how much a parameter changes from tunnel to tunnel: (i)~a high CV ($\geq 0.06$) identifies parameters that are \emph{tunnel-responsive}; (ii)~$\text{CV} \approx 0$ indicates \emph{baseline corrections} that take the same improved value on every tunnel regardless of geometry. We further examine \emph{cross-LLM consistency}: for parameters that always trigger adaptation, we compare the adapted values, tunnel counts, and tunnel categories produced by each LLM independently.
+
+
+
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Results}\label{sec:results}
+% ══════════════════════════════════════════════════════════════════════════
+
+\hl{This section presents the empirical results by first comparing overall segmentation performance with the static SAM4Tun baseline and a deterministic non-LLM control. It then examines how memory (m), state (s), and knowledge (k) contribute across LLMs, and identifies which parameters respond consistently to tunnel conditions. Finally, it reports a sensitivity analysis of the parameters.}
+
+\subsection{Overall performance}\label{sec:main-results}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.8\textwidth]{figs/ablation_point.pdf}
+\caption{Point-cloud visualisation for the tunnels with the largest mIoU gain in each category: regular (staggered; 2-2), regular (continuous; 3-3-1), and complex (5-5). Top (a): SAM4Tun baseline; bottom (b): LLM-adapted pipeline (m+s+k, Opus-4.6). Colours indicate classes; red denotes error; mIoU is shown per example.}
+\label{fig:ablation_point}
+\end{figure*}
+
+Table~\ref{tab:main-results} summarises mean mIoU across conditions and LLMs. Under the full m+s+k design, overall mIoU rises from 0.15 (baseline) to 0.32--0.34 across the three LLMs (a relative increase of 110.7\%--128.0\%; $p < 0.0001$, paired Cohen's \mbox{$d$} = 1.51--1.95); overall OA rises from 0.41 to 0.52--0.55 (a relative increase of 26.8\%--34.1\%). The improvement holds across both tunnel categories (Fig.~\ref{fig:ablation-bar}). Regular tunnels improve from 0.29 to 0.50--0.54 (a relative increase of 70.0\%--83.8\%; paired Cohen's \mbox{$d$} = 1.4--2.2); regular-tunnel OA rises from 0.51 to 0.67--0.71 (a relative increase of 31.3\%--39.2\%). Complex tunnels, where the baseline drops to mIoU\,=\,0.04 because several pipeline assumptions no longer match the tunnel conditions, improve to 0.18--0.19 (a relative increase of 323.1\%--361.7\%; paired Cohen's \mbox{$d$} = 1.2--2.5), an absolute increase of 0.14--0.15 mIoU; complex-tunnel OA rises from 0.34 to 0.41--0.43 (a relative increase of 21.6\%--28.2\%). Fig.~\ref{fig:ablation_point} shows the largest improvement observed in each category: regular (staggered), regular (continuous), and complex.
+
+Wall-clock runtime, API-call counts, and per-tunnel input/output token usage with the corresponding indicative USD cost for each LLM under m+s+k are reported in Appendix~\ref{app:practical} (Table~\ref{tab:practical}). Per-class IoU analysis (Appendix~\ref{app:perclass}) supports broad improvement across structural classes for regular tunnels and progressive recovery from near-zero baselines for complex tunnels. The full performance distribution is summarised in Appendix~\ref{app:distribution}. 
+
+
+
+\mbox{\textbf{Comparison against the non-LLM adaptation.}} The non-LLM rule-based adaptation (Table~\mbox{\ref{tab:main-results}}, \mbox{\emph{Non-LLM}} column) raises overall mIoU from 0.15 to 0.20 (a relative increase of 34.2\%; $+0.051$, $p = 0.0035$), indicating that part of the gain may reflect deterministic adaptation rather than the LLM-based step alone. The performance distribution varies markedly across tunnel categories: on regular tunnels, the non-LLM adaptation and the static baseline are statistically indistinguishable ($\approx 0.29$; $p = 0.79$), which is likely due to the rule table reproducing the configuration that SAM4Tun was originally tuned for.
+
+On complex tunnels, the rules add $+0.095$ mIoU ($p = 0.0001$), a 225.2\% increase over the complex category static baseline (0.04), by switching tunnel diameter, ring spacing, segment count, and key-block layout to their large-tunnel specification (i.e., lining-design parameters typically available to on-site engineers). Relative to this rule-based baseline, the LLM (m+s+k) yields a further increase in mean mIoU from 0.137 to 0.178--0.194 (an additional +0.041 to +0.057), improving 10 of 17 complex tunnels. The remaining seven cases occur primarily in tunnels where the deterministic large-tunnel rules already provide a strong prior.
+
+% The gap is largest on the regular category, where the non-LLM rule table \hl{remains at the SAM4Tun static baseline} ($\approx 0.29$), whereas the LLM-based adaptation raises mIoU to 0.50--0.54 (\hlpct{70.0\%--83.8\%} relative). Under this experimental setup, the additional gain is therefore consistent with an LLM contribution beyond the deterministic control. On the complex category, the rules recover roughly \hlpct{60\%} of the LLM gain (baseline: 0.04; rules: 0.137; LLM: 0.184). Both the LLM and rule-based adaptations converge toward similarly low absolute mIoU under the single-reference design.
+
+The gap is largest on the regular category, where the non-LLM rule table remains at the SAM4Tun static baseline (regular-baseline mIoU $\approx 0.29$), whereas the LLM-based adaptation raises mIoU to 0.50--0.54 (70.0\%--83.8\% relative). Under this experimental setup, the additional gain is therefore consistent with an LLM contribution beyond the deterministic control. On the complex category, both methods improve over the static baseline (complex-baseline mIoU $=0.04$): the rules reach 0.137, while the LLM further improve mIoU to 0.184. Both the LLM and rule-based adaptations converge toward similarly low absolute mIoU under the single-reference design.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figs/ablation_bar_with_nollm.pdf}
+\caption{Step-wise adaptation results split by tunnel categories. Bars left to right: \mbox{SAM4Tun} (static baseline), \mbox{\textit{Non-LLM}} (rule-based adaptation), \mbox{m}, \mbox{m+s}, \mbox{m+s+k}. The rule baseline closes part of the gap on complex tunnels but stays flat on regular tunnels; LLM (\mbox{m+s+k}) is highest in both categories. Error bars are bootstrap 95\% CIs.}
+\label{fig:ablation-bar}
+\end{figure*}
+
+\begin{table*}[t]
+\caption{Overall segmentation results ($n=30$): mean mIoU and paired $\Delta$mIoU vs. baseline with $p$-values, effect sizes, and bootstrap 95\% CIs. $\Delta$ is paired against \mbox{\texttt{SAM4Tun}}. OA is reported as a secondary metric, shown as the first line in each condition block.}\label{tab:main-results}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l c c c c @{}}
+\toprule
+Condition & Statistic & Non-LLM & Opus-4.6 & GPT-5.4 & Gemini-3-Flash \\
+\midrule
+\multirow{2}{*}{Baseline (SAM4Tun)}
+  & Mean OA & 0.411 & 0.411 & 0.411 & 0.411 \\
+  & Mean mIoU & 0.150 & 0.150 & 0.150 & 0.150 \\
+\midrule
+\multirow{6}{*}{Non-LLM}
+  & Mean OA & 0.407 & --- & --- & --- \\
+  & Mean mIoU & 0.201 & --- & --- & --- \\
+  & Mean $\Delta$mIoU & $+0.051$ & --- & --- & --- \\
+  & $p$-value & 0.0035 & --- & --- & --- \\
+  & paired Cohen's \mbox{$d$} & 0.58 & --- & --- & --- \\
+  & std~($\Delta$) & 0.088 & --- & --- & --- \\
+\midrule
+\multirow{6}{*}{m}
+  & Mean OA & --- & 0.397 & 0.428 & 0.443 \\
+  & Mean mIoU & --- & 0.144 & 0.182 & 0.199 \\
+  & Mean $\Delta$mIoU & --- & $-0.006$ & $+0.032$ & $+0.049$ \\
+  & $p$-value & --- & 0.558 & 0.028 & 0.056 \\
+  & paired Cohen's \mbox{$d$} & --- & $-0.11$ & 0.42 & 0.36 \\
+  & 95\% CI & --- & $[-0.027,\; 0.014]$ & $[0.005,\; 0.058]$ & $[0.006,\; 0.101]$ \\
+\midrule
+\multirow{6}{*}{m+s}
+  & Mean OA & --- & 0.535 & 0.520 & 0.525 \\
+  & Mean mIoU & --- & 0.320 & 0.299 & 0.302 \\
+  & Mean $\Delta$mIoU & --- & $+0.170$ & $+0.149$ & $+0.152$ \\
+  & $p$-value & --- & $<0.0001$ & $<0.0001$ & $<0.0001$ \\
+  & paired Cohen's \mbox{$d$} & --- & 1.77 & 1.32 & 1.46 \\
+  & 95\% CI & --- & $[0.137,\; 0.204]$ & $[0.110,\; 0.190]$ & $[0.117,\; 0.189]$ \\
+\midrule
+\multirow{6}{*}{m+s+k}
+  & Mean OA & --- & 0.552 & 0.537 & 0.522 \\
+  & \textbf{Mean mIoU} & --- & \textbf{0.342} & \textbf{0.321} & \textbf{0.316} \\
+  & Mean $\Delta$mIoU & --- & $+0.192$ & $+0.171$ & $+0.166$ \\
+  & $p$-value & --- & $<0.0001$ & $<0.0001$ & $<0.0001$ \\
+  & paired Cohen's \mbox{$d$} & --- & 1.95 & 1.95 & 1.51 \\
+  & 95\% CI & --- & $[0.158,\; 0.227]$ & $[0.140,\; 0.203]$ & $[0.126,\; 0.204]$ \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+
+
+\subsection{Ablation analysis}\label{sec:ablation}
+
+To isolate each context component's contribution, Table~\ref{tab:cumulative_miou} reports cumulative mIoU gains at each ablation step. Fig.~\ref{fig:ablation-bar} visualises the step-wise progression for regular and complex categories across all three LLMs.
+
+\begin{table}[ht]
+\caption{Cumulative mIoU contribution (mean $\Delta$ vs. previous level).}\label{tab:cumulative_miou}
+\begin{tabular*}{\tblwidth}{@{} l c c c @{}}
+\toprule
+Transition & Opus-4.6 & GPT-5.4 & Gemini-3-Flash \\
+\midrule
+Baseline $\rightarrow$ \mbox{\textit{Non-LLM}} & $+0.051$ & $+0.051$ & $+0.051$ \\
+Baseline $\rightarrow$ m & $-0.006$ & $+0.032$ & $+0.049$ \\
+\textbf{m $\rightarrow$ m+s} & $\mathbf{+0.176}$ & $\mathbf{+0.117}$ & $\mathbf{+0.103}$ \\
+m+s $\rightarrow$ m+s+k & $+0.022$ & $+0.021$ & $+0.014$ \\
+\bottomrule
+\end{tabular*}
+\end{table}
+\textbf{Memory} alone provides an initial reference but is insufficient, and in some settings it degrades performance. On regular tunnels, especially the staggered subsets, memory alone changes mIoU by $-0.031$ to $+0.053$ across the three LLMs; Table~\ref{tab:cumulative_miou}; two of the three LLMs show small positive averages, while one shows a small negative average). Without intermediate feedback, the agent can propose parameter updates but cannot verify whether they improve or degrade the pipeline outputs.
+
+\textbf{State} accounts for the largest observed increment in the ablation study. The m+s condition yields the strongest gain relative to baseline across all three LLMs (all $p < 0.0001$; paired Cohen's \mbox{$d$} = 1.32--1.77), while the memory-only effect is small or inconsistent, indicating that state is the main contributor to the observed improvement. State provides the agent with explicit quantitative evidence of how each stage has transformed the data: radial percentiles for mask bounds, retention rates for denoising aggressiveness, coverage uniformity for upsampling targets. Without state, the agent has only pre-pipeline statistics that may not reflect conditions after unfolding, denoising, or enhancing. The same conclusion holds when the comparator is the Non-LLM baseline rather than the static SAM4Tun: state alone (m+s) lifts overall mIoU by 0.10--0.12 above the rule-based adaptation (a relative increase of 50\%--60\% over the mIoU of 0.20 of the rule-based method).
+
+
+One plausible explanation is that the gain associated with state depends on how the model maps raw numeric summaries (percentiles, counts, ratios) to parameter values in light of parameter semantics. We did not test alternative mapping strategies (e.g., regression models); however, the continuous, multidimensional nature of the characteristic space and the non-trivial parameter interactions suggest that capturing this mapping through static rules alone would require considerable manual engineering effort per tunnel category.
+
+\textbf{Knowledge} provides a small additional gain, concentrated in the complex category. On top of m+s, knowledge raises mean mIoU by $+0.014$ to $+0.022$ across the three LLMs. The mean increments are small, but the per-tunnel direction is nevertheless positive. The increment is concentrated where the knowledge document supplies specific tuning guidance that neither memory nor state can reliably infer from numerical summaries alone (e.g.,  a larger-diameter tunnel often uses wider rings).
+
+% (e.g., the coupling between ring diameter and spacing, where \texttt{ring\_spacing\_constant} should increase with diameter).
+
+\subsection{Cross-model consistency}\label{sec:consistency}
+
+To assess whether the adaptation behaviour is model-dependent under a fixed prompt and input structure, Table~\ref{tab:cross-model} compares the three LLMs on the full m+s+k condition. The three models show similar effect ranges under the full m+s+k condition, although overlapping 95\% confidence intervals do not by themselves rule out between-model differences.
+
+\begin{table}[ht]
+\caption{Cross-model summary (m+s+k vs baseline, overall).}\label{tab:cross-model}
+\begin{tabular*}{\tblwidth}{@{} l c c c @{}}
+\toprule
+LLM & Mean $\Delta$mIoU & 95\% CI & \mbox{$d$} \\
+\midrule
+Opus-4.6 & $+0.192$ & $[0.158,\; 0.227]$ & 1.95 \\
+GPT-5.4 & $+0.171$ & $[0.140,\; 0.203]$ & 1.95 \\
+Gemini-3-Flash & $+0.166$ & $[0.126,\; 0.204]$ & 1.51 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Parameter sensitivity}\label{sec:sensitivity}
+
+This analysis separates parameters that vary across tunnels from those that remain constant, clarifying which aspects of the adaptation respond to specific tunnel conditions.
+
+Analysis of 270 adapted parameter runs identified 18 parameters that all three LLMs consistently adjust (Table~\ref{tab:critical-params}). Of these, 11 are tunnel-responsive ($\text{CV} \geq 0.06$), in that their adapted values vary with tunnel geometry, clustering by tunnel category. The remaining 7 parameters behave as baseline corrections ($\text{CV} \approx 0$), with near-identical values across tunnels, indicating a shared correction trend relative to the SAM4Tun defaults.
+
+\begin{table*}[t]
+\caption{Critical parameters identified across all three LLMs (18 total). \emph{Tunnel-responsive} parameters ($\text{CV} \geq 0.06$) vary with tunnel geometry; \emph{baseline corrections} ($\text{CV} \approx 0$) take near-identical values across tunnels.}\label{tab:critical-params}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l l c c l @{}}
+\toprule
+Stage & Parameter & Behaviour & Tunnels & CV & Adapted range / correction \\
+\midrule
+Unfolding & \texttt{diameter} & Responsive & 27/30 & 0.072 & [5.31, 7.6] \\
+\midrule
+Denoising & \texttt{mask\_r\_low} & Responsive & 30/30 & 0.082 & [2.09, 3.75] \\
+Denoising & \texttt{mask\_r\_high} & Responsive & 30/30 & 0.147 & [2.78, 4.38] \\
+Denoising & \texttt{default\_cutoff\_z} & Responsive & 29/30 & 0.142 & [2.65, 6.27] \\
+Denoising & \texttt{z\_step} & Responsive & 30/30 & 0.181 & [0.003, 0.005] \\
+Denoising & \texttt{smooth\_win} & Correction & 30/30 & $\approx$0 & 3 $\rightarrow$ 5 \\
+Denoising & \texttt{smooth\_offset} & Correction & 30/30 & $\approx$0 & $-$0.003 $\rightarrow$ $-$0.002 \\
+Denoising & \texttt{grad\_thresh} & Correction & 30/30 & $\approx$0 & 0.2 $\rightarrow$ 0.15 \\
+Denoising & \texttt{y\_step} & Correction & 30/30 & $\approx$0 & 0.5 $\rightarrow$ 0.4 \\
+\midrule
+Enhancing & \texttt{inter\_radius} & Responsive & 30/30 & 0.130 & [0.03, 0.08] \\
+Enhancing & \texttt{upsampling\_stage1} & Responsive & 30/30 & 0.064 & [0.055, 0.11] \\
+Enhancing & \texttt{curv\_thresh} & Correction & 30/30 & $\approx$0 & 0.0005 $\rightarrow$ 0.005 \\
+Enhancing & \texttt{depth\_low} & Correction & 30/30 & $\approx$0 & 0.003 $\rightarrow$ 0.005 \\
+Enhancing & \texttt{depth\_high} & Correction & 30/30 & $\approx$0 & 0.008 $\rightarrow$ 0.015 \\
+\midrule
+Segmenting & \texttt{hough\_thresh\_obliq} & Responsive & 30/30 & 0.188 & [20, 83] \\
+Segmenting & \texttt{hough\_thresh\_horiz} & Responsive & 30/30 & 0.204 & [20, 83] \\
+Segmenting & \texttt{hough\_thresh\_vert} & Responsive & 28/30 & 0.219 & [320, 980] \\
+Segmenting & \texttt{processing.padding} & Responsive & 29/30 & 0.265 & [160, 419] \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Discussion}\label{sec:discussion}
+% ══════════════════════════════════════════════════════════════════════════
+
+\hl{This section interprets the results in term of R4Tun's intended role: LLM-guided, bounded adaptation of an existing expert-designed pipeline, rather than a general-purpose tunnel segmentation method. It discusses what the results reveal about the m+s+k design, how the single-reference setup limits performance, and the implications for practical deployment and future development.}
+
+\subsection{Key findings}
+
+\hl{Taken together, the results support a mechanism-level claim rather than a deployment-level one. With the pipeline and the expert reference held fixed, structured context---state in particular---causally and reproducibly enables auditable adaptation across three different LLMs at negligible cost and with no labels or retraining (all \mbox{$p < 0.0001$}; paired Cohen's \mbox{$d$} = 1.51--1.95 at m+s+k). The low absolute mIoU is a property of the single-reference substrate we deliberately fixed, not evidence against the adaptation mechanism: it is the named, quantified variable that follow-on work (e.g., multiple expert references, proxy-metric-driven self-refinement) can raise without revisiting the adaptation primitive validated here.}
+
+The experimental evaluation yields two primary findings. First, as noted in the ablation study (Section~\ref{sec:ablation}), the ablation results suggest that the context design improves adaptation across models and tunnel categories, with state providing the main gains ($+0.103$ to $+0.176$ mIoU on top of memory). Second, the LLM (m+s+k) gain over the non-LLM rule-based adaptation is concentrated on the regular category, where the rule table cannot improve over the static baseline (Section~\ref{sec:main-results}). This concentration is consistent with the single-reference design: both comparators start from a configuration tuned on a tunnel that is similar to the regular category. Near the reference, the LLM has more informative context to condition on, and its advantage over deterministic lookup becomes visible; far from the reference (the complex category), neither approach has a matching anchor and the two converge toward similarly low absolute performance, with the LLMs retaining a small mean advantage. As reported in Section~\ref{sec:main-results}, the regular category gap occurs where the deterministic control does not improve over the static baseline, whereas the complex category convergence more likely reflects a shared ceiling than a specific failure of LLM reasoning (Section~\ref{sec:limitations}).
+
+
+In practice, a domain expert calibrates the pipeline on a single reference tunnel, encodes the tuning rationale into structured documents, and deploys R4Tun for subsequent tunnels. Under this single-reference setup, the framework is best suited to targets that remain close to the calibrated reference, and it can also flag when the fixed pipeline begins to fail. The framework supports post-hoc review by logging a rationale alongside each parameter change, and requires no model retraining or labelled domain data.
+
+
+\subsection{Limitations}\label{sec:limitations}
+
+R4Tun was evaluated exclusively on the SAM4Tun pipeline and the Seg2Tunnel dataset; as a result, its transferability to other point-cloud processing pipelines and datasets requires further testing. All parameter adaptation is anchored to a single expert-tuned configuration, which creates a low ceiling for both the LLM-guided and the rule-based methods. When no contextual anchor resembles the target tunnel, neither approach has sufficient information to recover strong performance. Expanding R4Tun to encode multiple expert-tuned reference configurations (e.g., one per tunnel category), may further narrow the absolute gap. \hl{R4Tun also inherits the assumptions and failure modes of the underlying SAM4Tun operators: when a processing stage fails structurally (e.g., due to severe occlusion, atypical geometry, or acquisition artefacts), LLM reasoning can only re-parameterise that stage rather than replace it.} \hl{In addition, adaptation quality depends on the completeness and correctness of the offline-authored parameter bounds and knowledge documents; overly conservative bounds or missing cases constrain performance, while overly permissive bounds can increase sensitivity.} The auditability of the generated reasoning traces has not been validated through a formal user study with practising engineers. Finally, parameters are adapted in a single forward pass without iterative self-correction, leaving potential gains from closed-loop refinement unexplored.
+
+% Reviewer #2 (minor): explicitly acknowledge that R4Tun does not eliminate the
+% need for expert knowledge; expert input is still required to author the reference
+% parameters, parameter bounds, and stage-specific knowledge documents.
+\hl{R4Tun does not eliminate the need for expert knowledge; it relocates it. Expert input remains essential to author the reference configuration, the per-parameter admissible bounds, and the stage-specific knowledge documents, and the quality of these offline artefacts upper-bounds adaptation quality. Rather than removing the expert, the framework shifts their effort from repeated per-tunnel manual re-tuning during deployment to a one-time, reusable authoring step performed before deployment.}
+
+% Reviewer #2 (minor): comment on how the memory-state-knowledge context-design
+% strategy is expected to generalise to other point-cloud pipelines when the
+% downstream segmentation backbone changes.
+\hl{Although evaluated only on SAM4Tun, the memory--state--knowledge context-design strategy is deliberately backbone-agnostic, as it conditions on the pipeline's own inputs and intermediate outputs rather than on any property specific to SAM-based segmentation. Memory (reference-versus-target characteristics), state (per-stage summaries of the actual data after each operator), and knowledge (per-parameter semantics, bounds, and constraints) are defined for any multi-stage pipeline whose stages expose tunable parameters and measurable intermediate outputs; the segmentation backbone enters only at the final stage. We therefore expect the strategy to transfer when the backbone changes, provided three conditions hold: the substitute pipeline exposes adaptable parameters, its stages emit characterisable intermediate state, and an expert can author the corresponding reference and knowledge documents. Confirming this on a non-SAM backbone remains future work.}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Conclusions}\label{sec:conclusions}
+% ══════════════════════════════════════════════════════════════════════════
+
+Reliable segmentation of segmental tunnel linings from point clouds remains challenging when tunnel conditions diverge from the expert-tuned reference. This paper presented R4Tun, a multi-agent framework that extends a fixed segmentation pipeline with LLM-guided parameter adaptation. Rather than replacing the underlying geometric operators, R4Tun adapts their parameters by comparing each new tunnel with the reference configuration and by using compact summaries of intermediate pipeline outputs. This design preserves the deterministic structure of the original pipeline while supporting post-hoc review and revision of parameter changes. \hl{The contribution is a validated adaptation mechanism rather than a finished segmentation product: it establishes, under controlled and auditable conditions, that structured context enables label-free, retraining-free re-parameterisation of a frozen pipeline across three LLMs. The absolute accuracy ceiling is a disclosed, separately addressable property of the single-reference substrate, and improving it is the subject of the future work below rather than a precondition for the mechanism demonstrated here.}
+
+Evaluated on 30 subsets spanning 13 regular and 17 complex tunnels with three different LLMs, the full \mbox{$m+s+k$}  design raised mean mIoU from 0.15 to 0.32--0.34 (a relative increase of 110.7\%--128.0\%) and OA from 0.41 to 0.52--0.55 (a relative increase of 26.8\%--34.1\%), with per-class IoU improving broadly across structural classes. Regular tunnels improve markedly, with mIoU increasing from 0.29 to 0.50--0.54 (a relative increase of +70.0\%--83.8\%) and OA increasing from 0.51 to 0.67--0.71 (a relative increase of +31.3\%--39.2\%). Complex tunnels recover from near-zero baselines, with mIoU increasing from 0.04 to 0.18--0.19 (a relative increase of +323.1\%--361.7\%), and OA from 0.34 to 0.41--0.43 (a relative increase of +21.6\%--28.2\%). The ablation study suggested that state is an important contributor to the improvement: adding state increases overall mIoU by 0.149--0.170 from the static baseline 0.150.
+
+In the regular category, the non-LLM rule-based adaptation matches the static baseline (mIoU $\approx 0.29$), whereas the LLM raises mIoU to 0.50--0.54. This result is therefore consistent with an additional LLM-related contribution. In the complex category, both the LLM and rule-based adaptations converge to low absolute mIoU, which we attribute to the single-reference design rather than to LLM reasoning quality.
+
+For construction practice, R4Tun may shift expert effort from repeated per-tunnel intervention toward an upfront authoring step (reference calibration plus per-stage knowledge documents). It logs a rationale alongside each parameter change to support review, and it can be executed via commercial LLM APIs under the tested settings without retraining on labelled domain data.
+
+\hl{Key limitations are inherent to the proposed approach. R4Tun is evaluated only on SAM4Tun and Seg2Tunnel, and its adaptation is anchored to a single expert-tuned reference configuration, which limits achievable performance when the target tunnel is far from that anchor. In addition, R4Tun inherits the assumptions of the underlying deterministic operators (so structural stage failures cannot be resolved by re-parameterisation alone), depends on the completeness of offline-authored bounds and knowledge documents, has not yet been validated via a formal auditability user study with practising engineers, and currently adapts parameters in a single forward pass without iterative self-correction.}
+
+Several directions for future work follow from these limitations. First, encoding multiple expert-designed reference configurations could improve adaptation to atypical tunnels. Second, adding an iterative self-evaluation step based on multiple intrinsic criteria, jointly considering coverage, class balance, and geometric continuity, may capture aspects missed by a single coverage metric. Third, validation on broader tunnel typologies and acquisition conditions would strengthen generalisability claims.
+
+% ══════════════════════════════════════════════════════════════════════════
+% Data availability, declarations, etc.
+% ══════════════════════════════════════════════════════════════════════════
+
+\section*{Data availability}
+
+The source code, adapted parameters, and evaluation scripts are available at \url{https://github.com/Tao-Robominds/R4Tun}. The Seg2Tunnel dataset is publicly available.
+
+\section*{Declaration of competing interest}
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Declaration of generative AI use}
+
+During this study, the authors evaluated large language models (Opus-4.6, GPT-5.4, and Gemini-3-Flash) as the main experimental systems. The LLMs were also used for language editing and for improving manuscript structure. The authors reviewed and edited all content and take full responsibility for the content of the publication.
+
+%\printcredits  % Uncomment if cas-dc supports it in your version
+
+% ══════════════════════════════════════════════════════════════════════════
+% Bibliography
+% ══════════════════════════════════════════════════════════════════════════
+
+% \clearpage % start Biography on a new page
+% \section*{Biography}
+% TODO: add biography text here
+
+% Natbib requires a BibTeX style; without it, citations stay as “?”
+% NOTE: \balance can cause column-balancing artefacts in the reference list (e.g.,
+% lines slipping into the footer area) with this class. Keep it off for the bibliography.
+%\balance
+\bibliographystyle{model1-num-names}
+\bibliography{references}
+
+% ══════════════════════════════════════════════════════════════════════════
+% Appendices (included after the references)
+% ══════════════════════════════════════════════════════════════════════════
+
+\clearpage
+\section*{Appendices}
+
+\input{appendices}
+
+\end{document}
