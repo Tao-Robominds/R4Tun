@@ -1,0 +1,64 @@
+% =====================================================================
+% Response to Q3 (comparison with SOTA baselines) — paste-ready LaTeX.
+% NOT applied to main.tex; copy in yourself.
+%
+% Recommended placement: a new subsection in the Discussion, immediately
+% after "Key findings" (Section 6.1) and before "Limitations" (Section 6.2):
+%     \subsection{Positioning relative to supervised and expert-tuned methods}
+%         \label{sec:positioning}
+% Rationale: Q3 is about how to interpret absolute accuracy against the cost
+% of competing paradigms, which is an argument (not a new experiment on our
+% pipeline), so it belongs in the Discussion. Reference Table~\ref{tab:sota}
+% from Section 6.1 and from the Introduction's positioning paragraph.
+% A secondary option is to place the table at the end of Results (Section 5)
+% if the editor prefers all quantitative tables together.
+%
+% Citation keys used (all confirmed present in references.bib):
+%   qi2017pointnet, hu2020randla, kolodiazhnyi2024td3d, schult2023mask3d,
+%   ye2025sam4tun, lin2024seg2tunnel, fischler1981ransac, weidner2024generalized
+% =====================================================================
+
+\subsection{Positioning relative to supervised and expert-tuned methods}\label{sec:positioning}
+
+\hl{A reasonable question is how R4Tun's absolute accuracy compares with established tunnel-segmentation methods. We address this directly rather than defensively. On the same Seg2Tunnel benchmark, supervised 3D deep learning reaches much higher absolute accuracy: PointNet++ attains a per-segment mIoU of about 0.90 and RandLA-Net about 0.83, with voxel- and image-based networks reported at 0.93 and 0.74 respectively}~\hlcite{lin2024seg2tunnel}. \hl{The expert-tuned, zero-shot SAM4Tun pipeline likewise reports an mIoU above 0.90 on its curated test rings}~\hlcite{ye2025sam4tun}. \hl{R4Tun's mIoU of 0.32--0.34 is well below these figures, and we do not claim to compete with them on absolute segmentation accuracy.}
+
+\hl{The comparison is, however, not on equal terms, because each high-accuracy method pays a different setup cost that R4Tun is explicitly designed to remove (Table~\ref{tab:sota}). Supervised networks require full per-point annotation (about 15 minutes of manual labelling per ring) and GPU retraining for new tunnel conditions}~\hlcite{lin2024seg2tunnel}; \hl{geometric feature-engineering methods avoid training but depend on manually tuned thresholds and often on original design documents, and they typically report cross-section fitting error (root-mean-square error on the order of 1\,mm) rather than per-segment mIoU, so they are not directly comparable at the component level}~\hlcite{fischler1981ransac,weidner2024generalized}; \hl{and SAM4Tun reaches its high accuracy only with per-case expert tuning of its prompts and parameters. When the same open-source SAM4Tun is applied with a single fixed expert reference across our 30 diverse subsets, without re-tuning, its mIoU falls to 0.15. R4Tun studies exactly this gap: with no labels, no retraining, and no expert re-tuning, an LLM recovers part of it (0.15 $\rightarrow$ 0.32--0.34) in a single forward pass, and does so consistently across three different LLMs.}
+
+\hl{Read this way, R4Tun occupies a distinct point in the design space rather than a lower point on the same axis: it is the only entry in Table~\ref{tab:sota} that is simultaneously label-free, training-free, and expert-tuning-free while still adapting per tunnel. This study is therefore an initial exploration of the self-adaptation capability of reasoning models, and a methodological foundation for introducing explicit, auditable LLM reasoning into expert-designed pipelines, not a ready-to-deploy replacement for supervised or expert-tuned segmentation. Consistent with this scope, the absolute accuracy reported here does not yet support autonomous final inspection.}
+
+\begin{table*}[t]
+\caption{\hl{Positioning R4Tun against representative tunnel-segmentation paradigms. mIoU values are per-segment on Seg2Tunnel where available; supervised and voxel/image figures are from}~\hlcite{lin2024seg2tunnel}, \hl{and SAM4Tun figures from}~\hlcite{ye2025sam4tun}. \hl{``n/r'': per-segment mIoU not reported (geometric methods report cross-section fitting error instead). The comparison is on setup cost as well as accuracy: R4Tun is the only approach that is simultaneously label-free, training-free, and expert-tuning-free while still adapting per tunnel.}}\label{tab:sota}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c c l @{}}
+\toprule
+Method & Labels & Training & Expert tuning & Per-tunnel adaptation & mIoU & Cost / notes \\
+\midrule
+PointNet++ (supervised)~\cite{qi2017pointnet,lin2024seg2tunnel}
+ & Yes (per-point) & Yes & Hyperparameters & Retrain & 0.90 & $\sim$15\,min/ring labels; GPU training \\
+RandLA-Net (supervised)~\cite{hu2020randla,lin2024seg2tunnel}
+ & Yes (per-point) & Yes & Hyperparameters & Retrain & 0.83 & scene-level; $\sim$6.5\,h training \\
+Voxel-based DL (supervised)~\cite{lin2024seg2tunnel}
+ & Yes (per-point) & Yes & Hyperparameters & Retrain & 0.93 & full annotation; GPU training \\
+\midrule
+Geometric feature engineering~\cite{fischler1981ransac,weidner2024generalized}
+ & No & No & Heavy (thresholds, design docs) & Manual & n/r & cross-section RMSE $\sim$1\,mm; not per-segment \\
+SAM4Tun, expert-tuned~\cite{ye2025sam4tun}
+ & No & No & Yes (per case) & Manual & $>$0.90 & zero-shot; $\sim$8.5\,min/station \\
+\midrule
+SAM4Tun, single fixed config (this study)~\cite{ye2025sam4tun}
+ & No & No & One reference only & None & 0.15 & static baseline; $\sim$235\,s/tunnel \\
+\textbf{R4Tun (m+s+k, this study)}
+ & \textbf{No} & \textbf{No} & \textbf{No} & \textbf{Automatic (bounded, cross-LLM)} & \textbf{0.32--0.34} & single pass; $+96$--$307$\,s LLM \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+% --- Optional one-line pointers to add elsewhere (non-defensive framing) ---
+% In the Introduction positioning paragraph (after the "bounded by the fixed
+% SAM4Tun open-source implementation" sentence), you may add:
+%   \hl{We do not aim to surpass supervised or expert-tuned baselines on absolute
+%   accuracy; Section~\ref{sec:positioning} positions R4Tun on setup cost
+%   (label-free, training-free, expert-tuning-free) rather than on the benchmark.}
+%
+% In the Abstract / Conclusion, the existing sentence
+%   "Deployment readiness and SOTA absolute accuracy remain future work."
+% already states this; Table~\ref{tab:sota} provides the supporting evidence.
