@@ -10,6 +10,7 @@ from tqdm.notebook import tqdm
 from scipy.ndimage import uniform_filter1d
 from numba import njit, prange
 import os
+import pickle
 import sys
 
 # Check if tunnel_id is provided
@@ -21,7 +22,11 @@ if len(sys.argv) != 2:
 tunnel_id = sys.argv[1]
 base_dir = f"data/{tunnel_id}/"
 unwrapped_file = os.path.join(base_dir, "unwrapped.csv")
-df_point_cloud = pd.read_csv(unwrapped_file)
+unwrapped_pkl = os.path.join(base_dir, "unwrapped.pkl")
+if os.path.exists(unwrapped_pkl):
+    df_point_cloud = pickle.load(open(unwrapped_pkl, 'rb'))
+else:
+    df_point_cloud = pd.read_csv(unwrapped_file)
 ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
 print(f"Processing tunnel: {tunnel_id}")
@@ -148,3 +153,4 @@ for x_min in x_bins[:-1]:
 denoised_file = os.path.join(base_dir, "denoised.csv")
 os.makedirs(base_dir, exist_ok=True)
 df_point_cloud.to_csv(denoised_file, index=False)
+pickle.dump(df_point_cloud, open(os.path.join(base_dir, "denoised.pkl"), 'wb'))

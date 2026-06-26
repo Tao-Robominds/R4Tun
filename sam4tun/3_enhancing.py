@@ -23,7 +23,11 @@ if len(sys.argv) != 2:
 tunnel_id = sys.argv[1]
 base_dir = f"data/{tunnel_id}/"
 denoised_file = os.path.join(base_dir, "denoised.csv")
-df_point_cloud = pd.read_csv(denoised_file)
+denoised_pkl = os.path.join(base_dir, "denoised.pkl")
+if os.path.exists(denoised_pkl):
+    df_point_cloud = pickle.load(open(denoised_pkl, 'rb'))
+else:
+    df_point_cloud = pd.read_csv(denoised_file)
 
 print(f"Processing tunnel: {tunnel_id}")
 
@@ -277,15 +281,34 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
     # Extract a DataFrame of meaningful points
     meaningful_df = df.iloc[meaningful_indices]
 
-    # Define the interpolation function
+    # Define the interpolation function (two-pass: count then fill, same logic as notebook)
+    @njit(parallel=False)
+    def count_interpolated_points(filtered_indices, points, inter_radius, num_interpolations, resolution):
+        num_indices = len(filtered_indices)
+        count = 0
+        for i in range(num_indices):
+            index1 = filtered_indices[i]
+            point1 = points[index1]
+            x1, y1, z1, i1 = point1
+            for j in range(i + 1, num_indices):
+                index2 = filtered_indices[j]
+                point2 = points[index2]
+                x2, y2, z2, i2 = point2
+                dist = np.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+                if resolution < dist < inter_radius:
+                    count += num_interpolations
+        return count
+
     @njit(parallel=False)
     def interpolate_points(filtered_indices, points, inter_radius, num_interpolations, duplicate_threshold, resolution):
         num_indices = len(filtered_indices)
-        max_new_points = num_indices * num_indices * num_interpolations
+        max_new_points = count_interpolated_points(
+            filtered_indices, points, inter_radius, num_interpolations, resolution
+        )
         new_points = np.zeros((max_new_points, 4))
         count = 0
     
-        for i in prange(num_indices):
+        for i in range(num_indices):
             index1 = filtered_indices[i]
             point1 = points[index1]
             x1, y1, z1, i1 = point1
@@ -329,16 +352,8 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
             filtered_high_density_indices.append(idx)
     
     filtered_indices = np.array(filtered_high_density_indices, dtype=np.int64)
-    
-    # Limit the number of indices to process to avoid memory issues
-    MAX_INDICES = 5000  # Process at most 5000 outlier points at once
-    if len(filtered_indices) > MAX_INDICES:
-        print(f"Warning: {len(filtered_indices)} outlier points found, limiting to {MAX_INDICES} to avoid memory issues")
-        # Randomly sample to get a representative subset
-        np.random.seed(42)
-        filtered_indices = np.random.choice(filtered_indices, size=MAX_INDICES, replace=False)
-    
-    print(f"Generating interpolated points for {len(filtered_indices)} outlier points...")
+
+    print("Generating interpolated points ...")
     
     new_points_array = interpolate_points(filtered_indices, points, inter_radius, num_interpolations, duplicate_threshold, resolution)
     
@@ -356,7 +371,7 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
 
 # Cell 10
 # =================n_segment need to change!!!!===============
-# The sample data is a half of one station, so n_segment should change when using entire station point cloud. 
+# The sample data is a half of one station, so n_segment should change when using entire station point cloud.
 meaningful_df, new_df = enhance_outlier_points(df_support_filtered_curva, n_segment=[0,5])
 
 df_enhance_joint = pd.concat([meaningful_df, new_df], ignore_index=False)

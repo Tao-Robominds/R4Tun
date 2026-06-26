@@ -43,14 +43,19 @@ def fill_polygon(mask, vertices):
     mask_inside = path.contains_points(points).reshape(mask.shape)
     mask[mask_inside] = 1
 
-def generate_template_mask(height, width, prompt_centre, block, resolution=0.005):
+def generate_template_mask(height, width, prompt_centre, block, resolution=0.005, K_height=1079.92):
     mask = np.zeros((height, width), dtype=np.uint8)
     prompt_centre_x, prompt_centre_y = prompt_centre
     x = prompt_centre_x * (resolution*1000)
     y = prompt_centre_y * (resolution*1000)
     
     if block == 'K':
-        vertices_real = np.array([[x-625,y-619.16],[x-625,y+619.16],[x+625,y+460.77],[x+625,y-460.77]])
+        # Tighter K parallelogram: scale template to nominal K_height (was ~1238 mm tall).
+        ky = K_height / (2 * 619.16)
+        vertices_real = np.array([
+            [x-625, y-619.16*ky], [x-625, y+619.16*ky],
+            [x+625, y+460.77*ky], [x+625, y-460.77*ky],
+        ])
     elif block == 'B1':
         vertices_real = np.array([[x-625,y-1619.89],[x-625,y+1540.69],[x+625,y+1699.08],[x+625,y-1619.89]])
     elif block == 'B2':
@@ -137,7 +142,7 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.
             [x-511.06,y-1452.43],[x-350,y-1473.69],[x,y-1519.89],[x+350,y-1566.08],[x+511.06,y-1587.34],     
             [x-511.06,y-1298.93],[x,y-1345.01],[x+511.06,y-1390.84],
             [x-500,y-1090.09],[x,y-1090.09],[x+500,y-1090.09],
-            [x-500,y-817.57],[x-250,y-817.57],[x,y-817.57],[x+250,y-817.57],[x+500,y+817.57],
+            [x-500,y-817.57],[x-250,y-817.57],[x,y-817.57],[x+250,y-817.57],[x+500,y-817.57],
             [x-500,y-545.05],[x-250,y-545.05],[x,y-545.05],[x+250,y-545.05],[x+500,y-545.05],
             [x-500,y-272.52],[x-250,y-272.52],[x,y-272.52],[x+250,y-272.52],[x+500,y-272.52],
             [x-500,y],[x-162.5,y],[x+162.5,y],[x+500,y],
@@ -206,6 +211,26 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.
 
 def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution*1000))
+
+def k_priority_rect(cx, cy, resolution=0.005, K_height=1079.92, segment_width=1200):
+    """Axis-aligned K-block footprint: B1/B2 must not overwrite pixels inside."""
+    half_h = convert_to_pixel_coords(0.5 * K_height, resolution)
+    half_w = convert_to_pixel_coords(0.5 * segment_width, resolution)
+    return int(cx - half_w), int(cx + half_w), int(cy - half_h), int(cy + half_h)
+
+def k_template_mask_global(height, width, cx, cy, resolution=0.005, K_height=1079.92, scale=1.0):
+    """Full-image K parallelogram (same geometry as generate_template_mask)."""
+    mask = np.zeros((height, width), dtype=np.uint8)
+    ky = (K_height / (2 * 619.16)) * scale
+    x = cx * (resolution * 1000)
+    y = cy * (resolution * 1000)
+    vertices_real = np.array([
+        [x - 625, y - 619.16 * ky], [x - 625, y + 619.16 * ky],
+        [x + 625, y + 460.77 * ky], [x + 625, y - 460.77 * ky],
+    ])
+    vertices = vertices_real / (resolution * 1000)
+    fill_polygon(mask, vertices)
+    return mask.astype(bool)
 
 def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution):
     img_height, img_width, _ = image.shape
@@ -337,6 +362,7 @@ def process_row(df_row, image, resolution=0.005, segment_per_ring=6, segment_wid
             
         if reverse:
             block = block_labels[block_label_index]
+            delta_y = convert_to_pixel_coords(0.5*AB_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
             if block_label_index == -1:
                 map_y = initial_y + convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
             else:
@@ -383,6 +409,17 @@ results = sam_segment(initial_prompt_points, image)
 
 block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
+K_LOGIT_BOOST = 2.0
+K_TEMPLATE_CLAIM_SCALE = 1.14
+
+k_priority_rects = [
+    k_priority_rect(row['X'], row['Y']) for _, row in initial_prompt_points.iterrows()
+]
+k_template_masks = [
+    k_template_mask_global(image.shape[0], image.shape[1], row['X'], row['Y'], scale=K_TEMPLATE_CLAIM_SCALE)
+    for _, row in initial_prompt_points.iterrows()
+]
+
 logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
 label_map = np.zeros(image.shape[:2], dtype=int)
 ring_map = np.zeros(image.shape[:2], dtype=int)
@@ -407,9 +444,25 @@ for ring_index, ring in enumerate(results, start=0):
         if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
             raise ValueError(f"Shape mismatch after resizing: mask {mask.shape}, new_logits {new_logits.shape}, current_logits {current_logits.shape}")
 
-        update_mask = (new_logits > current_logits) & mask
+        yy = np.arange(start_y, end_y)[:, None]
+        xx = np.arange(start_x, end_x)[None, :]
+
+        if block == 'K':
+            k_tmpl = k_template_masks[ring_index][valid_slice_y, valid_slice_x]
+            boosted = new_logits + K_LOGIT_BOOST
+            update_mask = (boosted > current_logits) & mask & k_tmpl
+        else:
+            update_mask = (new_logits > current_logits) & mask
+
+        # K priority: B1/B2 must not overwrite any pixel inside the K footprint.
+        if block in ('B1', 'B2'):
+            x1k, x2k, y1k, y2k = k_priority_rects[ring_index]
+            in_k_rect = (xx >= x1k) & (xx < x2k) & (yy >= y1k) & (yy < y2k)
+            update_mask = update_mask & ~in_k_rect
         
-        logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
+        logits_map[valid_slice_y, valid_slice_x][update_mask] = (
+            boosted[update_mask] if block == 'K' else new_logits[update_mask]
+        )
         label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
         ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
 
@@ -428,22 +481,11 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
     x = pixel_to_point_df['pixel_x'].values
     point_indices = pixel_to_point_df['index'].values
 
-    img_height, img_width = segmented_map.shape
-
     valid_point_mask = np.isin(point_indices, df_copy.index.values)
     valid_update_mask = (pred[point_indices[valid_point_mask]] == 7)
-    
-    y_valid = y[valid_point_mask][valid_update_mask]
-    x_valid = x[valid_point_mask][valid_update_mask]
-    
-    bounds_mask = (y_valid >= 0) & (y_valid < img_height) & (x_valid >= 0) & (x_valid < img_width)
-    
-    final_point_indices = point_indices[valid_point_mask][valid_update_mask][bounds_mask]
-    final_y = y_valid[bounds_mask]
-    final_x = x_valid[bounds_mask]
 
-    pred[final_point_indices] = segmented_map[final_y, final_x]
-    pred_ring[final_point_indices] = instance_map[final_y, final_x]
+    pred[point_indices[valid_point_mask][valid_update_mask]] = segmented_map[y[valid_point_mask][valid_update_mask], x[valid_point_mask][valid_update_mask]]
+    pred_ring[point_indices[valid_point_mask][valid_update_mask]] = instance_map[y[valid_point_mask][valid_update_mask], x[valid_point_mask][valid_update_mask]]
 
     df_copy['pred'] = pred
     df_copy['pred_ring'] = pred_ring

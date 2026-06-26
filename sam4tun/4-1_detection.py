@@ -54,8 +54,12 @@ lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLen
 # Vertical line detection (using cv2.HoughLines, for the whole station, 
 # the detection range needs to be adjusted, sample here is around half of a station)
 lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, 500)
+lines_vertical_all = lines_vertical
 if lines_vertical is not None:
-    lines_vertical = lines_vertical[lines_vertical[:, 0, 0] <= (5 * 1200 / (resolution*1000))]
+    # Half-station rho gate (notebook); keep unfiltered copy for merge when gate finds nothing.
+    lines_vertical_filtered = lines_vertical[lines_vertical[:, 0, 0] <= (5 * 1200 / (resolution*1000))]
+    if len(lines_vertical_filtered) > 0:
+        lines_vertical = lines_vertical_filtered
 
 # Prepare output image
 output_image = cv2.cvtColor(dilated_edges, cv2.COLOR_GRAY2BGR)
@@ -223,28 +227,45 @@ if lines_vertical is not None:
 
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
-# Fallback: Generate evenly spaced vertical lines if no lines were detected
-if lines_vertical is None or len(all_mid_lines) == 0:
-    print("No vertical lines detected. Using fallback method: Creating evenly spaced vertical lines based on ring count.")
+# If rho filter removed all vertical seeds, use full Hough set (still theta~0 gated below).
+if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is not None:
+    lines_vertical = lines_vertical_all[:, 0]
+    merged_lines = []
     all_mid_lines = []
-    
-    # Get image width (W) and use ring_count to determine vertical line spacing
-    # We need ring_count lines positioned at the middle of each block
-    block_width = W / ring_count
+    for rho1, theta1 in lines_vertical:
+        if -0.5 * np.pi / 180 <= abs(theta1) <= 0.5 * np.pi / 180:
+            merged_lines.append((rho1, theta1))
+    merged_lines.sort(key=lambda line: line[0])
+    mid_lines = []
+    for i in range(len(merged_lines) - 1):
+        rho1, theta1 = merged_lines[i]
+        rho2, theta2 = merged_lines[i + 1]
+        mid_lines.append(((rho1 + rho2) / 2, (theta1 + theta2) / 2))
+    avg_distance = W / ring_count
+    all_mid_lines = mid_lines.copy()
+    if mid_lines:
+        leftmost_rho, leftmost_theta = mid_lines[0]
+        a, b = np.cos(leftmost_theta), np.sin(leftmost_theta)
+        x0 = a * leftmost_rho
+        while x0 >= 0:
+            all_mid_lines.append((x0, leftmost_theta))
+            x0 -= avg_distance
+        rightmost_rho, rightmost_theta = mid_lines[-1]
+        a, b = np.cos(rightmost_theta), np.sin(rightmost_theta)
+        x0 = a * rightmost_rho
+        while x0 <= W:
+            all_mid_lines.append((x0, rightmost_theta))
+            x0 += avg_distance
+    all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
-    for i in range(ring_count):
-        # Position line in the middle of each block
-        x_pos = (i + 0.5) * block_width
-        # Store vertical line in the same format as expected by the rest of the code
-        # For a vertical line, theta is 0 and rho is x_pos
-        all_mid_lines.append((x_pos, 0))
-        
-        # Draw the vertical line on the output image for visualization
-        x1, y1 = int(x_pos), 0
-        x2, y2 = int(x_pos), L
-        cv2.line(output_image, (x1, y1), (x2, y2), color_mid_lines, line_thickness)
-
-    print(f"Generated {len(all_mid_lines)} synthetic vertical lines at ring centers")
+# Keep exactly one column per ring at designed spacing
+if len(all_mid_lines) > 0:
+    targets = [(i + 0.5) * W / ring_count for i in range(ring_count)]
+    selected = []
+    for tx in targets:
+        best = min(all_mid_lines, key=lambda line: abs(line[0] - tx))
+        selected.append(best)
+    all_mid_lines = selected
 
 # Display the result
 plt.figure(figsize=(12, 12))
@@ -338,15 +359,15 @@ for vertical_x, _ in vertical_lines:
         midpoint = compute_midpoint(merge_positive[0], merge_negative[0])
         adjusted_points.append(('midpoint', midpoint))
     
-    # Case 2: Only positive slope intersections
+    # Case 2: Only positive slope — K centre below / edge (image y increases downward)
     elif len(merge_positive) > 0:
         point = merge_positive[0]
-        adjusted_points.append(('positive_slope', (point[0], point[1] - 0.5*K_height_pixel)))
+        adjusted_points.append(('positive_slope', (point[0], point[1] + 0.5*K_height_pixel)))
     
-    # Case 3: Only negative slope intersections
+    # Case 3: Only negative slope — K centre above \ edge
     elif len(merge_negative) > 0:
         point = merge_negative[0]
-        adjusted_points.append(('negative_slope', (point[0], point[1] + 0.5*K_height_pixel)))
+        adjusted_points.append(('negative_slope', (point[0], point[1] - 0.5*K_height_pixel)))
     
     # Case 4: Check intersections with horizontal lines if no oblique segments were detected
     else:
@@ -361,6 +382,7 @@ for vertical_x, _ in vertical_lines:
         if pattern_midpoint:
             adjusted_points.append(('horizontal', pattern_midpoint))
         else:
+            assumed_y = None
             # Determine the y-coordinate of the assumed point based on the previous point
             if adjusted_points:
                 last_point_y = adjusted_points[-1][1][1]  # Get the y-value of the last added point
@@ -377,20 +399,18 @@ for vertical_x, _ in vertical_lines:
                         elif 1422 <= second_last_point_y <= 1738:
                             assumed_y = second_last_point_y
                         else:
-                            assumed_y = None  # Default or fallback logic if needed
+                            assumed_y = None
                     else:
-                        assumed_y = None  # Default or fallback logic if needed
+                        assumed_y = None
             else:
-                assumed_y = None  # Default or fallback logic if needed
+                ring_idx = len(adjusted_points)
+                assumed_y = 1123.0 if ring_idx % 2 == 0 else 1553.0
 
-            if assumed_y is not None:
-                adjusted_points.append(('assume', (vertical_x, assumed_y)))
-            else:
-                # If no assumption can be made, use a default fallback value
-                # Use the middle of the image height as a reasonable default
-                default_y = L / 2  # Use middle of image height
-                adjusted_points.append(('default', (vertical_x, default_y)))
-                print(f"Warning: Using default y-coordinate ({default_y}) for vertical line at x = {vertical_x}")
+            if assumed_y is None:
+                ring_idx = len(adjusted_points)
+                assumed_y = 1123.0 if ring_idx % 2 == 0 else 1553.0
+
+            adjusted_points.append(('assume', (vertical_x, assumed_y)))
 
 # recording initial point coordinate
 df_loc = pd.DataFrame(adjusted_points, columns=['Type', 'Coordinates'])
@@ -404,38 +424,39 @@ print(f"Number of adjusted points: {len(adjusted_points)}")
 print("DataFrame:")
 print(df_loc)
 
+df_loc.to_csv(f'{base_dir}/detected.csv', index=False)
+
 # Cell 7
 # if you want to visualize
-plt.figure(figsize=(16, 16))
-ax = plt.gca()
+if len(df_loc) > 0:
+    plt.figure(figsize=(16, 16))
+    ax = plt.gca()
 
-colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g', 'default': 'orange'}
-markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d', 'default': 'x'}
+    colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g', 'default': 'orange'}
+    markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d', 'default': 'x'}
 
-for label, (x, y) in adjusted_points:
-    ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)
+    for label, (x, y) in adjusted_points:
+        ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)
 
-handles, labels = ax.get_legend_handles_labels()
-by_label = dict(zip(labels, handles))
-ax.legend(by_label.values(), by_label.keys(), loc='lower right')
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(by_label.values(), by_label.keys(), loc='lower right')
 
-ax.set_xlabel('X-axis')
-ax.set_ylabel('Y-axis')
-ax.set_title('Intersection Points')
-ax.set_aspect('equal', adjustable='box')
-ax.invert_yaxis()
+    ax.set_xlabel('X-axis')
+    ax.set_ylabel('Y-axis')
+    ax.set_title('Intersection Points')
+    ax.set_aspect('equal', adjustable='box')
+    ax.invert_yaxis()
 
-x_min, x_max = df_loc['X'].min(), df_loc['X'].max()
-y_min, y_max = df_loc['Y'].min(), df_loc['Y'].max()
-margin = 0.1
-x_range = x_max - x_min
-y_range = y_max - y_min
-ax.set_xlim(x_min - margin * x_range, x_max + margin * x_range)
-ax.set_ylim(y_max + margin * y_range, y_min - margin * y_range) 
+    x_min, x_max = df_loc['X'].min(), df_loc['X'].max()
+    y_min, y_max = df_loc['Y'].min(), df_loc['Y'].max()
+    margin = 0.1
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    ax.set_xlim(x_min - margin * x_range, x_max + margin * x_range)
+    ax.set_ylim(y_max + margin * y_range, y_min - margin * y_range)
 
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
-# Cell 8
-df_loc.to_csv(f'{base_dir}/detected.csv',index=False)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f'{base_dir}/detected_points.png', dpi=300, bbox_inches='tight')
+    plt.close()

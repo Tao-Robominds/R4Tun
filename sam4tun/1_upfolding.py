@@ -14,6 +14,7 @@ import faiss
 from joblib import Parallel, delayed
 from tqdm.notebook import tqdm
 import os
+import pickle
 import math
 import sys
 
@@ -579,6 +580,7 @@ df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
 # save to data tunnel 5-1
 os.makedirs(f'data/{tunnel_id}', exist_ok=True)
 df_point_cloud.to_csv(f'data/{tunnel_id}/unwrapped.csv',index=False)
+pickle.dump(df_point_cloud, open(f'data/{tunnel_id}/unwrapped.pkl', 'wb'))
 # save ring count
 with open(f'data/{tunnel_id}/ring_count.txt', 'w') as f:
     f.write(str(ring_count))
