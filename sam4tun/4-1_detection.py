@@ -259,22 +259,27 @@ if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is
             x0 += avg_distance
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
-# === Option ①: ring-centre X = midpoint of the two detected ring seams ===
-# The K-centre (and every block centre) inherits its X from the vertical column, so the
-# column X must be the *geometric ring centre* = midpoint of the two ring seams that
-# bracket the ring. The detected ring centres (the seam midpoints in `mid_lines`) are
-# fit to a 1-D uniform lattice  centre(k) = a + b*k  (b ≈ ring width) with robust
-# estimation, and the ring-centre columns are taken from that lattice.
+# === Option ①: ring-centre X = geometric ring centre ===
+# Every block centre inherits its X from the vertical column, so the column X must equal
+# the geometric ring centre. Two estimators are combined:
 #
-# Robustness is essential: Hough produces spurious / duplicate seam midpoints (clutter,
-# typically near the image edges). A naive mean / circular-mean / least-squares phase is
-# dragged by such clutter by tens of pixels (this is what caused the previous +~57 px
-# bias). We therefore: (1) take the spacing b from the median single-ring gap; (2) take
-# the phase a from the median residual; (3) keep one midpoint per ring index (closest to
-# the median phase) and reject midpoints whose phase is still far from it; (4) refit a, b
-# by least squares on the surviving inliers. This replaces the earlier x=0-anchored
-# equal-division snap (a fixed ~20 px phase bias) and the circular-mean grid.
-ring_width = 1.2 / resolution  # designed ring width in pixels (=240 @ 0.005 m)
+#   (1) Equal-division backbone: centres = (i+0.5)·(W/ring_count), using the known ring
+#       count and the map width. This is robust and does NOT depend on seam detection.
+#
+#   (2) Seam-lattice fit: fit the detected seam midpoints (`mid_lines`) to a uniform
+#       lattice centre(k)=a+b·k with robust estimation, used ONLY when it passes sanity
+#       checks. On some samples the Hough seams are sparse/clustered (e.g. all midpoints
+#       in the right half of the image with b≈half the ring width); a naive fit then
+#       extrapolates wildly, so we reject it and keep the equal-division backbone.
+#
+# Note: on the validated sample the detected ring centre (seam midpoint AND equal
+# division) sits a roughly constant offset from the GT "median-h of the K-block" centroid
+# (~+20 px observed). That residual is a *definitional* gap between the ring geometric
+# centre and the K-block centroid, not a detection phase error, and cannot be inferred
+# from the seams. Use RING_CENTRE_X_OFFSET below to calibrate to a specific GT definition.
+ring_width = 1.2 / resolution        # designed ring width in pixels (=240 @ 0.005 m)
+eq_spacing = W / ring_count           # data-derived ring width from the map
+eq_centres = [(i + 0.5) * eq_spacing for i in range(ring_count)]
 
 # Representative seam angle (theta≈0) used only for the centre-line tuples.
 seam_theta = float(np.mean([theta for _, theta in merged_lines])) if merged_lines else 0.0
@@ -282,10 +287,11 @@ seam_theta = float(np.mean([theta for _, theta in merged_lines])) if merged_line
 # Detected ring centres = seam midpoints (theta≈0 ⇒ x ≈ rho·cosθ), de-duplicated.
 mids = sorted(set(round(float(rho * np.cos(theta)), 3) for rho, theta in mid_lines))
 
-ring_centres = None
+ring_centres = eq_centres
+source = "equal-division"
 fit_a = fit_b = None
 n_used = 0
-if len(mids) >= 2:
+if len(mids) >= max(3, ring_count // 2):
     m = np.asarray(mids, dtype=float)
     gaps = np.diff(m)
     single = gaps[(gaps > 0.5 * ring_width) & (gaps < 1.5 * ring_width)]
@@ -305,32 +311,42 @@ if len(mids) >= 2:
             best[ki] = i
     keep = np.array(sorted(best.values()))
     sel = keep[np.abs(p[keep] - a) <= max(0.2 * b, 6.0)]
-
     if len(sel) >= 2 and len(set(k[sel].tolist())) >= 2:
         fit_b, fit_a = (float(v) for v in np.polyfit(k[sel], m[sel], 1))
     else:
         fit_b, fit_a = b, a
     n_used = int(len(sel))
 
-    # Leftmost on-grid ring centre, then exactly ring_count centres at spacing fit_b.
-    j = int(np.floor((-0.3 * fit_b - fit_a) / fit_b))
-    while fit_a + fit_b * j < -0.3 * fit_b:
-        j += 1
-    ring_centres = [float(fit_a + fit_b * (j + i)) for i in range(ring_count)]
+    # Trust the seam fit only when its spacing, coverage and support are sane.
+    span = float(m[-1] - m[0])
+    b_ok = 0.85 * eq_spacing <= fit_b <= 1.15 * eq_spacing
+    span_ok = span >= 0.6 * W
+    inliers_ok = n_used >= max(3, ring_count // 2)
+    if b_ok and span_ok and inliers_ok:
+        j = int(np.floor((-0.3 * fit_b - fit_a) / fit_b))
+        while fit_a + fit_b * j < -0.3 * fit_b:
+            j += 1
+        ring_centres = [float(fit_a + fit_b * (j + i)) for i in range(ring_count)]
+        source = "seam-lattice"
+    else:
+        source = (f"equal-division (seam fit rejected: b_ok={b_ok}, "
+                  f"span_ok={span_ok}, inliers_ok={inliers_ok})")
 
-# Fallback when there are too few detected seams to fit a lattice.
-if ring_centres is None:
-    ring_centres = [(i + 0.5) * W / ring_count for i in range(ring_count)]
+# Optional phase calibration to a specific GT K-centre definition. Leave at 0.0 to output
+# the geometric ring centre; set in pixels if your GT places the K centre off the ring
+# centre (the validated sample showed the GT K-centroid ~+20 px from the ring centre).
+RING_CENTRE_X_OFFSET = 0.0
+if RING_CENTRE_X_OFFSET:
+    ring_centres = [c + RING_CENTRE_X_OFFSET for c in ring_centres]
 
 all_mid_lines = [(cx, seam_theta) for cx in ring_centres]
 
 # Intermediate quantities for local verification.
 print(f"[ring grid] detected midpoints={len(mids)} -> {[round(x, 1) for x in mids]}")
+print(f"[ring grid] eq_spacing(W/ring_count)={eq_spacing:.2f}px, design ring_width={ring_width:.2f}px")
 if fit_b is not None:
-    print(f"[ring grid] lattice fit: spacing b={fit_b:.2f}px (design {ring_width:.2f}px), "
-          f"phase a={fit_a:.2f}, inliers used={n_used}/{len(mids)}")
-else:
-    print("[ring grid] too few midpoints -> equal-division fallback")
+    print(f"[ring grid] seam fit: b={fit_b:.2f}px, a={fit_a:.2f}, inliers={n_used}/{len(mids)}")
+print(f"[ring grid] source={source}, offset={RING_CENTRE_X_OFFSET}")
 print(f"[ring grid] ring_centres={[round(c, 1) for c in ring_centres]}")
 
 # Display the result
