@@ -534,8 +534,7 @@ with open(pixel_to_point_file, 'wb') as f:
 # Cell 18
 import matplotlib.pyplot as plt
 
-def save_depth_map_exact(depth_map, resolution, filename="depth_map.png",
-                         contrast="percentile", pct=(1.0, 99.0), fixed_range=(2.70, 2.80)):
+def save_depth_map_exact(depth_map, resolution, filename="depth_map.png"):
     """
     Save the depth map as an image with the exact dimensions and resolution.
 
@@ -543,17 +542,6 @@ def save_depth_map_exact(depth_map, resolution, filename="depth_map.png",
     depth_map: numpy array, the depth map to be saved.
     resolution: Float, the resolution used to generate the depth map (e.g., 0.005).
     filename: String, the filename to save the image as.
-    contrast: how to choose the colormap range (vmin/vmax) for depth_map.png, which is the
-        SAM INPUT IMAGE, so its contrast directly affects segmentation quality:
-          - 'percentile' (default): vmin/vmax = the given percentiles of the valid depth
-            values. This maximizes usable contrast robustly. For the sample the depth only
-            spans ~[2.73, 2.78], so the notebook's fixed [2.70, 2.80] clamp wastes ~half the
-            colormap (contrast std 0.055 vs 0.196 for p1/p99, ~3.6x). Low contrast flattens
-            fine surface detail and hurts small blocks like K.
-          - 'fixed': the notebook's fixed range (default 2.70-2.80).
-          - 'auto': matplotlib autoscale (data min/max).
-    pct: (low, high) percentiles used when contrast='percentile'.
-    fixed_range: (vmin, vmax) used when contrast='fixed'.
     """
     height, width = depth_map.shape
     dpi = 1.0 / resolution  # Calculate DPI from the resolution
@@ -563,18 +551,9 @@ def save_depth_map_exact(depth_map, resolution, filename="depth_map.png",
     ax = fig.add_axes([0, 0, 1, 1])  # Add an axes covering the entire figure
     ax.axis('off')  # No axes for this plot
 
-    if contrast == "fixed":
-        vmin, vmax = fixed_range
-    elif contrast == "percentile":
-        valid = depth_map[~np.isnan(depth_map)]
-        if valid.size:
-            vmin, vmax = float(np.percentile(valid, pct[0])), float(np.percentile(valid, pct[1]))
-        else:
-            vmin, vmax = fixed_range
-    else:  # 'auto'
-        vmin = vmax = None
-
-    ax.imshow(depth_map, cmap='viridis', vmin=vmin, vmax=vmax)
+    # Faithful to the notebook (cell 49): fixed colour scale vmin=2.70, vmax=2.80 so that
+    # depth_map.png (the SAM input image) is rendered exactly as in SAM4Tun.ipynb.
+    ax.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
 
     # Save the depth map with exact dimensions
     plt.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0)

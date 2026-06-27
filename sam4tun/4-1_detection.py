@@ -55,8 +55,9 @@ L, W = binary_map.shape
 # thresholds to recover their faint joints. The strict angle gate (6..9 / -9..-6 deg) and
 # the downstream point clustering guard against false positives. This affects ONLY the
 # oblique joints (which set the prompt-point Y / type); the ring-centre X (the vertical-seam
-# grid) is unchanged. Set ADAPTIVE_OBLIQUE = False to restore the exact original behaviour.
-ADAPTIVE_OBLIQUE = True
+# grid) is unchanged. Default False keeps the notebook-faithful single-pass Hough; set True
+# to enable (the empirical A/B showed it only shifts prompt Y by ~2px on the sample).
+ADAPTIVE_OBLIQUE = False
 
 
 def detect_oblique_lines_adaptive(edges, base_thr=50, base_minlen=100, max_gap=60,
