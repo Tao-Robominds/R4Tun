@@ -104,6 +104,7 @@ if lines_horizontal is not None:
 
 # Merge close vertical lines
 merged_lines = []
+mid_lines = []
 all_mid_lines = []
 threshold_distance = 3  # 3 pixels
 
@@ -258,14 +259,55 @@ if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is
             x0 += avg_distance
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
-# Keep exactly one column per ring at designed spacing
-if len(all_mid_lines) > 0:
-    targets = [(i + 0.5) * W / ring_count for i in range(ring_count)]
-    selected = []
-    for tx in targets:
-        best = min(all_mid_lines, key=lambda line: abs(line[0] - tx))
-        selected.append(best)
-    all_mid_lines = selected
+# === Option ①: ring-centre X = midpoint of the two detected ring seams ===
+# The K-centre (and every block centre) inherits X from its vertical column, so the
+# column X must be the *geometric ring centre* = midpoint of the two ring seams that
+# bracket the ring. We build a seam grid phase-locked to the DETECTED seams and spaced
+# by the designed ring width, then take the seam midpoints as ring centres. This
+# replaces the previous x=0-anchored equal-division snap, which was anchored to the
+# image origin (not to a real seam) and therefore injected a systematic ~20 px phase
+# bias into the K-centre X.
+ring_width = 1.2 / resolution  # designed ring width in pixels (=240 @ 0.005 m)
+
+# Detected seam x-positions (theta≈0 ⇒ x ≈ rho·cosθ) and a representative seam angle.
+seam_xs = sorted(float(rho * np.cos(theta)) for rho, theta in merged_lines)
+seam_theta = float(np.mean([theta for _, theta in merged_lines])) if merged_lines else 0.0
+
+# Spacing: use the median detected single-ring seam gap when it is close to design,
+# otherwise fall back to the designed ring width.
+spacing = ring_width
+if len(seam_xs) >= 2:
+    gaps = np.diff(seam_xs)
+    single = gaps[gaps <= 1.5 * ring_width]
+    if len(single) > 0 and abs(float(np.median(single)) - ring_width) <= 0.1 * ring_width:
+        spacing = float(np.median(single))
+
+# Grid phase: estimate the ring-centre phase from ALL detected ring centres (the seam
+# midpoints) via a circular mean of their residuals (mod spacing). A circular mean is
+# used instead of a plain mean/median so the phase locks onto a real ring centre and
+# never lands halfway between two centres (which would shift the whole grid by ~half a
+# ring). The grid is therefore phase-locked to actual seams rather than the x=0 origin.
+mids = [float(rho * np.cos(theta)) for rho, theta in mid_lines]
+if mids:
+    ang = 2.0 * np.pi * (np.asarray(mids, dtype=float) % spacing) / spacing
+    phase = (np.angle(np.mean(np.exp(1j * ang))) % (2.0 * np.pi)) / (2.0 * np.pi) * spacing
+elif len(seam_xs) >= 1:
+    # No detected midpoints: derive the centre phase from a seam (seam + half a ring).
+    phase = (seam_xs[len(seam_xs) // 2] + 0.5 * spacing) % spacing
+else:
+    phase = 0.5 * spacing
+
+# Generate exactly ring_count ring centres at the designed spacing, starting from the
+# leftmost on-grid centre (phase ∈ [0, spacing)).
+ring_centres = [float(phase + i * spacing) for i in range(ring_count)]
+
+all_mid_lines = [(cx, seam_theta) for cx in ring_centres]
+
+# Intermediate quantities for local verification.
+print(f"[ring grid] spacing={spacing:.2f}px (design {ring_width:.2f}px), phase={phase:.2f}")
+print(f"[ring grid] detected seams={len(seam_xs)} -> {[round(s, 1) for s in seam_xs]}")
+print(f"[ring grid] detected midpoints={[round(m, 1) for m in mids]}")
+print(f"[ring grid] ring_centres={[round(c, 1) for c in ring_centres]}")
 
 # Display the result
 plt.figure(figsize=(12, 12))
