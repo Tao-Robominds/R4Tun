@@ -1,4 +1,7 @@
 import os
+# Must be set before any CUDA matmul for torch.use_deterministic_algorithms on CUBLAS.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+import random
 import numpy as np
 import pandas as pd
 import torch
@@ -131,11 +134,34 @@ ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
 print(f"Processing tunnel: {tunnel_id}")
 
+# SAM inference on CUDA is non-deterministic by default (cuDNN algorithm choice, TF32,
+# atomic ops). On the low-contrast tunnel depth maps many K-block pixels sit near the mask
+# decision boundary, so this run-to-run noise can swing K IoU by ~0.15 even with byte-
+# identical inputs. Pin every RNG and force deterministic kernels so repeated 4-2 runs on
+# the same inputs give the same masks. Set DETERMINISTIC = False to restore default speed.
+DETERMINISTIC = True
+SEED = 42
+if DETERMINISTIC:
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    try:
+        torch.use_deterministic_algorithms(True, warn_only=True)
+    except Exception as exc:
+        print(f"[deterministic] torch.use_deterministic_algorithms unavailable: {exc}")
+
 sam_checkpoint = "sam4tun/segment-anything/sam_vit_h_4b8939.pth"
 model_type = "vit_h"
 device = "cuda"
 sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
 sam.to(device=device)
+sam.eval()
 predictor = SamPredictor(sam)
 
 image = cv2.imread(f'{base_dir}/depth_map.png')
