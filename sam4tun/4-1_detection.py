@@ -45,8 +45,50 @@ import matplotlib.pyplot as plt
 # L, W = cropped_map.shape
 L, W = binary_map.shape
 
+# Oblique (segment-joint) line detection.
+# The outlier-point density is usually very uneven across the unwrapped map (dense near the
+# scanner, sparse at the far end), so a single global Hough threshold misses the faint
+# joints on the sparse side (observed: left half almost entirely missed). When
+# ADAPTIVE_OBLIQUE is True the Hough threshold / min-length are scaled by the LOCAL outlier
+# density over overlapping vertical bands: dense bands keep the original (50, 100) so the
+# already-working dense side is essentially unchanged, while sparse bands use lower
+# thresholds to recover their faint joints. The strict angle gate (6..9 / -9..-6 deg) and
+# the downstream point clustering guard against false positives. This affects ONLY the
+# oblique joints (which set the prompt-point Y / type); the ring-centre X (the vertical-seam
+# grid) is unchanged. Set ADAPTIVE_OBLIQUE = False to restore the exact original behaviour.
+ADAPTIVE_OBLIQUE = True
+
+
+def detect_oblique_lines_adaptive(edges, base_thr=50, base_minlen=100, max_gap=60,
+                                  min_thr=18, min_minlen=45, band_width=900, band_step=450):
+    col_density = (edges > 0).sum(axis=0)
+    nz = col_density[col_density > 0]
+    ref = float(np.median(nz)) if nz.size else 1.0
+    collected = []
+    x0 = 0
+    while True:
+        x1 = min(x0 + band_width, edges.shape[1])
+        band = edges[:, x0:x1]
+        d = float(col_density[x0:x1].mean()) if x1 > x0 else 0.0
+        scale = min(1.0, d / ref) if ref > 0 else 1.0  # dense band -> scale 1 -> original params
+        thr = int(max(min_thr, round(min_thr + (base_thr - min_thr) * scale)))
+        minlen = int(max(min_minlen, round(min_minlen + (base_minlen - min_minlen) * scale)))
+        lines = cv2.HoughLinesP(band, 1, np.pi / 180, thr, minLineLength=minlen, maxLineGap=max_gap)
+        if lines is not None:
+            for ln in lines:
+                xa, ya, xb, yb = ln[0]
+                collected.append(np.array([[xa + x0, ya, xb + x0, yb]], dtype=ln.dtype))
+        if x1 >= edges.shape[1]:
+            break
+        x0 += band_step
+    return collected if collected else None
+
+
 # Oblique line segment detection parameters
-lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=40)  # Width 240/cos(7.5°)=242
+if ADAPTIVE_OBLIQUE:
+    lines_oblique = detect_oblique_lines_adaptive(dilated_edges)
+else:
+    lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=40)  # Width 240/cos(7.5°)=242
 
 # Horizontal line detection parameters (0 degrees)
 lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=10)  # Width 240
