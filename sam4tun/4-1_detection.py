@@ -260,53 +260,77 @@ if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
 # === Option ①: ring-centre X = midpoint of the two detected ring seams ===
-# The K-centre (and every block centre) inherits X from its vertical column, so the
+# The K-centre (and every block centre) inherits its X from the vertical column, so the
 # column X must be the *geometric ring centre* = midpoint of the two ring seams that
-# bracket the ring. We build a seam grid phase-locked to the DETECTED seams and spaced
-# by the designed ring width, then take the seam midpoints as ring centres. This
-# replaces the previous x=0-anchored equal-division snap, which was anchored to the
-# image origin (not to a real seam) and therefore injected a systematic ~20 px phase
-# bias into the K-centre X.
+# bracket the ring. The detected ring centres (the seam midpoints in `mid_lines`) are
+# fit to a 1-D uniform lattice  centre(k) = a + b*k  (b ≈ ring width) with robust
+# estimation, and the ring-centre columns are taken from that lattice.
+#
+# Robustness is essential: Hough produces spurious / duplicate seam midpoints (clutter,
+# typically near the image edges). A naive mean / circular-mean / least-squares phase is
+# dragged by such clutter by tens of pixels (this is what caused the previous +~57 px
+# bias). We therefore: (1) take the spacing b from the median single-ring gap; (2) take
+# the phase a from the median residual; (3) keep one midpoint per ring index (closest to
+# the median phase) and reject midpoints whose phase is still far from it; (4) refit a, b
+# by least squares on the surviving inliers. This replaces the earlier x=0-anchored
+# equal-division snap (a fixed ~20 px phase bias) and the circular-mean grid.
 ring_width = 1.2 / resolution  # designed ring width in pixels (=240 @ 0.005 m)
 
-# Detected seam x-positions (theta≈0 ⇒ x ≈ rho·cosθ) and a representative seam angle.
-seam_xs = sorted(float(rho * np.cos(theta)) for rho, theta in merged_lines)
+# Representative seam angle (theta≈0) used only for the centre-line tuples.
 seam_theta = float(np.mean([theta for _, theta in merged_lines])) if merged_lines else 0.0
 
-# Spacing: use the median detected single-ring seam gap when it is close to design,
-# otherwise fall back to the designed ring width.
-spacing = ring_width
-if len(seam_xs) >= 2:
-    gaps = np.diff(seam_xs)
-    single = gaps[gaps <= 1.5 * ring_width]
-    if len(single) > 0 and abs(float(np.median(single)) - ring_width) <= 0.1 * ring_width:
-        spacing = float(np.median(single))
+# Detected ring centres = seam midpoints (theta≈0 ⇒ x ≈ rho·cosθ), de-duplicated.
+mids = sorted(set(round(float(rho * np.cos(theta)), 3) for rho, theta in mid_lines))
 
-# Grid phase: estimate the ring-centre phase from ALL detected ring centres (the seam
-# midpoints) via a circular mean of their residuals (mod spacing). A circular mean is
-# used instead of a plain mean/median so the phase locks onto a real ring centre and
-# never lands halfway between two centres (which would shift the whole grid by ~half a
-# ring). The grid is therefore phase-locked to actual seams rather than the x=0 origin.
-mids = [float(rho * np.cos(theta)) for rho, theta in mid_lines]
-if mids:
-    ang = 2.0 * np.pi * (np.asarray(mids, dtype=float) % spacing) / spacing
-    phase = (np.angle(np.mean(np.exp(1j * ang))) % (2.0 * np.pi)) / (2.0 * np.pi) * spacing
-elif len(seam_xs) >= 1:
-    # No detected midpoints: derive the centre phase from a seam (seam + half a ring).
-    phase = (seam_xs[len(seam_xs) // 2] + 0.5 * spacing) % spacing
-else:
-    phase = 0.5 * spacing
+ring_centres = None
+fit_a = fit_b = None
+n_used = 0
+if len(mids) >= 2:
+    m = np.asarray(mids, dtype=float)
+    gaps = np.diff(m)
+    single = gaps[(gaps > 0.5 * ring_width) & (gaps < 1.5 * ring_width)]
+    b = float(np.median(single)) if len(single) > 0 else float(ring_width)
 
-# Generate exactly ring_count ring centres at the designed spacing, starting from the
-# leftmost on-grid centre (phase ∈ [0, spacing)).
-ring_centres = [float(phase + i * spacing) for i in range(ring_count)]
+    # Integer ring index and phase residual of each detected midpoint.
+    k = np.array([round((mm - m[0]) / b) for mm in m], dtype=float)
+    p = m - b * k
+    a = float(np.median(p))  # robust phase, ignores clutter
+
+    # Keep one midpoint per ring index (closest to the median phase), then drop those
+    # whose phase is still far from it.
+    best = {}
+    for i in range(len(m)):
+        ki = int(k[i])
+        if ki not in best or abs(p[i] - a) < abs(p[best[ki]] - a):
+            best[ki] = i
+    keep = np.array(sorted(best.values()))
+    sel = keep[np.abs(p[keep] - a) <= max(0.2 * b, 6.0)]
+
+    if len(sel) >= 2 and len(set(k[sel].tolist())) >= 2:
+        fit_b, fit_a = (float(v) for v in np.polyfit(k[sel], m[sel], 1))
+    else:
+        fit_b, fit_a = b, a
+    n_used = int(len(sel))
+
+    # Leftmost on-grid ring centre, then exactly ring_count centres at spacing fit_b.
+    j = int(np.floor((-0.3 * fit_b - fit_a) / fit_b))
+    while fit_a + fit_b * j < -0.3 * fit_b:
+        j += 1
+    ring_centres = [float(fit_a + fit_b * (j + i)) for i in range(ring_count)]
+
+# Fallback when there are too few detected seams to fit a lattice.
+if ring_centres is None:
+    ring_centres = [(i + 0.5) * W / ring_count for i in range(ring_count)]
 
 all_mid_lines = [(cx, seam_theta) for cx in ring_centres]
 
 # Intermediate quantities for local verification.
-print(f"[ring grid] spacing={spacing:.2f}px (design {ring_width:.2f}px), phase={phase:.2f}")
-print(f"[ring grid] detected seams={len(seam_xs)} -> {[round(s, 1) for s in seam_xs]}")
-print(f"[ring grid] detected midpoints={[round(m, 1) for m in mids]}")
+print(f"[ring grid] detected midpoints={len(mids)} -> {[round(x, 1) for x in mids]}")
+if fit_b is not None:
+    print(f"[ring grid] lattice fit: spacing b={fit_b:.2f}px (design {ring_width:.2f}px), "
+          f"phase a={fit_a:.2f}, inliers used={n_used}/{len(mids)}")
+else:
+    print("[ring grid] too few midpoints -> equal-division fallback")
 print(f"[ring grid] ring_centres={[round(c, 1) for c in ring_centres]}")
 
 # Display the result
