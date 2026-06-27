@@ -9,7 +9,112 @@ import pickle
 from segment_anything import sam_model_registry, SamPredictor
 from segment_anything.utils.transforms import ResizeLongestSide
 from matplotlib.path import Path
+import matplotlib
+matplotlib.use('Agg')  # headless: save figures to files instead of plt.show()
+import matplotlib.pyplot as plt
 import sys
+
+
+# --- Visualization helpers (mirrors notebook cell 64) ---
+def show_mask(mask, ax, random_color=False):
+    if random_color:
+        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+    else:
+        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    ax.imshow(mask_image)
+
+
+def show_points(coords, labels, ax, marker_size=375):
+    pos_points = coords[labels == 1]
+    neg_points = coords[labels == 0]
+    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*',
+               s=marker_size, edgecolor='white', linewidth=1.25)
+    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*',
+               s=marker_size, edgecolor='white', linewidth=1.25)
+
+
+def show_box(box, ax):
+    x0, y0 = box[0], box[1]
+    w, h = box[2] - box[0], box[3] - box[1]
+    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0, 0, 0, 0), lw=2))
+
+
+def save_instance_checks(results, filename, ring_index=0):
+    """Per-instance check (mirrors notebook cell 74): crop + mask + prompt points for
+    every block of one ring, saved as a grid."""
+    if not results or ring_index >= len(results) or not results[ring_index]:
+        return
+    ring = results[ring_index]
+    n = len(ring)
+    cols = min(3, n)
+    rows = int(np.ceil(n / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 6 * rows), squeeze=False)
+    axes = axes.ravel()
+    for idx, item in enumerate(ring):
+        ax = axes[idx]
+        ax.imshow(item['cropped_image'])
+        show_mask(item['mask'], ax)
+        show_points(item['points'], item['labels'], ax, marker_size=120)
+        score = float(np.ravel(item['score'])[0])
+        ax.set_title(f"ring{ring_index} {item['block']} score={score:.3f}")
+        ax.axis('off')
+    for j in range(n, len(axes)):
+        axes[j].axis('off')
+    plt.tight_layout()
+    plt.savefig(filename, dpi=120, bbox_inches='tight')
+    plt.close(fig)
+
+
+def visualize_combined_results(image, result_image, ring_image, filename):
+    """Combined semantic + ring-instance overlays (mirrors notebook cell 77)."""
+    cmap_result = plt.colormaps['tab10']
+    cmap_ring = plt.get_cmap('tab20')
+
+    colored_result = np.zeros((*result_image.shape, 3))
+    colored_ring = np.zeros((*ring_image.shape, 3))
+
+    for label in range(7):  # 0-6: background + 6 blocks
+        colored_result[result_image == label] = cmap_result(label)[:3]
+
+    unique_rings = np.unique(ring_image)
+    for ring in unique_rings:
+        colored_ring[ring_image == ring] = cmap_ring(int(ring) % 20)[:3]
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 18),
+                                        gridspec_kw={'height_ratios': [1, 1, 1]})
+    plt.subplots_adjust(hspace=0.1)
+
+    ax1.imshow(image, cmap='gray')
+    ax1.set_title('Original Depth Map', pad=10)
+    ax1.axis('off')
+
+    ax2.imshow(image, cmap='gray', alpha=0.5)
+    ax2.imshow(colored_result, alpha=0.5)
+    ax2.set_title('Labeled Mask Results', pad=10)
+    ax2.axis('off')
+
+    ax3.imshow(image, cmap='gray', alpha=0.5)
+    ax3.imshow(colored_ring, alpha=0.5)
+    ax3.set_title('Ring Instance Segmentation Results', pad=10)
+    ax3.axis('off')
+
+    legend_elements_result = [
+        plt.Line2D([0], [0], color=cmap_result(label), lw=4, label=f'{block} (Label {label})')
+        for label, block in {v: k for k, v in block_to_label.items()}.items()
+    ]
+    ax2.legend(handles=legend_elements_result, loc='center left', bbox_to_anchor=(1, 0.5))
+
+    legend_elements_ring = [
+        plt.Line2D([0], [0], color=cmap_ring(int(ring) % 20), lw=4, label=f'Ring {ring}')
+        for ring in unique_rings
+    ]
+    ax3.legend(handles=legend_elements_ring, loc='center left', bbox_to_anchor=(1, 0.5))
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close(fig)
 
 # Check if tunnel_id is provided
 if len(sys.argv) != 2:
@@ -468,6 +573,10 @@ for ring_index, ring in enumerate(results, start=0):
 
 result_image = label_map
 ring_image = ring_map
+
+# Save visualizations (mirrors notebook cells 74 & 77; written to file in this script).
+save_instance_checks(results, f'{base_dir}/sam_instances.png')
+visualize_combined_results(image, result_image, ring_image, f'{base_dir}/segmentation_overlay.png')
 
 fix_ring = np.where((ring_image >= 1) & (ring_image <= (ring_count-1)), ring_count - ring_image, ring_image)
 
