@@ -332,12 +332,18 @@ if len(mids) >= max(3, ring_count // 2):
         source = (f"equal-division (seam fit rejected: b_ok={b_ok}, "
                   f"span_ok={span_ok}, inliers_ok={inliers_ok})")
 
-# Optional phase calibration to a specific GT K-centre definition. Leave at 0.0 to output
-# the geometric ring centre; set in pixels if your GT places the K centre off the ring
-# centre (the validated sample showed the GT K-centroid ~+20 px from the ring centre).
-RING_CENTRE_X_OFFSET = 0.0
-if RING_CENTRE_X_OFFSET:
-    ring_centres = [c + RING_CENTRE_X_OFFSET for c in ring_centres]
+# Calibration to the K-block centroid. The SAM prompt must sit on the ACTUAL K block,
+# whose centroid (the GT "median-h of segment-1 points") sits a roughly constant offset
+# to the RIGHT of the ring geometric centre. On the validated sample both independent
+# centre estimators (seam midpoints and equal-division) sit ~20 px (≈100 mm @ 0.005 m)
+# left of the GT K-centroid, consistently across rings (per-ring +15..+25 px, mean ~+20).
+# The offset is defined in millimetres so it is resolution-independent; set
+# RING_CENTRE_X_OFFSET_MM = 0 to output the bare geometric ring centre, and re-measure
+# for a different segment design / scan setup.
+RING_CENTRE_X_OFFSET_MM = 100.0
+ring_centre_x_offset = RING_CENTRE_X_OFFSET_MM / (resolution * 1000.0)
+if ring_centre_x_offset:
+    ring_centres = [c + ring_centre_x_offset for c in ring_centres]
 
 all_mid_lines = [(cx, seam_theta) for cx in ring_centres]
 
@@ -346,7 +352,7 @@ print(f"[ring grid] detected midpoints={len(mids)} -> {[round(x, 1) for x in mid
 print(f"[ring grid] eq_spacing(W/ring_count)={eq_spacing:.2f}px, design ring_width={ring_width:.2f}px")
 if fit_b is not None:
     print(f"[ring grid] seam fit: b={fit_b:.2f}px, a={fit_a:.2f}, inliers={n_used}/{len(mids)}")
-print(f"[ring grid] source={source}, offset={RING_CENTRE_X_OFFSET}")
+print(f"[ring grid] source={source}, offset={ring_centre_x_offset:.1f}px ({RING_CENTRE_X_OFFSET_MM:.0f}mm)")
 print(f"[ring grid] ring_centres={[round(c, 1) for c in ring_centres]}")
 
 # Display the result
