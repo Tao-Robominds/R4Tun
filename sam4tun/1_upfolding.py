@@ -30,6 +30,14 @@ point_cloud_data = np.loadtxt(os.path.join(base_dir, f"{tunnel_id}.txt")) # file
 
 print(f"Processing tunnel: {tunnel_id}")
 
+# Seed the RNGs for reproducible unwrapping. The cross-section ellipse RANSAC uses
+# random.sample, and the 3-D centre-curve RANSAC regressors use NumPy's RNG; without a
+# fixed seed the unwrapped (r, theta, h) coordinates vary slightly on every run, which
+# propagates to the depth map and to all downstream detection/segmentation metrics.
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+
 # Check the size of the point cloud data
 # The sample data should consist of six columns 
 # including x, y, z, intensity, block type, and ring number
@@ -421,10 +429,10 @@ x_poly = t_poly
 y_poly = t_poly
 z_poly = t_poly
 
-# Initialize RANSAC Regressor for x, y, z
-ransac_x = RANSACRegressor()
-ransac_y = RANSACRegressor()
-ransac_z = RANSACRegressor()
+# Initialize RANSAC Regressor for x, y, z (seeded for reproducibility)
+ransac_x = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_y = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_z = RANSACRegressor(random_state=RANDOM_SEED)
 
 # Fit the RANSAC model to x, y, z coordinates
 ransac_x.fit(x_poly, cps_arr[:, 0])
