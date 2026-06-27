@@ -119,20 +119,22 @@ def visualize_combined_results(image, result_image, ring_image, filename):
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     plt.close(fig)
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python 4-2_sam.py <tunnel_id>")
+# Check if tunnel_id is provided (optional second arg: RNG seed for sweeping SAM runs)
+if len(sys.argv) not in (2, 3):
+    print("Usage: python 4-2_sam.py <tunnel_id> [seed]")
     print("Example: python 4-2_sam.py 1-4")
+    print("Example: python 4-2_sam.py 1-4 7   # use RNG seed 7")
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
+SEED = int(sys.argv[2]) if len(sys.argv) == 3 else 42
 base_dir = f"data/{tunnel_id}/"
 initial_prompt_points = pd.read_csv(os.path.join(base_dir, "detected.csv"))
 pixel_to_point = pickle.load(open(os.path.join(base_dir, "pixel_to_point.pkl"), "rb"))
 df_point_cloud = pd.read_csv(os.path.join(base_dir, "enhanced.csv"))
 ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
 
-print(f"Processing tunnel: {tunnel_id}")
+print(f"Processing tunnel: {tunnel_id} (seed={SEED})")
 
 # SAM inference on CUDA is non-deterministic by default (cuDNN algorithm choice, TF32,
 # atomic ops). On the low-contrast tunnel depth maps many K-block pixels sit near the mask
@@ -140,7 +142,6 @@ print(f"Processing tunnel: {tunnel_id}")
 # identical inputs. Pin every RNG and force deterministic kernels so repeated 4-2 runs on
 # the same inputs give the same masks. Set DETERMINISTIC = False to restore default speed.
 DETERMINISTIC = True
-SEED = 42
 if DETERMINISTIC:
     random.seed(SEED)
     np.random.seed(SEED)
