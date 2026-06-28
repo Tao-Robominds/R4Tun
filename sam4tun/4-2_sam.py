@@ -182,8 +182,12 @@ def generate_template_mask(height, width, prompt_centre, block, resolution=0.005
     y = prompt_centre_y * (resolution*1000)
     
     if block == 'K':
-        # Faithful to notebook (cell 67): full-size K parallelogram (no shrink).
-        vertices_real = np.array([[x-625,y-619.16],[x-625,y+619.16],[x+625,y+460.77],[x+625,y-460.77]])
+        # Tighter K parallelogram: scale template to nominal K_height (was ~1238 mm tall).
+        ky = K_height / (2 * 619.16)
+        vertices_real = np.array([
+            [x-625, y-619.16*ky], [x-625, y+619.16*ky],
+            [x+625, y+460.77*ky], [x+625, y-460.77*ky],
+        ])
     elif block == 'B1':
         vertices_real = np.array([[x-625,y-1619.89],[x-625,y+1540.69],[x+625,y+1699.08],[x+625,y-1619.89]])
     elif block == 'B2':
@@ -340,6 +344,26 @@ def generate_prompt_points(prompt_centre, initial_x, map_y, block, resolution=0.
 def convert_to_pixel_coords(real_dist, resolution=0.005):
     return int(real_dist / (resolution*1000))
 
+def k_priority_rect(cx, cy, resolution=0.005, K_height=1079.92, segment_width=1200):
+    """Axis-aligned K-block footprint: B1/B2 must not overwrite pixels inside."""
+    half_h = convert_to_pixel_coords(0.5 * K_height, resolution)
+    half_w = convert_to_pixel_coords(0.5 * segment_width, resolution)
+    return int(cx - half_w), int(cx + half_w), int(cy - half_h), int(cy + half_h)
+
+def k_template_mask_global(height, width, cx, cy, resolution=0.005, K_height=1079.92, scale=1.0):
+    """Full-image K parallelogram (same geometry as generate_template_mask)."""
+    mask = np.zeros((height, width), dtype=np.uint8)
+    ky = (K_height / (2 * 619.16)) * scale
+    x = cx * (resolution * 1000)
+    y = cy * (resolution * 1000)
+    vertices_real = np.array([
+        [x - 625, y - 619.16 * ky], [x - 625, y + 619.16 * ky],
+        [x + 625, y + 460.77 * ky], [x + 625, y - 460.77 * ky],
+    ])
+    vertices = vertices_real / (resolution * 1000)
+    fill_polygon(mask, vertices)
+    return mask.astype(bool)
+
 def crop_image_and_mask_logits(image, cx, cy, crop_width, crop_height, block, resolution):
     img_height, img_width, _ = image.shape
     x1 = max(cx - crop_width // 2, 0)
@@ -470,6 +494,7 @@ def process_row(df_row, image, resolution=0.005, segment_per_ring=6, segment_wid
             
         if reverse:
             block = block_labels[block_label_index]
+            delta_y = convert_to_pixel_coords(0.5*AB_height + math.tan(math.radians(angle))*700+100 + 50, resolution)
             if block_label_index == -1:
                 map_y = initial_y + convert_to_pixel_coords(0.5 * K_height + 0.5 * AB_height, resolution)
             else:
@@ -516,9 +541,17 @@ results = sam_segment(initial_prompt_points, image)
 
 block_to_label = {'K': 1, 'B1': 2, 'A1': 3, 'A2': 4, 'A3': 5, 'B2': 6}
 
-# Merge the per-block masks into the label/ring maps. Faithful to notebook cell 76: every
-# block competes on raw SAM logits (highest-logit block wins each pixel). No K-specific
-# boost / template clip / footprint guard (those eroded the K wedge into B1/B2).
+K_LOGIT_BOOST = 2.0
+K_TEMPLATE_CLAIM_SCALE = 1.14
+
+k_priority_rects = [
+    k_priority_rect(row['X'], row['Y']) for _, row in initial_prompt_points.iterrows()
+]
+k_template_masks = [
+    k_template_mask_global(image.shape[0], image.shape[1], row['X'], row['Y'], scale=K_TEMPLATE_CLAIM_SCALE)
+    for _, row in initial_prompt_points.iterrows()
+]
+
 logits_map = np.full(image.shape[:2], -np.inf, dtype=float)
 label_map = np.zeros(image.shape[:2], dtype=int)
 ring_map = np.zeros(image.shape[:2], dtype=int)
@@ -543,9 +576,25 @@ for ring_index, ring in enumerate(results, start=0):
         if mask.shape != current_logits.shape or new_logits.shape != current_logits.shape:
             raise ValueError(f"Shape mismatch after resizing: mask {mask.shape}, new_logits {new_logits.shape}, current_logits {current_logits.shape}")
 
-        update_mask = (new_logits > current_logits) & mask
+        yy = np.arange(start_y, end_y)[:, None]
+        xx = np.arange(start_x, end_x)[None, :]
 
-        logits_map[valid_slice_y, valid_slice_x][update_mask] = new_logits[update_mask]
+        if block == 'K':
+            k_tmpl = k_template_masks[ring_index][valid_slice_y, valid_slice_x]
+            boosted = new_logits + K_LOGIT_BOOST
+            update_mask = (boosted > current_logits) & mask & k_tmpl
+        else:
+            update_mask = (new_logits > current_logits) & mask
+
+        # K priority: B1/B2 must not overwrite any pixel inside the K footprint.
+        if block in ('B1', 'B2'):
+            x1k, x2k, y1k, y2k = k_priority_rects[ring_index]
+            in_k_rect = (xx >= x1k) & (xx < x2k) & (yy >= y1k) & (yy < y2k)
+            update_mask = update_mask & ~in_k_rect
+        
+        logits_map[valid_slice_y, valid_slice_x][update_mask] = (
+            boosted[update_mask] if block == 'K' else new_logits[update_mask]
+        )
         label_map[valid_slice_y, valid_slice_x][update_mask] = block_to_label[block]
         ring_map[valid_slice_y, valid_slice_x][update_mask] = ring_index
 
