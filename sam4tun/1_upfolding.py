@@ -18,17 +18,26 @@ import pickle
 import math
 import sys
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python 1_upfolding.py <tunnel_id>")
+# Check if tunnel_id is provided (optional second arg: RNG seed for sweeping unwrappings)
+if len(sys.argv) not in (2, 3):
+    print("Usage: python 1_upfolding.py <tunnel_id> [seed]")
     print("Example: python 1_upfolding.py 1-4")
+    print("Example: python 1_upfolding.py 1-4 7   # use RNG seed 7")
     sys.exit(1)
 
 tunnel_id = sys.argv[1]
+RANDOM_SEED = int(sys.argv[2]) if len(sys.argv) == 3 else 42
 base_dir = f"data/"
 point_cloud_data = np.loadtxt(os.path.join(base_dir, f"{tunnel_id}.txt")) # file name
 
-print(f"Processing tunnel: {tunnel_id}")
+print(f"Processing tunnel: {tunnel_id} (seed={RANDOM_SEED})")
+
+# Seed the RNGs for reproducible unwrapping. The cross-section ellipse RANSAC uses
+# random.sample, and the 3-D centre-curve RANSAC regressors use NumPy's RNG; without a
+# fixed seed the unwrapped (r, theta, h) coordinates vary slightly on every run, which
+# propagates to the depth map and to all downstream detection/segmentation metrics.
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
 
 # Check the size of the point cloud data
 # The sample data should consist of six columns 
@@ -421,10 +430,10 @@ x_poly = t_poly
 y_poly = t_poly
 z_poly = t_poly
 
-# Initialize RANSAC Regressor for x, y, z
-ransac_x = RANSACRegressor()
-ransac_y = RANSACRegressor()
-ransac_z = RANSACRegressor()
+# Initialize RANSAC Regressor for x, y, z (seeded for reproducibility)
+ransac_x = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_y = RANSACRegressor(random_state=RANDOM_SEED)
+ransac_z = RANSACRegressor(random_state=RANDOM_SEED)
 
 # Fit the RANSAC model to x, y, z coordinates
 ransac_x.fit(x_poly, cps_arr[:, 0])

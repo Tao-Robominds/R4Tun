@@ -550,9 +550,10 @@ def save_depth_map_exact(depth_map, resolution, filename="depth_map.png"):
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax = fig.add_axes([0, 0, 1, 1])  # Add an axes covering the entire figure
     ax.axis('off')  # No axes for this plot
-    
-    # Display the depth map
-    ax.imshow(depth_map, cmap='viridis')
+
+    # Faithful to the notebook (cell 49): fixed colour scale vmin=2.70, vmax=2.80 so that
+    # depth_map.png (the SAM input image) is rendered exactly as in SAM4Tun.ipynb.
+    ax.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
 
     # Save the depth map with exact dimensions
     plt.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0)
@@ -585,44 +586,21 @@ depth_map_outlier,_ = project_to_depth_map_inter(data_segment, df_joint, window_
 depth_map_outlier_file = os.path.join(base_dir, "depth_map_outlier.npy")
 np.save(depth_map_outlier_file, depth_map_outlier)
 
-# Merge enhanced points back into df_point_cloud
-# Extract only new upsampled points (pred == 8) from df_enhance_segment
-new_upsampled_points = df_enhance_segment[df_enhance_segment['pred'] == 8].copy()
+# Persist the two enhanced point sets separately, mirroring the notebook's in-memory
+# `df_enhance_segment` (segment-surface points + upsampled midpoints, pred==8) and
+# `df_enhance_joint` (outlier/joint points + interpolated points). These are intermediate
+# products used to build the depth maps; downstream stages (4-1/4-2) consume the depth
+# maps and pixel_to_point mapping rather than these tables, but we keep them for fidelity
+# and inspection.
+pickle.dump(df_enhance_segment, open(os.path.join(base_dir, "enhance_segment.pkl"), 'wb'))
+pickle.dump(df_enhance_joint, open(os.path.join(base_dir, "enhance_joint.pkl"), 'wb'))
+df_enhance_segment.to_csv(os.path.join(base_dir, "enhance_segment.csv"), index=False)
+df_enhance_joint.to_csv(os.path.join(base_dir, "enhance_joint.csv"), index=False)
 
-# Extract new interpolated points from df_enhance_joint (already has pred == 8)
-new_joint_points = df_enhance_joint[df_enhance_joint['pred'] == 8].copy()
-
-# Combine all new points
-if len(new_upsampled_points) > 0 or len(new_joint_points) > 0:
-    # Ensure new points have all required columns from df_point_cloud
-    # Add missing columns with default values
-    for col in df_point_cloud.columns:
-        if col not in new_upsampled_points.columns:
-            if col in ['x', 'y', 'z']:
-                # Will need to convert from cylindrical if needed, but for now use NaN
-                new_upsampled_points[col] = np.nan
-            elif col == 'curvature':
-                # Keep curvature if it exists
-                pass
-            else:
-                new_upsampled_points[col] = df_point_cloud[col].iloc[0] if len(df_point_cloud) > 0 else None
-    
-    for col in df_point_cloud.columns:
-        if col not in new_joint_points.columns:
-            if col in ['x', 'y', 'z']:
-                new_joint_points[col] = np.nan
-            elif col == 'curvature':
-                pass
-            else:
-                new_joint_points[col] = df_point_cloud[col].iloc[0] if len(df_point_cloud) > 0 else None
-    
-    # Combine all new points
-    all_new_points = pd.concat([new_upsampled_points, new_joint_points], ignore_index=True)
-    
-    # Merge with original df_point_cloud
-    df_point_cloud = pd.concat([df_point_cloud, all_new_points], ignore_index=True)
-    print(f"Added {len(all_new_points)} new upsampled points to enhanced point cloud")
-    print(f"Total points in enhanced.csv: {len(df_point_cloud)}")
-
-# save df_point_cloud
+# Save enhanced.csv as the original point cloud, faithfully matching the notebook: it keeps
+# the original 0..N-1 row order/index (so pixel_to_point indices resolve positionally in
+# 4-2_sam.py's project_back_to_point_cloud) and only carries the updated `pred` column
+# (pred in {0, 7}). The pred==8 upsampled/interpolated points are NOT mixed in here, because
+# the notebook never adds them to df_point_cloud and doing so would inject NaN coordinates
+# and spurious rows into final.csv / only_label.csv.
 df_point_cloud.to_csv(f"{base_dir}/enhanced.csv", index=False)
