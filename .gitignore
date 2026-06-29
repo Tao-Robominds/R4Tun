@@ -210,3 +210,7 @@ __marimo__/
 data/*
 !data/sample.txt
 data.zip
+
+# SAM4Tun runtime artifacts (inputs/outputs live under sam4tun/data/)
+sam4tun/data/**
+!sam4tun/data/.gitkeep

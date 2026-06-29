@@ -1,35 +1,50 @@
-# Algorithm 2 - Local Point Cloud Density-Difference-Based Denoising extracted from notebook
+#!/usr/bin/env python3
+# AUTO-GENERATED from SAM4Tun.py — do not edit body; re-run generate_modules.py
 
-# # Algorithm 2: Local point cloud density-difference-based denoising
+import sys
+import os
+import matplotlib
+matplotlib.use("Agg")
 
-# Cell 1
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from helpers.pipeline_io import ensure_dir
+from helpers.pipeline_state import load_state, save_state
+
+tunnel_id = sys.argv[1]
+paths = ensure_dir(tunnel_id)
+state = load_state(paths["state"])
+df_point_cloud = state["df_point_cloud"]
+ring_count = state["ring_count"]
+resolution = state.get("resolution", 0.005)
+
+print(f"Total computation time: {end_time - start_time:.6f} seconds")
+# recording data
+import pandas as pd
+
+diameter = 5.5
+df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
+df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
+df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
+df_point_cloud.head()
+df_point_cloud.to_csv(_out('sample_unwrapped.csv'),index=False)
+# Algorithm 2: Local point cloud density-difference-based denoising
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 from tqdm.notebook import tqdm
 from scipy.ndimage import uniform_filter1d
 from numba import njit, prange
-import os
-import pickle
-import sys
+import time
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python 2_denoising.py <tunnel_id>")
-    print("Example: python 2_denoising.py 1-4")
-    sys.exit(1)
-
-tunnel_id = sys.argv[1]
-base_dir = f"data/{tunnel_id}/"
-unwrapped_file = os.path.join(base_dir, "unwrapped.csv")
-unwrapped_pkl = os.path.join(base_dir, "unwrapped.pkl")
-if os.path.exists(unwrapped_pkl):
-    df_point_cloud = pickle.load(open(unwrapped_pkl, 'rb'))
-else:
-    df_point_cloud = pd.read_csv(unwrapped_file)
-ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
-
-print(f"Processing tunnel: {tunnel_id}")
+# Start the timer
+start_time = time.time()
 
 # Add a 'pred' column and initialize to 7
 df_point_cloud['pred'] = 7
@@ -50,6 +65,8 @@ min_x, max_x = np.min(x_points), np.max(x_points)
 min_y, max_y = np.min(y_points), np.max(y_points)
 min_z, max_z = np.min(z_points), np.max(z_points)
 
+print('Range of X:', '[', min_x, max_x, ']')
+
 # Set grid sizes
 x_step = (max_x - min_x) / ring_count
 y_step = 0.5
@@ -58,6 +75,10 @@ z_step = 0.001
 x_bins = np.arange(min_x, max_x + x_step, x_step)
 y_bins = np.arange(min_y, max_y + y_step, y_step)
 z_bins = np.arange(min_z, max_z + z_step, z_step)
+
+# Initialize list to store filtered points and count matrices
+filtered_points_list = []
+count_matrices = []
 
 # Pre-compute useful variables
 grad_threshold = 0.2
@@ -108,6 +129,7 @@ count_matrices = []
 # Iterate over X bins
 for x_min in x_bins[:-1]:
     x_max = x_min + x_step
+    print('x_min-x_max:','[',x_min,x_max,']')
     mask_x = (x_points >= x_min) & (x_points < x_max)
     y_points_sub = y_points[mask_x]
     z_points_sub = z_points[mask_x]
@@ -134,6 +156,16 @@ for x_min in x_bins[:-1]:
 
     cutoff_z_values_smoothed = uniform_filter1d(cutoff_z_values, size=3, mode='nearest') - 0.003
 
+    index_ranges = [[min_y + i * y_step, min_y + (i + 1) * y_step] for i in range(len(cutoff_z_values))]
+    df_visual = pd.DataFrame({
+        'Y range': index_ranges,
+        'cutoff_z': cutoff_z_values,
+        'smoothed_z': cutoff_z_values_smoothed,
+        'max_z': max_z_temp_values
+    })
+    df_visual['Y range'] = df_visual['Y range'].apply(lambda x: [round(val, 4) for val in x])
+    print(df_visual)
+
     # Vectorized filtering based on cutoff values
     y_indices = np.digitize(y_points_sub, y_bins) - 1
     filtered_mask = (z_points_sub >= cutoff_z_values_smoothed[y_indices])
@@ -146,11 +178,12 @@ for x_min in x_bins[:-1]:
     filtered_points_list.append(filtered_points_sub)
 
     # Update filtered out points 'pred' to 0
+    # Corrected: apply filtered_mask directly to the indices of mask_x
     filtered_out_indices = filtered_df.index[mask_x][~filtered_mask]
-    df_point_cloud.loc[filtered_out_indices, 'pred'] = 0
 
-# Save results
-denoised_file = os.path.join(base_dir, "denoised.csv")
-os.makedirs(base_dir, exist_ok=True)
-df_point_cloud.to_csv(denoised_file, index=False)
-pickle.dump(df_point_cloud, open(os.path.join(base_dir, "denoised.pkl"), 'wb'))
+
+df_point_cloud.to_csv(paths["denoised_csv"], index=False)
+state["df_point_cloud"] = df_point_cloud
+save_state(paths["state"], state)
+print(f"Denoising complete -> {paths['denoised_csv']}")
+

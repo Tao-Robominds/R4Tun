@@ -1,41 +1,42 @@
-# Algorithm 3 - Geometry Guided Enhancing extracted from notebook
+#!/usr/bin/env python3
+# AUTO-GENERATED from SAM4Tun.py — do not edit body; re-run generate_modules.py
 
-# # Algorithm 3: geometry guided enhancing
-
-import os
-import pandas as pd
-import numpy as np
-from scipy.spatial import KDTree, cKDTree
-import numba as nb
-from numba import njit, prange
-from scipy.interpolate import griddata
-from tqdm.notebook import tqdm
-from collections import defaultdict
-import pickle
 import sys
+import os
+import matplotlib
+matplotlib.use("Agg")
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python 3_enhancing.py <tunnel_id>")
-    print("Example: python 3_enhancing.py 1-4")
-    sys.exit(1)
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from helpers.pipeline_io import ensure_dir
+from helpers.pipeline_state import load_state, save_state
 
 tunnel_id = sys.argv[1]
-base_dir = f"data/{tunnel_id}/"
-denoised_file = os.path.join(base_dir, "denoised.csv")
-denoised_pkl = os.path.join(base_dir, "denoised.pkl")
-if os.path.exists(denoised_pkl):
-    df_point_cloud = pickle.load(open(denoised_pkl, 'rb'))
-else:
-    df_point_cloud = pd.read_csv(denoised_file)
+paths = ensure_dir(tunnel_id)
+state = load_state(paths["state"])
+df_point_cloud = state["df_point_cloud"]
+ring_count = state["ring_count"]
+resolution = state.get("resolution", 0.005)
 
-print(f"Processing tunnel: {tunnel_id}")
+    df_point_cloud.loc[filtered_out_indices, 'pred'] = 0
 
-# Cell 1
+# Output the number of filtered points
+filtered_points_count = (df_point_cloud['pred'] == 7).sum()
+print(f"Remaining points count: {filtered_points_count}")
+
+# End the timer
+end_time = time.time()
+execution_time = end_time - start_time
+print(f"Execution time: {execution_time:.2f} seconds")
+# Algorithm 3: geometry guided up sampling
 df_support_filtered = df_point_cloud[df_point_cloud['pred'] != 0]
 df_support_filtered.tail()
-
-# Cell 2
 # curvature calculation or you can use cloudcompare
 import numpy as np
 from scipy.spatial import KDTree
@@ -67,10 +68,7 @@ def compute_curvature(df, k=20):
 
 df_support_filtered_curva = compute_curvature(df_support_filtered)
 df_support_filtered_curva.head()
-
-# ## 1. enhance the surface of segment
-
-# Cell 5
+## 1. enhance the surface of segment
 import time
 from scipy.spatial import cKDTree
 import numpy as np
@@ -179,9 +177,6 @@ def enhance_segment_surface(df, target_distance=0.08, curvature_threshold=0.0005
     print('The number of newly added interpolation points is', len(new_df))
 
     return new_df
-
-
-# Cell 6
 # Define the parameters for each upsampling step
 upsampling_params = [
     {'target_distance': 0.08},  # First upsampling
@@ -199,10 +194,7 @@ for params in upsampling_params:
     df_upsampling_all = pd.concat([df_upsampling_all, df_upsampling], ignore_index=False)
 
 df_enhance_segment = df_upsampling_all
-
-# ## 2. enhance the outlier points
-
-# Cell 9
+## 2. enhance the outlier points
 import pandas as pd
 import numpy as np
 from scipy.spatial import cKDTree
@@ -352,7 +344,7 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
             filtered_high_density_indices.append(idx)
     
     filtered_indices = np.array(filtered_high_density_indices, dtype=np.int64)
-
+    
     print("Generating interpolated points ...")
     
     new_points_array = interpolate_points(filtered_indices, points, inter_radius, num_interpolations, duplicate_threshold, resolution)
@@ -367,25 +359,15 @@ def enhance_outlier_points(df, depth_threshold_low=0.003, depth_threshold_high=0
     print(f"enhance_outlier_points took {elapsed_time:.2f} seconds")
     
     return meaningful_df, new_df
-
-
-# Cell 10
 # =================n_segment need to change!!!!===============
-# The sample data is a half of one station, so n_segment should change when using entire station point cloud.
+# The sample data is a half of one station, so n_segment should change when using entire station point cloud. 
 meaningful_df, new_df = enhance_outlier_points(df_support_filtered_curva, n_segment=[0,5])
 
 df_enhance_joint = pd.concat([meaningful_df, new_df], ignore_index=False)
-
-# Cell 11
 # update pred 0 using meaningful_df, we believe outlier points are belong to background
 df_point_cloud.loc[meaningful_df.index, 'pred'] = 0
-
-# Cell 12
 df_point_cloud.tail()
-
-# ## 3. projection and record mapping index 
-
-# Cell 15
+## 3. projection and record mapping index 
 import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
@@ -502,9 +484,6 @@ def project_to_depth_map_inter(data1, data2, resolution=0.005, window_size=5, ou
         pixel_to_point = []
 
     return depth_map, pixel_to_point
-
-
-# Cell 16
 data_segment = {
     'index': df_enhance_segment.index,
     'x': df_enhance_segment['h'],
@@ -524,17 +503,16 @@ resolution = 0.005
 
 # depth map generation, and record pixel to point
 depth_map, pixel_to_point = project_to_depth_map_inter(data_segment, data_joint, resolution=resolution, window_size=9)
-# save pixel to point
-os.makedirs(base_dir, exist_ok=True)
-pixel_to_point_file = os.path.join(base_dir, "pixel_to_point.pkl")
-with open(pixel_to_point_file, 'wb') as f:
-    pickle.dump(pixel_to_point, f)
-
-
-# Cell 18
+import matplotlib.pyplot as plt
+# visualization
+plt.figure(figsize=(12, 24))
+plt.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
+plt.axis('off')
+plt.savefig(_out('depth_map_viridis.png'), dpi=150, bbox_inches='tight')
+# plt.show()
 import matplotlib.pyplot as plt
 
-def save_depth_map_exact(depth_map, resolution, filename="depth_map.png"):
+def save_depth_map_exact(depth_map, resolution, filename=paths["depth_map"]):
     """
     Save the depth map as an image with the exact dimensions and resolution.
 
@@ -550,57 +528,38 @@ def save_depth_map_exact(depth_map, resolution, filename="depth_map.png"):
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax = fig.add_axes([0, 0, 1, 1])  # Add an axes covering the entire figure
     ax.axis('off')  # No axes for this plot
-
-    # Faithful to the notebook (cell 49): fixed colour scale vmin=2.70, vmax=2.80 so that
-    # depth_map.png (the SAM input image) is rendered exactly as in SAM4Tun.ipynb.
+    
+    # Display the depth map
     ax.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
 
     # Save the depth map with exact dimensions
     plt.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0)
     plt.close()
-
-
-# Cell 19
-# save to base_dir
-save_depth_map_exact(depth_map, resolution=0.005, filename=f"{base_dir}/depth_map.png")
-
-
-# for algorithm 4-1
+save_depth_map_exact(depth_map, resolution=0.005, filename=_out("depth_map.png"))
+# Algorithm 4: Prompt point generation 
+##  1. Obtain initial prompt points
 data_joint_2 = {
     'x': df_enhance_joint['h'],
     'y': df_enhance_joint['theta'],
     'z': df_enhance_joint['r'],
-    'pred': df_enhance_joint['pred'],
-    'intensity': df_enhance_joint['intensity'],
-}
 
-df_joint = pd.DataFrame(data_joint_2)
 
-# df_joint = df_joint[df_joint['intensity'] <= -1200]
+import pickle
+import numpy as np
 
-# Cell 3
-# generate map only including outlier point
-depth_map_outlier,_ = project_to_depth_map_inter(data_segment, df_joint, window_size=1, outlier_mode=True)
+np.save(os.path.join(os.path.dirname(paths["depth_map"]), "depth_map.npy"), depth_map)
+df_point_cloud.to_csv(paths["enhanced_csv"], index=False)
+with open(paths["pixel_to_point"], "wb") as f:
+    pickle.dump(pixel_to_point, f)
+state.update({
+    "df_point_cloud": df_point_cloud,
+    "df_enhance_segment": df_enhance_segment,
+    "df_enhance_joint": df_enhance_joint,
+    "depth_map": depth_map,
+    "depth_map_outlier": depth_map_outlier,
+    "pixel_to_point": pixel_to_point,
+    "resolution": resolution,
+})
+save_state(paths["state"], state)
+print(f"Enhancing complete -> {paths['enhanced_csv']}, {paths['depth_map']}")
 
-# save depth_map_outlier
-depth_map_outlier_file = os.path.join(base_dir, "depth_map_outlier.npy")
-np.save(depth_map_outlier_file, depth_map_outlier)
-
-# Persist the two enhanced point sets separately, mirroring the notebook's in-memory
-# `df_enhance_segment` (segment-surface points + upsampled midpoints, pred==8) and
-# `df_enhance_joint` (outlier/joint points + interpolated points). These are intermediate
-# products used to build the depth maps; downstream stages (4-1/4-2) consume the depth
-# maps and pixel_to_point mapping rather than these tables, but we keep them for fidelity
-# and inspection.
-pickle.dump(df_enhance_segment, open(os.path.join(base_dir, "enhance_segment.pkl"), 'wb'))
-pickle.dump(df_enhance_joint, open(os.path.join(base_dir, "enhance_joint.pkl"), 'wb'))
-df_enhance_segment.to_csv(os.path.join(base_dir, "enhance_segment.csv"), index=False)
-df_enhance_joint.to_csv(os.path.join(base_dir, "enhance_joint.csv"), index=False)
-
-# Save enhanced.csv as the original point cloud, faithfully matching the notebook: it keeps
-# the original 0..N-1 row order/index (so pixel_to_point indices resolve positionally in
-# 4-2_sam.py's project_back_to_point_cloud) and only carries the updated `pred` column
-# (pred in {0, 7}). The pred==8 upsampled/interpolated points are NOT mixed in here, because
-# the notebook never adds them to df_point_cloud and doing so would inject NaN coordinates
-# and spurious rows into final.csv / only_label.csv.
-df_point_cloud.to_csv(f"{base_dir}/enhanced.csv", index=False)

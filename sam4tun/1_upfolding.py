@@ -1,47 +1,41 @@
-# Algorithm 1 - Tunnel Centre Line Extraction extracted from notebook
+#!/usr/bin/env python3
+# AUTO-GENERATED from SAM4Tun.py — do not edit body; re-run generate_modules.py
+
+import sys
+import os
+import matplotlib
+matplotlib.use("Agg")
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from helpers.pipeline_io import ensure_dir
+from helpers.pipeline_state import save_state
+
+tunnel_id = sys.argv[1]
+paths = ensure_dir(tunnel_id)
 
 import numpy as np
 import pandas as pd
-from scipy.spatial import ConvexHull
-from shapely.geometry import Polygon
-import cv2
-import random
-import time
-from sklearn.linear_model import RANSACRegressor
-from sklearn.preprocessing import PolynomialFeatures
-from numba import njit, prange
-import faiss
-from joblib import Parallel, delayed
-from tqdm.notebook import tqdm
 import os
-import pickle
-import math
-import sys
 
-# Check if tunnel_id is provided (optional second arg: RNG seed for sweeping unwrappings)
-if len(sys.argv) not in (2, 3):
-    print("Usage: python 1_upfolding.py <tunnel_id> [seed]")
-    print("Example: python 1_upfolding.py 1-4")
-    print("Example: python 1_upfolding.py 1-4 7   # use RNG seed 7")
-    sys.exit(1)
+_SAM4TUN_ROOT = os.path.dirname(os.path.abspath(__file__))
+_DATA_ROOT = os.path.join(_SAM4TUN_ROOT, "data")
+_MONOLITH_DIR = os.path.join(_DATA_ROOT, "monolith")
+os.makedirs(_MONOLITH_DIR, exist_ok=True)
 
-tunnel_id = sys.argv[1]
-RANDOM_SEED = int(sys.argv[2]) if len(sys.argv) == 3 else 42
-base_dir = f"data/"
-point_cloud_data = np.loadtxt(os.path.join(base_dir, f"{tunnel_id}.txt")) # file name
 
-print(f"Processing tunnel: {tunnel_id} (seed={RANDOM_SEED})")
+def _out(name: str) -> str:
+    return os.path.join(_MONOLITH_DIR, name)
 
-# Seed the RNGs for reproducible unwrapping. The cross-section ellipse RANSAC uses
-# random.sample, and the 3-D centre-curve RANSAC regressors use NumPy's RNG; without a
-# fixed seed the unwrapped (r, theta, h) coordinates vary slightly on every run, which
-# propagates to the depth map and to all downstream detection/segmentation metrics.
-random.seed(RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
+# read pointcloud
+point_cloud_data = np.loadtxt(os.path.join(_DATA_ROOT, "sample.txt")) # file name
 
 # Check the size of the point cloud data
 # The sample data should consist of six columns 
 # including x, y, z, intensity, block type, and ring number
+print(point_cloud_data.shape)
 points_xyz = point_cloud_data[:, :3]
 intensity = point_cloud_data[:, 3]
 segment = point_cloud_data[:, 4].astype(int)
@@ -55,8 +49,12 @@ df_point_cloud = pd.DataFrame({
     'segment': segment,
     'ring': ring
 })
-
-# ## 1. Determine direction vector
+df_point_cloud.head()
+# Algorithm 1: Tunnel centre line extraction
+## 1. Determine direction vector
+from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
+from helpers.tunnel_direction import orient_centers_by_ring
 
 # Obtain minimum bounding rectangle for the 2D XOY projection
 points_2d_xoy = points_xyz[:, :2]
@@ -75,10 +73,52 @@ short_edge_index = np.argmin(edges)
 # Determine the centers of the two short sides
 center1 = (rect_vertices[short_edge_index] + rect_vertices[(short_edge_index + 1) % 4]) / 2
 center2 = (rect_vertices[(short_edge_index + 2) % 4] + rect_vertices[(short_edge_index + 3) % 4]) / 2
+center1, center2, ring_rho, ring_swapped = orient_centers_by_ring(points_xyz, ring, center2, center1)
+print(f"Ring-axis Spearman rho={ring_rho:.4f}, swapped={ring_swapped}")
 
 vector = center2 - center1
+print(vector)
+# if you want to visualize
+#=========important: vector direction is auto-oriented by ring metadata (see tunnel_direction.py)========= 
+import matplotlib.pyplot as plt
 
-# ## 2. Generate point cloud slices
+# Visualization
+plt.figure(figsize=(8, 8))
+
+sample_size = 10000
+indices = np.random.choice(len(points_2d_xoy), size=sample_size, replace=False)
+sampled_points = points_2d_xoy[indices]
+
+# Plot the original points
+plt.scatter(sampled_points[:, 0], sampled_points[:, 1], s=1, c='blue', label='Projected Points')
+
+# Plot the convex hull
+for simplex in convex_hull.simplices:
+    plt.plot(points_2d_xoy[simplex, 0], points_2d_xoy[simplex, 1], 'k-')
+
+# Plot the minimum bounding rectangle
+rect_x, rect_y = zip(*(np.array(min_bounding_rect.exterior.coords)))
+plt.plot(rect_x, rect_y, 'r-', label='Minimum Bounding Rectangle')
+
+# Plot the centers of the short edges
+plt.plot(center1[0], center1[1], 'go', label='Center 1 of Short Edge')
+plt.plot(center2[0], center2[1], 'mo', label='Center 2 of Short Edge')
+
+# Plot the vector as an arrow
+plt.arrow(center1[0], center1[1], vector[0], vector[1], head_width=1, head_length=1, fc='green', ec='green', label='Direction Vector')
+
+plt.xlabel('X-axis')
+plt.ylabel('Y-axis')
+plt.title('Projected Point Cloud and Bounding Rectangle')
+plt.legend()
+plt.axis('equal')
+plt.grid(True)
+plt.savefig(_out('projected_point_cloud_bbox.png'), dpi=150, bbox_inches='tight')
+# plt.show()
+## 2. Generate point cloud slices
+import numpy as np
+import math
+from tqdm.notebook import tqdm
 
 def generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta):
     """
@@ -154,12 +194,13 @@ def generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta):
         slicing_cloud.append(points_xyz[mask])
 
     return origin, planes, slicing_cloud
-
 delta = 0.005  # Thickness of slices / 2
-origin, planes, slicing_cloud = generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta)
-ring_count = len(slicing_cloud)
 
-# ## 3. Ellipse centre fitting of Cloud<sub>Slices</sub>
+origin, planes, slicing_cloud = generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta)
+print(f"Number of sliced clouds: {len(slicing_cloud)}")
+ring_count = len(slicing_cloud)
+## 3. Ellipse centre fitting of Cloud<sub>Slices</sub>
+import numpy as np
 
 def project_to_plane(point_cloud, center, normal):
     '''
@@ -196,7 +237,6 @@ def project_to_plane(point_cloud, center, normal):
     y_coords = np.dot(projected_points, y_axis)
     
     return np.vstack((x_coords, y_coords)).T
-
 # Define the normal vector and center for projection
 normal = np.array([planes[0][0], planes[0][1], 0])
 
@@ -214,6 +254,25 @@ for points in point2ds:
     # Filter points where y-coordinate is within 4.5 units of y_max
     filtered_points = [point for point in points if abs(point[1] - y_max) <= 4.5]
     filtered_point2ds.append(filtered_points)
+# if you want to visulize
+import matplotlib.pyplot as plt
+
+x_coords = [point[0] for point in filtered_point2ds[8]]
+y_coords = [point[1] for point in filtered_point2ds[8]]
+
+plt.scatter(x_coords, y_coords, c='blue', s=1, marker='o', label='Point Cloud')
+
+plt.title('2D Point Cloud Visualization')
+plt.xlabel('X Coordinate')
+plt.ylabel('Y Coordinate')
+plt.legend()
+plt.axis('equal')
+plt.grid(True)
+plt.savefig(_out('slice_point_cloud_2d.png'), dpi=150, bbox_inches='tight')
+# plt.show()
+import cv2
+import random
+import time
 
 class RANSAC:
     def __init__(self, data, threshold, P, S, N):
@@ -226,7 +285,6 @@ class RANSAC:
         self.items = 999  # Number of iterations
         self.count = 0  # Number of inliers
         self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
-        self.best_inliers = np.zeros((0, 2), dtype=np.float32)
 
     def random_sampling(self, n):
         """Randomly select n data points."""
@@ -289,10 +347,8 @@ class RANSAC:
 
     def execute_ransac(self):
         """Run RANSAC algorithm to fit an ellipse."""
-        last_inliers = np.zeros((0, 2), dtype=np.float32)
-        for _ in range(10000):
-            if not math.ceil(self.items):
-                break
+        start_time = time.time()
+        while math.ceil(self.items):
             # Randomly sample N points
             select_points = self.random_sampling(self.N)
             select_points_list = [(point[0], point[1]) for point in select_points]
@@ -302,34 +358,26 @@ class RANSAC:
 
             # Evaluate the model and find inliers
             inliers_count, inliers_set = self.eval_model(ellipse)
-            inliers_arr = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
-            last_inliers = inliers_arr
+            inliers_set = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
 
-            # Update the best model if current inliers are better (OpenCV needs >= 5 points)
-            if inliers_count > self.count and len(inliers_arr) >= 5:
-                try:
-                    self.best_model = cv2.fitEllipse(inliers_arr)
-                    self.count = inliers_count
-                    self.best_inliers = inliers_arr
-                except cv2.error:
-                    pass
+            # Update the best model if current inliers are better
+            if inliers_count > self.count:
+                self.count = inliers_count
+                self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
 
                 # Check if we have reached the expected number of inliers
                 if self.count > self.max_inliers:
+                    print('Inlier ratio: ', self.count / len(self.point_data))
                     break
 
                 # Update number of iterations
-                denom = 1 - (inliers_count / len(self.point_data)) ** self.N
-                if 0 < denom < 1:
-                    self.items = math.log(1 - self.P) / math.log(denom)
+                self.items = math.log(1 - self.P) / math.log(1 - (inliers_count / len(self.point_data))**self.N)
 
-        if len(self.best_inliers) >= 5:
-            return self.best_model, self.best_inliers
-        return self.best_model, last_inliers if len(last_inliers) >= 5 else self.point_data.astype(np.float32)
-
+        return self.best_model, inliers_set
 # Initialize lists to store ellipse centers
 X_center = []
 Y_center = []
+
 LAxis_sets = []
 SAxis_sets = []
 Angle_sets = []
@@ -338,17 +386,12 @@ in_sets = []
 for i in range(len(slicing_cloud)):
     # Prepare point data for RANSAC
     points_data = np.reshape(filtered_point2ds[i], (-1, 2))  # Ellipse edge points
-    if len(points_data) == 0:
-        points_data = np.zeros((5, 2), dtype=np.float64)
-    elif len(points_data) < 5:
-        rng = np.random.default_rng(42 + i)
-        pad = points_data[:1]
-        while len(points_data) < 5:
-            points_data = np.vstack([points_data, pad + rng.normal(0, 1e-4, (1, 2))])
 
     # First RANSAC fit to find initial inliers
     ransac = RANSAC(data=points_data, threshold=1.0, P=0.9, S=0.75, N=5)
+    # _, inliers_set = ransac.execute_ransac()
     _, inliers_set = ransac.execute_ransac()
+    
 
     # Refine fit using inliers from the first RANSAC
     points_data = np.reshape(inliers_set, (-1, 2))
@@ -356,15 +399,35 @@ for i in range(len(slicing_cloud)):
     ellipse_params, _ = ransac.execute_ransac()
 
     # Extract center coordinates
+    # ((X, Y), _, _) = ellipse_params
     ((X, Y), (LAxis, SAxis), Angle) = ellipse_params
 
     X_center.append(X)
     Y_center.append(Y)
+
     LAxis_sets.append(LAxis)
     SAxis_sets.append(SAxis)
     Angle_sets.append(Angle)
     in_sets.append(inliers_set)
 
+print('done')
+# if you want to check fitting results
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+i = 8
+ip1 = in_sets[i][:,0]
+ip2 = in_sets[i][:,1]
+
+ellipse = Ellipse(xy=(X_center[i],Y_center[i]), width=LAxis_sets[i], height=SAxis_sets[i], angle=Angle_sets[i], edgecolor='b', fc='None')
+print(ellipse)
+plt.figure('Draw')
+plt.scatter(ip1,ip2,s=3,color='green')
+plt.scatter(X_center[i],Y_center[i],color='red')
+plt.gca().add_patch(ellipse)
+plt.axis('equal')
+plt.title('cross section - 2d points')
+plt.grid(True)
+plt.draw()
 def get_3dcoordinates_from_plane(point2d,plane_params,origin):
     """
     Computes the coordinates of a point in 3D space given its coordinates in the plane coordinate system.
@@ -402,7 +465,6 @@ def get_3dcoordinates_from_plane(point2d,plane_params,origin):
     z = z0+xp*V[2]+yp*U[2]
     
     return [x,y,z]
-
 # Initialize list to store 3D coordinates
 cps = []
 
@@ -415,7 +477,38 @@ for i in range(len(slicing_cloud)):
 # Construct final list of coordinates
 cps_arr= np.array(cps)
 
-# ## 4. 3D Curve Curve<sub>centre</sub> fitting
+len(cps_arr) # should be same to len(slicing_cloud)
+# 3D visualization
+from mpl_toolkits.mplot3d import Axes3D
+
+x = cps_arr[:, 0]
+y = cps_arr[:, 1]
+z = cps_arr[:, 2]
+
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+sc = ax.scatter(x, y, z, c=z, cmap='viridis', s=100)
+
+cbar = plt.colorbar(sc)
+cbar.set_label('Value of z')
+
+ax.set_xlabel('X axis')
+ax.set_ylabel('Y axis')
+ax.set_zlabel('Z axis')
+ax.set_title('3D Scatter Plot')
+
+ax.view_init(elev=15, azim=0)
+ax.set_aspect('auto')
+ax.set_box_aspect([1,1,1])
+plt.savefig(_out('ellipse_centres_3d.png'), dpi=150, bbox_inches='tight')
+# plt.show()
+## 4. 3D Curve Curve<sub>centre</sub> fitting
+import numpy as np
+from sklearn.linear_model import RANSACRegressor
+from sklearn.preprocessing import PolynomialFeatures
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # Generate parameter t for each point (using indices as parameter t)
 t = np.arange(ring_count)
@@ -430,10 +523,10 @@ x_poly = t_poly
 y_poly = t_poly
 z_poly = t_poly
 
-# Initialize RANSAC Regressor for x, y, z (seeded for reproducibility)
-ransac_x = RANSACRegressor(random_state=RANDOM_SEED)
-ransac_y = RANSACRegressor(random_state=RANDOM_SEED)
-ransac_z = RANSACRegressor(random_state=RANDOM_SEED)
+# Initialize RANSAC Regressor for x, y, z
+ransac_x = RANSACRegressor()
+ransac_y = RANSACRegressor()
+ransac_z = RANSACRegressor()
 
 # Fit the RANSAC model to x, y, z coordinates
 ransac_x.fit(x_poly, cps_arr[:, 0])
@@ -457,6 +550,63 @@ y_params[0] = y_intercept
 
 z_params = z_coef.copy()
 z_params[0] = z_intercept
+
+# Print the coefficients for x, y, z
+print("X parameters:", x_params)
+print("Y parameters:", y_params)
+print("Z parameters:", z_params)
+
+# Extend t range for plotting
+t_extend = np.linspace(-2, ring_count+1, 100)
+t_extend_poly = poly.transform(t_extend.reshape(-1, 1))
+
+# Predict fitted values for extended t range
+x_fit_extend = ransac_x.predict(t_extend_poly)
+y_fit_extend = ransac_y.predict(t_extend_poly)
+z_fit_extend = ransac_z.predict(t_extend_poly)
+
+# Plot the fitted curve and original data points in 3D
+
+# Create a 3D figure
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the original data points and the fitted curve
+ax.scatter(cps_arr[:, 0], cps_arr[:, 1], cps_arr[:, 2], color='blue', label='Data Points')
+ax.plot(x_fit_extend, y_fit_extend, z_fit_extend, color='orange', label='Fitted Curve')
+
+# Set axis labels
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.legend()
+
+# Set view angle
+ax.view_init(elev=90, azim=-90)  # Elevation 90°, Azimuth -90°, for counterclockwise rotation
+
+# Get the limits of x, y, z axes
+xlim = ax.get_xlim()
+ylim = ax.get_ylim()
+zlim = ax.get_zlim()
+
+# Manually adjust the ranges of x, y, z to make the scales equal
+max_range = np.array([xlim[1] - xlim[0], ylim[1] - ylim[0], zlim[1] - zlim[0]]).max()
+mid_x = np.mean(xlim)
+mid_y = np.mean(ylim)
+mid_z = np.mean(zlim)
+
+ax.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+ax.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+ax.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
+
+plt.savefig(_out('tunnel_centre_curve_3d.png'), dpi=150, bbox_inches='tight')
+# plt.show()
+import numpy as np
+from numba import njit, prange
+import faiss
+from joblib import Parallel, delayed
+from tqdm.notebook import tqdm
+import time
 
 @njit
 def poly_eval(coeffs, x):
@@ -548,6 +698,8 @@ C_points, arc_lengths = compute_C_points_and_arc_length(B_points, T_vectors, arc
 index = faiss.IndexFlatL2(3)
 index.add(B_points)
 
+start_time = time.time()
+
 # Define batch size for Faiss search to improve performance
 batch_size = 1000000  # Adjust batch size based on memory constraints
 
@@ -580,17 +732,15 @@ cylindrical_coords = []
 for batch_result in cylindrical_coords_batches:
     cylindrical_coords.extend(batch_result)
 
-# recording data
-diameter = 5.5
-df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
-df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
-df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
+end_time = time.time()
 
-# save to data tunnel 5-1
-os.makedirs(f'data/{tunnel_id}', exist_ok=True)
-df_point_cloud.to_csv(f'data/{tunnel_id}/unwrapped.csv',index=False)
-pickle.dump(df_point_cloud, open(f'data/{tunnel_id}/unwrapped.pkl', 'wb'))
-# save ring count
-with open(f'data/{tunnel_id}/ring_count.txt', 'w') as f:
-    f.write(str(ring_count))
+
+
+df_point_cloud.to_csv(paths["unwrapped_csv"], index=False)
+save_state(paths["state"], {
+    "df_point_cloud": df_point_cloud,
+    "ring_count": ring_count,
+    "resolution": 0.005,
+})
+print(f"Upfolding complete -> {paths['unwrapped_csv']}")
 

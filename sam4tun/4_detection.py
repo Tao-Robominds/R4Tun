@@ -1,31 +1,45 @@
-# Algorithm 4 - Prompt Point Generation extracted from notebook
+#!/usr/bin/env python3
+# AUTO-GENERATED from SAM4Tun.py — do not edit body; re-run generate_modules.py
 
-# # Algorithm 4: Prompt point generation 
-
-# ##  1. Obtain initial prompt points
-
+import sys
 import os
-import cv2
+import matplotlib
+matplotlib.use("Agg")
+
 import numpy as np
 import pandas as pd
-import sys
+import matplotlib.pyplot as plt
 
-# Check if tunnel_id is provided
-if len(sys.argv) != 2:
-    print("Usage: python 4-1_detection.py <tunnel_id>")
-    print("Example: python 4-1_detection.py 1-4")
-    sys.exit(1)
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from helpers.pipeline_io import ensure_dir
+from helpers.pipeline_state import load_state, save_state
 
 tunnel_id = sys.argv[1]
-base_dir = f"data/{tunnel_id}"
-depth_map_outlier = np.load(os.path.join(base_dir, "depth_map_outlier.npy"))
-resolution = 0.005
-ring_count = int(open(f'data/{tunnel_id}/ring_count.txt', 'r').read())
+paths = ensure_dir(tunnel_id)
+state = load_state(paths["state"])
+df_point_cloud = state["df_point_cloud"]
+df_enhance_segment = state["df_enhance_segment"]
+df_enhance_joint = state["df_enhance_joint"]
+ring_count = state["ring_count"]
+resolution = state.get("resolution", 0.005)
+depth_map_outlier = state["depth_map_outlier"]
 
-print(f"Processing tunnel: {tunnel_id}")
+    'pred': df_enhance_joint['pred'],
+    'intensity': df_enhance_joint['intensity'],
+}
 
-# Cell 4
+df_joint = pd.DataFrame(data_joint_2)
+
+# df_joint = df_joint[df_joint['intensity'] <= -1200]
+# generate map only including outlier point
+depth_map_outlier,_ = project_to_depth_map_inter(data_segment, df_joint, window_size=1, outlier_mode=True)
+np.save(_out('depth_map_outlier.npy'), depth_map_outlier)
 # pre-processing
+
+import cv2
 
 binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
 
@@ -34,8 +48,6 @@ ret, binary_image = cv2.threshold(binary_map, 127, 255, cv2.THRESH_BINARY)  #100
 kernel = np.ones((3, 3), np.uint8)
 
 dilated_edges = cv2.dilate(binary_image, kernel, iterations=1)  #1
-
-# Cell 5
 # detection
 
 import cv2
@@ -45,51 +57,8 @@ import matplotlib.pyplot as plt
 # L, W = cropped_map.shape
 L, W = binary_map.shape
 
-# Oblique (segment-joint) line detection.
-# The outlier-point density is usually very uneven across the unwrapped map (dense near the
-# scanner, sparse at the far end), so a single global Hough threshold misses the faint
-# joints on the sparse side (observed: left half almost entirely missed). When
-# ADAPTIVE_OBLIQUE is True the Hough threshold / min-length are scaled by the LOCAL outlier
-# density over overlapping vertical bands: dense bands keep the original (50, 100) so the
-# already-working dense side is essentially unchanged, while sparse bands use lower
-# thresholds to recover their faint joints. The strict angle gate (6..9 / -9..-6 deg) and
-# the downstream point clustering guard against false positives. This affects ONLY the
-# oblique joints (which set the prompt-point Y / type); the ring-centre X (the vertical-seam
-# grid) is unchanged. Default False keeps the notebook-faithful single-pass Hough; set True
-# to enable (the empirical A/B showed it only shifts prompt Y by ~2px on the sample).
-ADAPTIVE_OBLIQUE = False
-
-
-def detect_oblique_lines_adaptive(edges, base_thr=50, base_minlen=100, max_gap=60,
-                                  min_thr=18, min_minlen=45, band_width=900, band_step=450):
-    col_density = (edges > 0).sum(axis=0)
-    nz = col_density[col_density > 0]
-    ref = float(np.median(nz)) if nz.size else 1.0
-    collected = []
-    x0 = 0
-    while True:
-        x1 = min(x0 + band_width, edges.shape[1])
-        band = edges[:, x0:x1]
-        d = float(col_density[x0:x1].mean()) if x1 > x0 else 0.0
-        scale = min(1.0, d / ref) if ref > 0 else 1.0  # dense band -> scale 1 -> original params
-        thr = int(max(min_thr, round(min_thr + (base_thr - min_thr) * scale)))
-        minlen = int(max(min_minlen, round(min_minlen + (base_minlen - min_minlen) * scale)))
-        lines = cv2.HoughLinesP(band, 1, np.pi / 180, thr, minLineLength=minlen, maxLineGap=max_gap)
-        if lines is not None:
-            for ln in lines:
-                xa, ya, xb, yb = ln[0]
-                collected.append(np.array([[xa + x0, ya, xb + x0, yb]], dtype=ln.dtype))
-        if x1 >= edges.shape[1]:
-            break
-        x0 += band_step
-    return collected if collected else None
-
-
 # Oblique line segment detection parameters
-if ADAPTIVE_OBLIQUE:
-    lines_oblique = detect_oblique_lines_adaptive(dilated_edges)
-else:
-    lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=40)  # Width 240/cos(7.5°)=242
+lines_oblique = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=40)  # Width 240/cos(7.5°)=242
 
 # Horizontal line detection parameters (0 degrees)
 lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLength=100, maxLineGap=10)  # Width 240
@@ -99,7 +68,6 @@ lines_horizontal = cv2.HoughLinesP(dilated_edges, 1, np.pi / 180, 50, minLineLen
 lines_vertical = cv2.HoughLines(dilated_edges, 1, np.pi / 180, 500)
 lines_vertical_all = lines_vertical
 if lines_vertical is not None:
-    # Half-station rho gate (notebook); keep unfiltered copy for merge when gate finds nothing.
     lines_vertical_filtered = lines_vertical[lines_vertical[:, 0, 0] <= (5 * 1200 / (resolution*1000))]
     if len(lines_vertical_filtered) > 0:
         lines_vertical = lines_vertical_filtered
@@ -268,7 +236,7 @@ if lines_vertical is not None:
             all_mid_lines.append((x0, rightmost_theta))  # Save new centered line record
             x0 += avg_distance
 
-    all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
+all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
 # If rho filter removed all vertical seeds, use full Hough set (still theta~0 gated below).
 if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is not None:
@@ -301,22 +269,26 @@ if (lines_vertical is None or len(all_mid_lines) == 0) and lines_vertical_all is
             x0 += avg_distance
     all_mid_lines = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
 
-# Keep exactly one column per ring at designed spacing
+# Keep exactly one column per ring at designed spacing (unique global nearest-line search).
 if len(all_mid_lines) > 0:
     targets = [(i + 0.5) * W / ring_count for i in range(ring_count)]
+    remaining = sorted(list(set(all_mid_lines)), key=lambda line: line[0])
     selected = []
     for tx in targets:
-        best = min(all_mid_lines, key=lambda line: abs(line[0] - tx))
+        if not remaining:
+            break
+        best = min(remaining, key=lambda line: abs(line[0] - tx))
         selected.append(best)
+        remaining.remove(best)
     all_mid_lines = selected
 
 # Display the result
 plt.figure(figsize=(12, 12))
 plt.imshow(output_image)
-os.makedirs(base_dir, exist_ok=True)
-plt.savefig(f'{base_dir}/detected_lines.png', dpi=300, bbox_inches='tight')
-
-# Cell 6
+# plt.title('Detected Lines')
+plt.axis('off')
+plt.savefig(_out('detected_lines.png'), dpi=150, bbox_inches='tight')
+# plt.show()
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -426,7 +398,6 @@ for vertical_x, _ in vertical_lines:
             adjusted_points.append(('horizontal', pattern_midpoint))
         else:
             assumed_y = None
-            # Determine the y-coordinate of the assumed point based on the previous point
             if adjusted_points:
                 last_point_y = adjusted_points[-1][1][1]  # Get the y-value of the last added point
                 if 1035 <= last_point_y <= 1265:  # Approximately 1150 +/- 10%
@@ -466,40 +437,34 @@ print(f"Number of vertical lines: {len(vertical_lines)}")
 print(f"Number of adjusted points: {len(adjusted_points)}")
 print("DataFrame:")
 print(df_loc)
-
-df_loc.to_csv(f'{base_dir}/detected.csv', index=False)
-
-# Cell 7
 # if you want to visualize
+plt.figure(figsize=(16, 16))
+ax = plt.gca()
+
+colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g'}
+markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d'}
+
+for label, (x, y) in adjusted_points:
+    ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)
+
+handles, labels = ax.get_legend_handles_labels()
+by_label = dict(zip(labels, handles))
+ax.legend(by_label.values(), by_label.keys(), loc='lower right')
+
+ax.set_xlabel('X-axis')
+ax.set_ylabel('Y-axis')
+ax.set_title('Intersection Points')
+ax.set_aspect('equal', adjustable='box')
+ax.invert_yaxis()
+
+x_min, x_max = df_loc['X'].min(), df_loc['X'].max()
+y_min, y_max = df_loc['Y'].min(), df_loc['Y'].max()
+margin = 0.1
 if len(df_loc) > 0:
-    plt.figure(figsize=(16, 16))
-    ax = plt.gca()
 
-    colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume':'g', 'default': 'orange'}
-    markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*','assume':'d', 'default': 'x'}
 
-    for label, (x, y) in adjusted_points:
-        ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)
+df_loc.to_csv(paths["initial_points"], index=False)
+state["df_loc"] = df_loc
+save_state(paths["state"], state)
+print(f"Detection complete -> {paths['initial_points']}")
 
-    handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), loc='lower right')
-
-    ax.set_xlabel('X-axis')
-    ax.set_ylabel('Y-axis')
-    ax.set_title('Intersection Points')
-    ax.set_aspect('equal', adjustable='box')
-    ax.invert_yaxis()
-
-    x_min, x_max = df_loc['X'].min(), df_loc['X'].max()
-    y_min, y_max = df_loc['Y'].min(), df_loc['Y'].max()
-    margin = 0.1
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    ax.set_xlim(x_min - margin * x_range, x_max + margin * x_range)
-    ax.set_ylim(y_max + margin * y_range, y_min - margin * y_range)
-
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(f'{base_dir}/detected_points.png', dpi=300, bbox_inches='tight')
-    plt.close()
