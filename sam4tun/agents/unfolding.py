@@ -1,0 +1,742 @@
+#!/usr/bin/env python3
+# Parameterized unfolding — algorithm from sam4tun/1_upfolding.py
+# Deferred JSON: none
+import sys
+import os
+import matplotlib
+matplotlib.use("Agg")
+
+_AGENTS_DIR = os.path.dirname(os.path.abspath(__file__))
+_SAM4TUN_ROOT = os.path.dirname(_AGENTS_DIR)
+for _p in (_AGENTS_DIR, _SAM4TUN_ROOT):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from pipeline_data import (
+    parse_pipeline_args, load_stage_parameters, require_keys, resolve_param_file, setup_sam4tun_path,
+)
+setup_sam4tun_path()
+from helpers.pipeline_io import ensure_dir
+from helpers.pipeline_state import load_state, save_state
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.spatial import ConvexHull
+from shapely.geometry import Polygon
+import cv2
+import random
+import time
+import math
+from tqdm.auto import tqdm
+from sklearn.linear_model import RANSACRegressor
+from sklearn.preprocessing import PolynomialFeatures
+from numba import njit, prange
+import faiss
+from joblib import Parallel, delayed
+
+tunnel_id = parse_pipeline_args("unfolding")
+params = load_stage_parameters(tunnel_id, "unfolding")
+param_file = resolve_param_file(tunnel_id, "unfolding")
+expected_keys = [
+    "delta", "slice_spacing_factor", "vertical_filter_window",
+    "ransac_threshold", "ransac_probability", "ransac_inlier_ratio",
+    "ransac_sample_size", "ransac_initial_iterations", "ransac_inlier_threshold_multiplier",
+    "polynomial_degree", "num_samples_factor", "t_extrapolation_start", "t_extrapolation_end",
+    "diameter", "batch_size", "n_jobs", "swap_tunnel_centers",
+]
+require_keys(params, expected_keys, param_file)
+delta = params["delta"]
+slice_spacing_factor = params["slice_spacing_factor"]
+vertical_filter_window = params["vertical_filter_window"]
+ransac_threshold = params["ransac_threshold"]
+ransac_probability = params["ransac_probability"]
+ransac_inlier_ratio = params["ransac_inlier_ratio"]
+ransac_sample_size = params["ransac_sample_size"]
+ransac_initial_iterations = params["ransac_initial_iterations"]
+ransac_inlier_threshold_multiplier = params["ransac_inlier_threshold_multiplier"]
+polynomial_degree = params["polynomial_degree"]
+num_samples_factor = params["num_samples_factor"]
+t_extrapolation_start = params["t_extrapolation_start"]
+t_extrapolation_end = params["t_extrapolation_end"]
+diameter = params["diameter"]
+batch_size = params["batch_size"]
+n_jobs = params["n_jobs"]
+swap_tunnel_centers = params["swap_tunnel_centers"]
+
+paths = ensure_dir(tunnel_id)
+point_cloud_data = np.loadtxt(paths["input_txt"])
+print(point_cloud_data.shape)
+points_xyz = point_cloud_data[:, :3]
+intensity = point_cloud_data[:, 3]
+segment = point_cloud_data[:, 4].astype(int)
+ring = point_cloud_data[:, 5].astype(int)
+df_point_cloud = pd.DataFrame({
+    'x': points_xyz[:, 0], 'y': points_xyz[:, 1], 'z': points_xyz[:, 2],
+    'intensity': intensity, 'segment': segment, 'ring': ring,
+})
+
+points_2d_xoy = points_xyz[:, :2]
+convex_hull = ConvexHull(points_2d_xoy)
+convex_hull_points = points_2d_xoy[convex_hull.vertices]
+convex_polygon = Polygon(convex_hull_points)
+min_bounding_rect = convex_polygon.minimum_rotated_rectangle
+rect_vertices = np.array(min_bounding_rect.exterior.coords)[:-1]
+edges = [np.linalg.norm(rect_vertices[i] - rect_vertices[(i + 1) % 4]) for i in range(4)]
+short_edge_index = np.argmin(edges)
+center1 = (rect_vertices[short_edge_index] + rect_vertices[(short_edge_index + 1) % 4]) / 2
+center2 = (rect_vertices[(short_edge_index + 2) % 4] + rect_vertices[(short_edge_index + 3) % 4]) / 2
+if swap_tunnel_centers:
+    center1, center2 = center2, center1
+vector = center2 - center1
+print(vector)
+
+plt.figure(figsize=(8, 8))
+sample_size = 10000
+indices = np.random.choice(len(points_2d_xoy), size=sample_size, replace=False)
+sampled_points = points_2d_xoy[indices]
+plt.scatter(sampled_points[:, 0], sampled_points[:, 1], s=1, c='blue', label='Projected Points')
+for simplex in convex_hull.simplices:
+    plt.plot(points_2d_xoy[simplex, 0], points_2d_xoy[simplex, 1], 'k-')
+rect_x, rect_y = zip(*(np.array(min_bounding_rect.exterior.coords)))
+plt.plot(rect_x, rect_y, 'r-', label='Minimum Bounding Rectangle')
+plt.plot(center1[0], center1[1], 'go', label='Center 1 of Short Edge')
+plt.plot(center2[0], center2[1], 'mo', label='Center 2 of Short Edge')
+plt.arrow(center1[0], center1[1], vector[0], vector[1], head_width=1, head_length=1, fc='green', ec='green', label='Direction Vector')
+plt.xlabel('X-axis'); plt.ylabel('Y-axis')
+plt.title('Projected Point Cloud and Bounding Rectangle')
+plt.legend(); plt.axis('equal'); plt.grid(True)
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "projected_point_cloud_bbox.png"), dpi=150, bbox_inches='tight')
+
+def generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta):
+    """
+    Generate slicing planes and point cloud slices along the line segment between two points.
+
+    Parameters:
+    center1 (array-like): Starting point of the line segment.
+    center2 (array-like): Ending point of the line segment.
+    points_xyz (numpy array): The point cloud data.
+    delta (float): Half the thickness of slices.
+
+    Returns:
+    origin (list of numpy arrays): List of 3D coordinates for each plane.
+    planes (list of numpy arrays): List of plane equations [A, B, C, D].
+    slicing_cloud (list of lists of numpy arrays): List of sliced point clouds for each plane.
+    """
+    # Calculate the distance between center1 and center2 in the XY plane
+    l = np.linalg.norm(center2[:2] - center1[:2])
+    
+    # Find the optimal integer n such that 1.2 * n is closest to l
+    n = round(l / slice_spacing_factor)
+    min_diff = abs(l - slice_spacing_factor * n)
+    optimal_n = n
+
+    # Check nearby integer values for better match
+    for candidate_n in [n - 1, n + 1]:
+        diff = abs(l - slice_spacing_factor * candidate_n)
+        if diff < min_diff:
+            optimal_n = candidate_n
+            min_diff = diff
+
+    # Initialize lists to hold points and planes
+    points_on_plane = []
+    planes = []
+    origin = []
+
+    # Calculate direction vector and total distance
+    direction = (center2 - center1) / np.linalg.norm(center2 - center1)
+    total_distance = np.linalg.norm(center2 - center1)
+    first_distance = total_distance / (2 * optimal_n)
+    last_distance = total_distance - first_distance
+
+    # Generate planes
+    for i in range(optimal_n):
+        if i == 0:
+            segment_length = first_distance
+        elif i == optimal_n - 1:
+            segment_length = last_distance
+        else:
+            segment_length = first_distance + (i * (last_distance - first_distance)) / (optimal_n - 1)
+
+        point_on_plane = center1 + (segment_length / total_distance) * (center2 - center1)
+        points_on_plane.append(point_on_plane)
+        origin.append(np.append(point_on_plane, 0))  # Convert to 3D by adding a zero z-component
+
+        normal_vector = np.append(direction, 0)
+        d = -np.dot(normal_vector[:2], point_on_plane)
+        plane = np.append(normal_vector, d)
+        planes.append(plane)
+
+    # Initialize slicing cloud list
+    slicing_cloud = []
+    Delta = delta  # Half the thickness of slices
+
+    points_xyz = np.asarray(points_xyz)  # Ensure points_xyz is a numpy array
+
+    # Iterate over each plane with progress bar
+    for plane in tqdm(planes, desc="Processing planes"):
+        a, b, c, d = plane
+        Wr = a * points_xyz[:, 0] + b * points_xyz[:, 1] + c * points_xyz[:, 2] + d - Delta
+        Wl = a * points_xyz[:, 0] + b * points_xyz[:, 1] + c * points_xyz[:, 2] + d + Delta
+        mask = (Wr * Wl <= 0)
+        slicing_cloud.append(points_xyz[mask])
+
+    return origin, planes, slicing_cloud
+origin, planes, slicing_cloud = generate_slicing_planes_point_cloud(center1, center2, points_xyz, delta)
+print(f"Number of sliced clouds: {len(slicing_cloud)}")
+ring_count = len(slicing_cloud)
+## 3. Ellipse centre fitting of Cloud<sub>Slices</sub>
+import numpy as np
+
+def project_to_plane(point_cloud, center, normal):
+    '''
+    Project a 3D point cloud onto a known plane, and convert the projected points to 2D coordinates.
+    The origin (0, 0) in 2D corresponds to the `center` point in 3D.
+
+    Args:
+        point_cloud: numpy array, shape (N, 3). Represents a 3D point cloud.
+        center: numpy array, shape (3,). Represents a point on the plane, which will be the origin in the 2D projection.
+        normal: numpy array, shape (3,). Represents the normal vector of the plane.
+
+    Returns:
+        numpy array, shape (N, 2). Represents the 2D coordinates of the projected points on the plane.
+    '''
+    
+    # Move the center of the point cloud to the origin.
+    shifted_point_cloud = np.array(point_cloud) - np.array(center)
+    
+    # Compute the projection of the point cloud onto the plane's normal vector.
+    projection = np.dot(shifted_point_cloud, normal)
+    
+    # Compute the coordinates of the projected points onto the plane.
+    projected_points = shifted_point_cloud - np.outer(projection, normal)
+    
+    # Define the 2D coordinate system on the plane:
+    x_axis = np.array([-normal[1], normal[0], 0])
+    x_axis /= np.linalg.norm(x_axis)
+
+    # y-axis is orthogonal to both the normal and x_axis.
+    y_axis = np.cross(normal, x_axis)
+
+    # Calculate the 2D coordinates by projecting the 3D points onto the x and y axes.
+    x_coords = np.dot(projected_points, x_axis)
+    y_coords = np.dot(projected_points, y_axis)
+    
+    return np.vstack((x_coords, y_coords)).T
+# Define the normal vector and center for projection
+normal = np.array([planes[0][0], planes[0][1], 0])
+
+# Project each point in slicing_cloud onto the plane
+point2ds = []
+for i in range(len(origin)):
+    point2ds_temp = project_to_plane(slicing_cloud[i], origin[i], normal)
+    point2ds.append(point2ds_temp)
+
+# Process each set of 2D points
+filtered_point2ds = []
+for points in point2ds:
+    # Find the maximum y-coordinate
+    y_max = max(point[1] for point in points)
+    # Filter points where y-coordinate is within 4.5 units of y_max
+    filtered_points = [point for point in points if abs(point[1] - y_max) <= 4.5]
+    filtered_point2ds.append(filtered_points)
+# if you want to visulize
+import matplotlib.pyplot as plt
+
+x_coords = [point[0] for point in filtered_point2ds[8]]
+y_coords = [point[1] for point in filtered_point2ds[8]]
+
+plt.scatter(x_coords, y_coords, c='blue', s=1, marker='o', label='Point Cloud')
+
+plt.title('2D Point Cloud Visualization')
+plt.xlabel('X Coordinate')
+plt.ylabel('Y Coordinate')
+plt.legend()
+plt.axis('equal')
+plt.grid(True)
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "slice_point_cloud_2d.png"), dpi=150, bbox_inches='tight')
+# plt.show()
+import cv2
+import random
+import time
+
+class RANSAC:
+    def __init__(self, data, threshold, P, S, N, initial_iterations=999, inlier_threshold_multiplier=0.8):
+        self.point_data = data  # Ellipse contour points
+        self.error_threshold = threshold  # Error tolerance threshold
+        self.N = N  # Number of points to sample
+        self.S = S  # Inlier ratio
+        self.P = P  # Probability of finding a correct model
+        self.max_inliers = len(data) * S  # Maximum number of inliers
+        self.items = initial_iterations  # Number of iterations
+        self.inlier_threshold_multiplier = inlier_threshold_multiplier
+        self.count = 0  # Number of inliers
+        self.best_model = ((0, 0), (1e-6, 1e-6), 0)  # Best ellipse model
+
+    def random_sampling(self, n):
+        """Randomly select n data points."""
+        return np.asarray(random.sample(list(self.point_data), n))
+
+    def Geometric2Conic(self, ellipse):
+        """Convert ellipse parameters to conic coefficients."""
+        (x0, y0), (bb, aa), phi_b_deg = ellipse
+        a, b = aa / 2, bb / 2  # Semi-major and semi-minor axes
+        phi_b_rad = np.radians(phi_b_deg)  # Convert angle to radians
+        ax, ay = -np.sin(phi_b_rad), np.cos(phi_b_rad)  # Major axis unit vector
+
+        # Conic parameters
+        a2, b2 = a * a, b * b
+        if a2 > 0 and b2 > 0:
+            A = ax * ax / a2 + ay * ay / b2
+            B = 2 * ax * ay / a2 - 2 * ax * ay / b2
+            C = ay * ay / a2 + ax * ax / b2
+            D = (-2 * ax * ay * y0 - 2 * ax * ax * x0) / a2 + (2 * ax * ay * y0 - 2 * ay * ay * x0) / b2
+            E = (-2 * ax * ay * x0 - 2 * ay * ay * y0) / a2 + (2 * ax * ay * x0 - 2 * ax * ax * y0) / b2
+            F = (2 * ax * ay * x0 * y0 + ax * ax * x0 * x0 + ay * ay * y0 * y0) / a2 + \
+                (-2 * ax * ay * x0 * y0 + ay * ay * x0 * x0 + ax * ax * y0 * y0) / b2 - 1
+        else:
+            A, B, C, D, E, F = 1, 0, 1, 0, 0, -1e-6  # Default for degenerate cases
+
+        return np.array([A, B, C, D, E, F])
+
+    def eval_model(self, ellipse):
+        """Evaluate the ellipse model and count inliers."""
+        a, b, c, d, e, f = self.Geometric2Conic(ellipse)
+        E = 4 * a * c - b * b
+        if E <= 0:
+            return 0, np.array([])  # Not an ellipse
+
+        (x, y), (LAxis, SAxis), Angle = ellipse
+        LAxis, SAxis = LAxis / 2, SAxis / 2
+        if SAxis > LAxis:
+            SAxis, LAxis = LAxis, SAxis  # Ensure LAxis is the longer one
+
+        # Calculate foci
+        Axis = math.sqrt(LAxis**2 - SAxis**2)
+        f1_x = x - Axis * math.cos(math.radians(Angle))
+        f1_y = y - Axis * math.sin(math.radians(Angle))
+        f2_x = x + Axis * math.cos(math.radians(Angle))
+        f2_y = y + Axis * math.sin(math.radians(Angle))
+
+        # Compute distances to foci
+        f1, f2 = np.array([f1_x, f1_y]), np.array([f2_x, f2_y])
+        f1_distance = np.sum((self.point_data - f1)**2, axis=1)
+        f2_distance = np.sum((self.point_data - f2)**2, axis=1)
+        all_distance = np.sqrt(f1_distance) + np.sqrt(f2_distance)
+
+        # Identify inliers
+        Z = np.abs(2 * LAxis - all_distance)
+        delta = np.sqrt(np.mean((Z - np.mean(Z))**2))
+        inliers = np.where(Z < self.inlier_threshold_multiplier * delta)[0]
+        inlier_points = self.point_data[inliers]
+
+        return len(inlier_points), inlier_points
+
+    def execute_ransac(self):
+        """Run RANSAC algorithm to fit an ellipse."""
+        start_time = time.time()
+        while math.ceil(self.items):
+            # Randomly sample N points
+            select_points = self.random_sampling(self.N)
+            select_points_list = [(point[0], point[1]) for point in select_points]
+
+            # Fit an ellipse to the selected points
+            ellipse = cv2.fitEllipse(np.array(select_points_list, dtype=np.float32))
+
+            # Evaluate the model and find inliers
+            inliers_count, inliers_set = self.eval_model(ellipse)
+            inliers_set = np.array([tuple(point) for point in inliers_set], dtype=np.float32)
+
+            # Update the best model if current inliers are better
+            if inliers_count > self.count:
+                self.count = inliers_count
+                self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
+
+                # Check if we have reached the expected number of inliers
+                if self.count > self.max_inliers:
+                    print('Inlier ratio: ', self.count / len(self.point_data))
+                    break
+
+                # Update number of iterations
+                self.items = math.log(1 - self.P) / math.log(1 - (inliers_count / len(self.point_data))**self.N)
+
+        return self.best_model, inliers_set
+# Initialize lists to store ellipse centers
+X_center = []
+Y_center = []
+
+LAxis_sets = []
+SAxis_sets = []
+Angle_sets = []
+in_sets = []
+
+for i in range(len(slicing_cloud)):
+    # Prepare point data for RANSAC
+    points_data = np.reshape(filtered_point2ds[i], (-1, 2))  # Ellipse edge points
+
+    # First RANSAC fit to find initial inliers
+    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    # _, inliers_set = ransac.execute_ransac()
+    _, inliers_set = ransac.execute_ransac()
+    
+
+    # Refine fit using inliers from the first RANSAC
+    points_data = np.reshape(inliers_set, (-1, 2))
+    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
+    ellipse_params, _ = ransac.execute_ransac()
+
+    # Extract center coordinates
+    # ((X, Y), _, _) = ellipse_params
+    ((X, Y), (LAxis, SAxis), Angle) = ellipse_params
+
+    X_center.append(X)
+    Y_center.append(Y)
+
+    LAxis_sets.append(LAxis)
+    SAxis_sets.append(SAxis)
+    Angle_sets.append(Angle)
+    in_sets.append(inliers_set)
+
+print('done')
+# if you want to check fitting results
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+i = 8
+ip1 = in_sets[i][:,0]
+ip2 = in_sets[i][:,1]
+
+ellipse = Ellipse(xy=(X_center[i],Y_center[i]), width=LAxis_sets[i], height=SAxis_sets[i], angle=Angle_sets[i], edgecolor='b', fc='None')
+print(ellipse)
+plt.figure('Draw')
+plt.scatter(ip1,ip2,s=3,color='green')
+plt.scatter(X_center[i],Y_center[i],color='red')
+plt.gca().add_patch(ellipse)
+plt.axis('equal')
+plt.title('cross section - 2d points')
+plt.grid(True)
+plt.draw()
+def get_3dcoordinates_from_plane(point2d,plane_params,origin):
+    """
+    Computes the coordinates of a point in 3D space given its coordinates in the plane coordinate system.
+    
+    Args:
+        point2d: numpy array, shape (2,). Represents 2D points in the plane.
+        plane_params: numpy array, shape (4,). Represents the parameters of the known plane.
+        origin: numpy array, shape (3,). Represents the 3D coordinates of the origin of the known plane.
+
+    Returns:
+        numpy array, shape (N, 3). Represents the 3D coordinates of the 2D points.
+    """
+    xp,yp = point2d
+    A,B,C,D = plane_params
+    x0,y0,z0 = origin
+    
+    # normal vector of the plane
+    N = np.array([A, B, C])
+    N = N / np.linalg.norm(N)
+    
+    # calculate vector V, which is the x-axis of the 2D coordinate system
+    Vx = -B
+    Vy = A
+    Vz = 0
+    V = np.array([Vx, Vy, Vz])
+    V = V / np.linalg.norm(V)
+    
+    # calculate vector U, which is the y-axis of the 2D coordinate system
+    U = np.cross(N, V)
+    U = U / np.linalg.norm(U)
+    
+    # calculate 3D coordinates
+    x = x0+xp*V[0]+yp*U[0]
+    y = y0+xp*V[1]+yp*U[1]
+    z = z0+xp*V[2]+yp*U[2]
+    
+    return [x,y,z]
+# Initialize list to store 3D coordinates
+cps = []
+
+# Compute 3D coordinates for each center point
+for i in range(len(slicing_cloud)):
+    point2d_cp = np.array([X_center[i], Y_center[i]])
+    cp = get_3dcoordinates_from_plane(point2d_cp, planes[i], origin[i])
+    cps.append(cp)
+
+# Construct final list of coordinates
+cps_arr= np.array(cps)
+
+len(cps_arr) # should be same to len(slicing_cloud)
+# 3D visualization
+from mpl_toolkits.mplot3d import Axes3D
+
+x = cps_arr[:, 0]
+y = cps_arr[:, 1]
+z = cps_arr[:, 2]
+
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+
+sc = ax.scatter(x, y, z, c=z, cmap='viridis', s=100)
+
+cbar = plt.colorbar(sc)
+cbar.set_label('Value of z')
+
+ax.set_xlabel('X axis')
+ax.set_ylabel('Y axis')
+ax.set_zlabel('Z axis')
+ax.set_title('3D Scatter Plot')
+
+ax.view_init(elev=15, azim=0)
+ax.set_aspect('auto')
+ax.set_box_aspect([1,1,1])
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "ellipse_centres_3d.png"), dpi=150, bbox_inches='tight')
+# plt.show()
+## 4. 3D Curve Curve<sub>centre</sub> fitting
+import numpy as np
+from sklearn.linear_model import RANSACRegressor
+from sklearn.preprocessing import PolynomialFeatures
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Generate parameter t for each point (using indices as parameter t)
+t = np.arange(ring_count)
+
+# Polynomial feature expansion, degree 2
+degree = polynomial_degree
+poly = PolynomialFeatures(degree)
+
+# Polynomial feature transformation for x(t), y(t), z(t)
+t_poly = poly.fit_transform(t.reshape(-1, 1))
+x_poly = t_poly
+y_poly = t_poly
+z_poly = t_poly
+
+# Initialize RANSAC Regressor for x, y, z
+ransac_x = RANSACRegressor()
+ransac_y = RANSACRegressor()
+ransac_z = RANSACRegressor()
+
+# Fit the RANSAC model to x, y, z coordinates
+ransac_x.fit(x_poly, cps_arr[:, 0])
+ransac_y.fit(y_poly, cps_arr[:, 1])
+ransac_z.fit(z_poly, cps_arr[:, 2])
+
+# Get polynomial coefficients and intercepts
+x_coef = ransac_x.estimator_.coef_
+y_coef = ransac_y.estimator_.coef_
+z_coef = ransac_z.estimator_.coef_
+x_intercept = ransac_x.estimator_.intercept_
+y_intercept = ransac_y.estimator_.intercept_
+z_intercept = ransac_z.estimator_.intercept_
+
+# Adjust coefficients to include the intercept term
+x_params = x_coef.copy()
+x_params[0] = x_intercept
+
+y_params = y_coef.copy()
+y_params[0] = y_intercept
+
+z_params = z_coef.copy()
+z_params[0] = z_intercept
+
+# Print the coefficients for x, y, z
+print("X parameters:", x_params)
+print("Y parameters:", y_params)
+print("Z parameters:", z_params)
+
+# Extend t range for plotting
+t_extend = np.linspace(-2, ring_count+1, 100)
+t_extend_poly = poly.transform(t_extend.reshape(-1, 1))
+
+# Predict fitted values for extended t range
+x_fit_extend = ransac_x.predict(t_extend_poly)
+y_fit_extend = ransac_y.predict(t_extend_poly)
+z_fit_extend = ransac_z.predict(t_extend_poly)
+
+# Plot the fitted curve and original data points in 3D
+
+# Create a 3D figure
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the original data points and the fitted curve
+ax.scatter(cps_arr[:, 0], cps_arr[:, 1], cps_arr[:, 2], color='blue', label='Data Points')
+ax.plot(x_fit_extend, y_fit_extend, z_fit_extend, color='orange', label='Fitted Curve')
+
+# Set axis labels
+ax.set_xlabel('X')
+ax.set_ylabel('Y')
+ax.set_zlabel('Z')
+ax.legend()
+
+# Set view angle
+ax.view_init(elev=90, azim=-90)  # Elevation 90°, Azimuth -90°, for counterclockwise rotation
+
+# Get the limits of x, y, z axes
+xlim = ax.get_xlim()
+ylim = ax.get_ylim()
+zlim = ax.get_zlim()
+
+# Manually adjust the ranges of x, y, z to make the scales equal
+max_range = np.array([xlim[1] - xlim[0], ylim[1] - ylim[0], zlim[1] - zlim[0]]).max()
+mid_x = np.mean(xlim)
+mid_y = np.mean(ylim)
+mid_z = np.mean(zlim)
+
+ax.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+ax.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+ax.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
+
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "tunnel_centre_curve_3d.png"), dpi=150, bbox_inches='tight')
+# plt.show()
+import numpy as np
+from numba import njit, prange
+import faiss
+from joblib import Parallel, delayed
+from tqdm.auto import tqdm
+import time
+
+@njit
+def poly_eval(coeffs, x):
+    result = 0.0
+    for coeff in coeffs:
+        result = result * x + coeff
+    return result
+
+@njit(parallel=True)
+def curve_func(t, x_params, y_params, z_params):
+    result = np.empty((len(t), 3))
+    for i in prange(len(t)):
+        result[i, 0] = poly_eval(x_params[::-1], t[i])
+        result[i, 1] = poly_eval(y_params[::-1], t[i])
+        result[i, 2] = poly_eval(z_params[::-1], t[i])
+    return result
+
+@njit
+def poly_deriv(coeffs):
+    return np.array([i * c for i, c in enumerate(coeffs[:0:-1])][::-1])
+
+@njit(parallel=True)
+def curve_deriv(t, x_params, y_params, z_params):
+    result = np.empty((len(t), 3))
+    dx_params = poly_deriv(x_params[::-1])
+    dy_params = poly_deriv(y_params[::-1])
+    dz_params = poly_deriv(z_params[::-1])
+    for i in prange(len(t)):
+        result[i, 0] = poly_eval(dx_params, t[i])
+        result[i, 1] = poly_eval(dy_params, t[i])
+        result[i, 2] = poly_eval(dz_params, t[i])
+    return result
+    
+@njit
+def calculate_angle_with_direction(A, B, C):
+    ''' 
+    A is point from point cloud, 
+    B is the closest point of A on the curve, 
+    Angle ABC is angle value of point A in cylindrical coordinates
+    '''
+    AB = B - A
+    BC = C - B
+    
+    dot_product = np.dot(AB, BC)
+    norm_AB = np.sqrt(np.dot(AB, AB))
+    norm_BC = np.sqrt(np.dot(BC, BC))
+    
+    if norm_AB == 0 or norm_BC == 0:
+        return 0.0, np.linalg.norm(AB)
+    
+    cos_angle = dot_product / (norm_AB * norm_BC)
+    angle_radians = np.arccos(cos_angle)
+    angle_degrees = angle_radians * (180.0 / np.pi)
+    cross_product = np.cross(AB, BC)
+    if cross_product[2] < 0:
+        angle_degrees = 360 - angle_degrees
+
+    return angle_degrees, np.linalg.norm(AB)
+
+@njit
+def compute_C_points_and_arc_length(B_points, T_vectors, arc_lengths):
+    C_points = np.empty_like(B_points)
+    for i in range(B_points.shape[0]):
+        B = B_points[i]
+        T = T_vectors[i]
+        lambda_ = -T[2] / (T[0]**2 + T[1]**2)
+        C = B + lambda_ * np.array([T[0], T[1], 0]) + np.array([0, 0, 1])
+        C_points[i] = C
+
+        # Compute arc length
+        if i > 0:
+            prev_B = B_points[i-1]
+            arc_lengths[i] = arc_lengths[i-1] + np.linalg.norm(B - prev_B)
+        else:
+            arc_lengths[i] = 0.0
+    
+    return C_points, arc_lengths
+
+# Precompute the curve points, derivatives, C_points, and arc lengths based on B_points
+num_samples = ring_count * num_samples_factor # around 1mm accuracy
+t_samples = np.linspace(t_extrapolation_start, ring_count + t_extrapolation_end, num_samples)
+B_points = curve_func(t_samples, x_params, y_params, z_params)
+T_vectors = curve_deriv(t_samples, x_params, y_params, z_params)
+arc_lengths = np.zeros(num_samples, dtype=np.float32)
+
+C_points, arc_lengths = compute_C_points_and_arc_length(B_points, T_vectors, arc_lengths)
+
+# Build Faiss index
+index = faiss.IndexFlatL2(3)
+index.add(B_points)
+
+start_time = time.time()
+
+# Define batch size for Faiss search to improve performance
+def process_batch(points_batch):
+    ''' Process a batch of points to find nearest neighbors, angles, and distances '''
+    _, idx_batch = index.search(points_batch, 1)
+    results = []
+    
+    for i in range(points_batch.shape[0]):
+        A = points_batch[i]
+        idx = idx_batch[i][0]
+        B = B_points[idx]
+        C = C_points[idx]
+        angle_ABC, distance_AB = calculate_angle_with_direction(A, B, C)
+        arc_length_B = arc_lengths[idx]
+        results.append((distance_AB, angle_ABC, arc_length_B))
+    
+    return results
+
+# Split points into batches for parallel processing
+num_batches = (len(points_xyz) + batch_size - 1) // batch_size
+points_batches = np.array_split(points_xyz, num_batches)
+
+# Using Joblib for parallel batch processing
+cylindrical_coords_batches = Parallel(n_jobs=n_jobs)(
+    delayed(process_batch)(batch) for batch in tqdm(points_batches, desc="Calculating cylindrical coordinates", total=len(points_batches))
+)
+
+cylindrical_coords = []
+for batch_result in cylindrical_coords_batches:
+    cylindrical_coords.extend(batch_result)
+
+end_time = time.time()
+
+print(f"Total computation time: {end_time - start_time:.6f} seconds")
+# recording data
+import pandas as pd
+
+df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
+df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
+df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
+df_point_cloud.head()
+df_point_cloud.to_csv(paths["unwrapped_csv"],index=False)
+# Algorithm 2: Local point cloud density-difference-based denoising
+import numpy as np
+
+
+df_point_cloud.to_csv(paths["unwrapped_csv"], index=False)
+save_state(paths["state"], {
+    "df_point_cloud": df_point_cloud,
+    "ring_count": ring_count,
+    "resolution": 0.005,
+})
+print(f"Upfolding complete -> {paths['unwrapped_csv']}")
+
