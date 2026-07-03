@@ -25,35 +25,35 @@ T1/T2 gate threshold: mIoU ≥ 0.70 — all **m+s** and **m+s+k** runs pass; **m
 
 Source: `data/ablation/…`, `data/static/…`, `sam4tun/data/3-1-1/…`, `methods/papers/output/t3_tune_summary.md`, `methods/papers/output/t3_hint_loop_summary.md`.
 
-| Pipeline | mIoU | Notes |
-|----------|------|-------|
-| Ablation **m** / **m+s** | 0.045–0.047 | State alone does not help |
-| Ablation **m+s+k** | 0.548 | Large lift from knowledge; below 0.60 single-tunnel target |
-| SAM4Tun.py (axis + resize fixes) | 0.562 | `sam4tun/data/3-1-1` |
-| Static baseline | 0.045 | `data/static/3-1-1` |
-| GT-free tune best single (`hough_low`) | 0.582 | `3-1-1` only; panel mean 0.306 |
-| GT-free tune best panel (`hough_low_flip`) | 0.601 on `3-1-1` | Panel mean 0.331 |
-| Hint loop best panel (T5) | 0.456 on `3-1-1` | Panel mean 0.380 |
+| Pipeline | OA | mIoU | Notes |
+|----------|-----|------|-------|
+| Ablation **m** / **m+s** | 0.316–0.317 | 0.045–0.047 | State alone does not help |
+| Ablation **m+s+k** | 0.757 | 0.548 | Large lift from knowledge; below 0.60 single-tunnel target |
+| SAM4Tun.py (axis + resize fixes) | 0.770 | 0.562 | `sam4tun/data/3-1-1` |
+| Static baseline | 0.312 | 0.045 | `data/static/3-1-1` |
+| GT-free tune best single (`hough_low`) | — | 0.582 | `3-1-1` only; panel mean 0.306 |
+| GT-free tune best panel (`hough_low_flip`) | — | 0.601 on `3-1-1` | Panel mean 0.331 |
+| Hint loop best panel (T5) | — | 0.456 on `3-1-1` | Panel mean 0.380 |
 
 T3 gate: panel mean mIoU ≥ **0.60** across `3-1-1`, `3-1-2`, `3-1-3` — **not met**. Per-tunnel gates on `3-1-1`: T1 ≥ 0.45 ✓, scale ≥ 0.55 ✓ for ablation m+s+k and SAM4Tun fixes. Bottleneck: K detection on `3-1-2`/`3-1-3` (Y-spread 121–159 px); `3-1-1` largely fixed.
 
 ## T4 results (`4-1` gate tunnel)
 
-| Pipeline | mIoU | Notes |
-|----------|------|-------|
-| Static baseline | 0.038 | `data/static/4-1` |
-| Rules-adapted (7.5 m geometry) | 0.157 | ~+0.12 vs static (`data/rules/4-1`) |
-| Ablation **m+s+k** | 0.104 | `data/ablation/memory+state+knowledge/4-1` |
+| Pipeline | OA | mIoU | Notes |
+|----------|-----|------|-------|
+| Static baseline | 0.303 | 0.038 | `data/static/4-1` |
+| Rules-adapted (7.5 m geometry) | 0.372 | 0.157 | ~+0.12 vs static (`data/rules/4-1`) |
+| Ablation **m+s+k** | 0.328 | 0.104 | `data/ablation/memory+state+knowledge/4-1` |
 
 No formal T4 gate defined. Rules-adapted geometry outperforms LLM ablation on this tunnel.
 
 ## T5 results (`5-1` gate tunnel)
 
-| Pipeline | mIoU | Notes |
-|----------|------|-------|
-| Static baseline | 0.037 | `data/static/5-1` |
-| Rules-adapted | 0.142 | `data/rules/5-1` |
-| Ablation **m+s+k** | 0.166 | Best ablation result |
+| Pipeline | OA | mIoU | Notes |
+|----------|-----|------|-------|
+| Static baseline | 0.295 | 0.037 | `data/static/5-1` |
+| Rules-adapted | 0.345 | 0.142 | `data/rules/5-1` |
+| Ablation **m+s+k** | 0.409 | 0.166 | Best ablation result |
 
 No formal T5 gate defined. Same pattern as T4 — very low static baseline, modest gains from rules and ablation.
 
@@ -83,13 +83,13 @@ Highest mIoU in the repo — exceeds T1/T2 gate (0.70) and all benchmark tunnels
 
 ## Summary at a glance
 
-| Family | Gate tunnel | Best current mIoU | Primary gate | Pass? |
-|--------|-------------|-------------------|--------------|-------|
-| **T1** | `1-1` | 0.815 (m+s+k) | ≥ 0.70 | ✓ |
-| **T2** | `2-1` | 0.885 (m+s+k) | ≥ 0.70 | ✓ |
-| **T3** | `3-1-1` | 0.562 (SAM4Tun fixes) / 0.548 (m+s+k) | panel ≥ 0.60 | ✗ |
-| **T4** | `4-1` | 0.157 (rules) | none | ✗ |
-| **T5** | `5-1` | 0.166 (m+s+k) | none | ✗ |
-| **sample** | `sample.txt` | **0.892** (SAM4Tun.py) | — | ✓ |
+| Family | Gate tunnel | Best OA | Best mIoU | Pipeline | Primary gate | Pass? |
+|--------|-------------|---------|-----------|----------|--------------|-------|
+| **T1** | `1-1` | 0.912 | 0.815 | m+s+k | ≥ 0.70 mIoU | ✓ |
+| **T2** | `2-1` | 0.944 | 0.885 | m+s+k | ≥ 0.70 mIoU | ✓ |
+| **T3** | `3-1-1` | 0.770 | 0.562 | SAM4Tun.py fixes | panel ≥ 0.60 mIoU | ✗ |
+| **T4** | `4-1` | 0.372 | 0.157 | rules-adapted | none | ✗ |
+| **T5** | `5-1` | 0.409 | 0.166 | m+s+k | none | ✗ |
+| **sample** | `sample.txt` | 0.942 | 0.892 | SAM4Tun.py | — | ✓ |
 
 **Takeaway:** T1/T2 are solved by agent ablation (memory+state, especially +knowledge). T3 is partially recovered on `3-1-1` (0.55+) but the full T3 panel still fails. T4/T5 remain near-random on static params and only reach ~0.10–0.17 with rules or ablation. `sample.txt` on SAM4Tun.py reaches mIoU **0.892** — the pipeline ceiling.
