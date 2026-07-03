@@ -57,53 +57,29 @@ No formal T4 gate defined. Rules-adapted geometry outperforms LLM ablation on th
 
 No formal T5 gate defined. Same pattern as T4 — very low static baseline, modest gains from rules and ablation.
 
-## Reference tunnel `sample` (`sam4tun/data/sample.txt`)
+## `sample.txt` — SAM4Tun.py mIoU (`sam4tun/data/sample.txt`)
 
-Source: `sam4tun/data/sample.txt` (input), `sam4tun/data/sample/evaluation/performance.md` (semantic), `logs/sample_regression.log` (instance mAP from `6_evaluation.py`).
+Source: `sam4tun/data/sample/evaluation/performance.md` (sklearn 7-class semantic mIoU, same metric as T1–T5 ablation table).
 
-Public reference tunnel used to validate the SAM4Tun.py monolith. Input is a single-station TLS point cloud with ground-truth block and ring labels.
-
-| Property | Value |
-|----------|-------|
-| Input file | `sam4tun/data/sample.txt` |
-| Points | 1,109,768 (6 columns: x, y, z, intensity, block type, ring) |
-| Rings | 10 |
-| Geometry | 5.5 m class, 6 segments per ring |
-| Pipeline | `SAM4Tun.py` monolith (axis swap + template resize fixes) |
-| Run date | 2026-07-02 (`sam4tun/data/sample/`) |
-
-### Semantic segmentation (`evaluation.py`, 7-class)
+Input: `sam4tun/data/sample.txt` — 1,109,768 labelled points, 10 rings, 6 segments/ring. Pipeline: `SAM4Tun.py` monolith with axis swap + template-resize fixes (2026-07-02).
 
 | Metric | Value |
 |--------|------:|
-| OA | **0.942** |
-| F1 | **0.943** |
-| mIoU | **0.892** |
+| OA | 0.942 |
+| F1 | 0.943 |
+| **mIoU** | **0.892** |
 
-Per-class IoU: Background 0.850, K 0.880, B1 0.912, A1 0.914, A2 0.865, A3 0.911, B2 0.912 — all block classes ≥ 0.86.
+| Class | IoU |
+|-------|----:|
+| Background | 0.850 |
+| K-block | 0.880 |
+| B1-block | 0.912 |
+| A1-block | 0.914 |
+| A2-block | 0.865 |
+| A3-block | 0.911 |
+| B2-block | 0.912 |
 
-### Ring-instance segmentation (`6_evaluation.py`)
-
-| Metric | Value |
-|--------|------:|
-| mAP@50–95 | 0.570 |
-| mAP@50 | **0.815** |
-| mAP@75 | 0.664 |
-| mAP@90 | 0.247 |
-
-At IoU 0.50: 53 TP / 5 FP / 7 FN across 60 ring-instances (6 block types × 10 rings).
-
-### vs pre-fix baseline (2026-06-25, `data/sample.txt`)
-
-Prior SAM4Tun run before axis swap and template-resize fixes:
-
-| Metric | Pre-fix | Post-fix | Δ |
-|--------|--------:|---------:|--:|
-| mIoU | 0.645 | **0.892** | **+0.247** |
-| OA | 0.829 | **0.942** | +0.113 |
-| F1 | 0.773 | **0.943** | +0.170 |
-
-The post-fix run exceeds the prior oracle-swap ceiling (mIoU 0.874 on old masks) without any GT relabelling — the fixes recover most of the class-swap error that dominated the old baseline. This is the practical upper bound for the fixed-template SAM4Tun pipeline and surpasses all T1–T5 benchmark results above.
+Highest mIoU in the repo — exceeds T1/T2 gate (0.70) and all benchmark tunnels. Prior run on the same `sample.txt` before the SAM4Tun.py fixes scored mIoU **0.645** (+0.247).
 
 ## Summary at a glance
 
@@ -114,8 +90,6 @@ The post-fix run exceeds the prior oracle-swap ceiling (mIoU 0.874 on old masks)
 | **T3** | `3-1-1` | 0.562 (SAM4Tun fixes) / 0.548 (m+s+k) | panel ≥ 0.60 | ✗ |
 | **T4** | `4-1` | 0.157 (rules) | none | ✗ |
 | **T5** | `5-1` | 0.166 (m+s+k) | none | ✗ |
-| **sample** | `sample` | **0.892** (SAM4Tun.py) | reference | ✓ (ceiling) |
+| **sample** | `sample.txt` | **0.892** (SAM4Tun.py) | — | ✓ |
 
-Reference tunnel `sample` on SAM4Tun.py reaches mIoU **0.892** — see section above for full metrics and comparison to pre-fix baseline.
-
-**Takeaway:** T1/T2 are solved by agent ablation (memory+state, especially +knowledge). T3 is partially recovered on `3-1-1` (0.55+) but the full T3 panel still fails. T4/T5 remain near-random on static params and only reach ~0.10–0.17 with rules or ablation. The reference `sample` tunnel validates the fixed SAM4Tun.py pipeline at mIoU **0.892**, setting the ceiling that benchmark adaptation must approach.
+**Takeaway:** T1/T2 are solved by agent ablation (memory+state, especially +knowledge). T3 is partially recovered on `3-1-1` (0.55+) but the full T3 panel still fails. T4/T5 remain near-random on static params and only reach ~0.10–0.17 with rules or ablation. `sample.txt` on SAM4Tun.py reaches mIoU **0.892** — the pipeline ceiling.
