@@ -24,18 +24,6 @@ df_point_cloud = state["df_point_cloud"]
 ring_count = state["ring_count"]
 resolution = state.get("resolution", 0.005)
 
-print(f"Total computation time: {end_time - start_time:.6f} seconds")
-# recording data
-import pandas as pd
-
-diameter = 5.5
-df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
-df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
-df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
-df_point_cloud.head()
-df_point_cloud.to_csv(_out('sample_unwrapped.csv'),index=False)
-# Algorithm 2: Local point cloud density-difference-based denoising
-import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 from tqdm.notebook import tqdm
@@ -180,6 +168,16 @@ for x_min in x_bins[:-1]:
     # Update filtered out points 'pred' to 0
     # Corrected: apply filtered_mask directly to the indices of mask_x
     filtered_out_indices = filtered_df.index[mask_x][~filtered_mask]
+    df_point_cloud.loc[filtered_out_indices, 'pred'] = 0
+
+# Output the number of filtered points
+filtered_points_count = (df_point_cloud['pred'] == 7).sum()
+print(f"Remaining points count: {filtered_points_count}")
+
+# End the timer
+end_time = time.time()
+execution_time = end_time - start_time
+print(f"Execution time: {execution_time:.2f} seconds")
 
 
 df_point_cloud.to_csv(paths["denoised_csv"], index=False)

@@ -12,12 +12,11 @@
 - **Geometry**: 5.5 m nominal diameter (similar to T1/T2)
 - **Key difference**: Continuous joints instead of staggered
 - **Data formation**: Multi-station registration creating more uniform density distribution
-- **SAM4Tun adaptations**:
-  - **No upsampling** applied due to uniform density
-  - **Global outlier threshold**: 0.01 m
+- **SAM4Tun adaptations (sam4tun/agents subset)**:
+  - Subset point counts are **much lower** than legacy full-cloud pipelines — upsampling and gap-fill are usually required
+  - Run **DEPTH_MAP_COVERAGE_GATE** after denoising; tune `window_size`, upsampling, and depth thresholds from `median_NN` and `h/θ` spans
+  - **Global outlier threshold**: use `depth_threshold_low` / `depth_threshold_high` pair — lower low threshold when peripheral white bands dominate
   - **Detection logic**: Reuses T1/T2 approach with fallback for horizontal-segment detection failures
-  - **Template customization**: Adjusted prompts for T3's specific segment dimensions and bolt-hole locations
-- **Evaluation scope**: First 50 rings spanning two stations
 
 ### Large Tunnels (T4 & T5)
 - **Geometry**: 7.5 m inner diameter (larger scale)
@@ -38,7 +37,7 @@ The five tunnels span:
 - **Scanning configurations**: Single-station TLS (T1/T2/T4/T5) vs multi-station registration (T3)
 
 ### Parameter Adaptation Strategy
-- **Uniform-density tunnels** (T3): Drop upsampling, adjust prompts
+- **Uniform-density tunnels** (T3 on full cloud): may reduce upsampling; **sam4tun subset** still needs coverage tuning
 - **Larger-diameter tunnels** (T4/T5): Split scenes into density regions with distinct thresholds
 - **Core pipeline**: Downstream processing remains largely unchanged across variations
 - **Customization focus**: Pre-processing choices adapt to geometric and scanning differences
@@ -71,11 +70,30 @@ The upsampling / interpolation stage (Algorithm 3) uses `agents/ablation/{cond
 - **depth_threshold_low / depth_threshold_high (m)** – intensity of radial deviation required to mark “meaningful” outliers in low- vs high-density sections. Empirical ranges: **0.003–0.006** (low) and **0.008–0.015** (high).
 - **inter_radius (m)** – search radius when picking outlier pairs for joint enhancement. Values between **0.03–0.08** cover all tunnels (shorter for dense stations, longer for sparse large-diameter scans).
 - **duplicate_threshold (m)** – minimum spacing between newly generated points (default **0.02**). Increase slightly if you observe overlapping interpolations in T4/T5.
-- **n_segment_start / n_segment_end** – defines the high-density window (in ring indices) around the scanner to apply stricter thresholds. Use **0–5** when the scanner sits near the first ring, up to **10–21** when the scanner is embedded deeper (T4/T5).
+- **n_segment_start / n_segment_end** – high-density window in ring indices. **`n_segment_end = segment_per_ring − 1`** (5 for 6-seg T1–T3, 6 for 7-seg T4/T5). T1/T2: keep sample `0–5`.
 - **num_neighbors** – number of neighbors queried in KDTree lookups, typically **20**. Raising it increases smoothing but costs time.
 - **num_interpolations** – number of points inserted per qualifying pair (usually **2**).
 - **resolution (m)** – target grid resolution when projecting to depth maps; the pipeline assumes **0.005** and downstream SAM processing expects the same.
-- **window_size (px)** – sliding window for filling missing pixels during projection. Choose **5** for dense data and **9** when large gaps exist (e.g., 7.5 m tunnels).
+- **window_size (px)** – sliding window for filling missing pixels during projection. Default **9**. Increase to **11–13** when depth maps show >15% white space after adequate denoise retention; each +2 fills wider NaN neighborhoods via nearest-neighbor interpolation.
+
+## Enhancing — DEPTH_MAP_WHITE_SPACE (CoT domain knowledge)
+
+White pixels = no projected point in that `(h, θ)` bin at `resolution=0.005`, after optional `window_size` fill.
+
+**Diagnose before tuning:**
+
+| Signal | Interpretation |
+|--------|----------------|
+| Denoise retention ≥ 50% but map still >15% white | COVERAGE_FAILURE — enhancing issue |
+| Edge white > center white | Peripheral gap-fill weak — lower `depth_threshold_low`, increase `window_size` |
+| Stage-1 upsampling adds < 10k points | `upsampling_stage1` too coarse vs `median_NN` — reduce stage1 |
+| "Number of new added points" < 500 | Raise `inter_radius` or lower depth thresholds |
+| `ring_count` ≫ `n_segment_end` | Expand `n_segment_end` to `ring_count − 1` |
+
+**Parameter interaction (white-space reduction):**
+- Finer upsampling → more `df_enhance_segment` points → more occupied bins
+- Lower depth thresholds → more `enhance_outlier_points` joint fill → fills θ/h holes
+- Larger `window_size` → fills isolated NaNs without new points (last resort; can blur)
 
 ## Enhancing — Classification Criteria (CoT domain knowledge)
 
@@ -130,4 +148,4 @@ Reference block is sam4tun starting-point — **proven defaults supersede** for 
 - **inter_radius**: Default 0.03. CRITICAL-SPARSE → 0.05–0.08; larger can blur detail.
 - **duplicate_threshold**: Default 0.02; range 0.015–0.03 as needed.
 - **num_neighbors, num_interpolations**: Default 20, 2 — generally stable.
-- **resolution, window_size**: Default 0.005, 9 — stable unless extreme quality issues.
+- **resolution, window_size**: resolution fixed **0.005**. `window_size` default 9; **11–13** for COVERAGE_FAILURE on T3/multi-station tunnels.

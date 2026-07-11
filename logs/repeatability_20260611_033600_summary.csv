@@ -1,0 +1,12 @@
+tunnel,model,run2_source,run1_miou,run2_miou,params_identical,pipeline_ran,status
+1-1,opus4.6,inference,0.617,,True,,orchestrator_fail
+1-1,gpt5.4,inference,0.619,,True,,orchestrator_fail
+1-1,gemini3flash,inference,0.584,,True,,orchestrator_fail
+1-2,opus4.6,inference,0.608,,True,,orchestrator_fail
+1-2,gpt5.4,inference,0.619,,True,,orchestrator_fail
+1-2,gemini3flash,inference,0.62,,True,,orchestrator_fail
+1-3,opus4.6,inference,0.658,,True,,orchestrator_fail
+1-3,gpt5.4,inference,0.554,,True,,orchestrator_fail
+1-3,gemini3flash,inference,0.565,,True,,orchestrator_fail
+1-4,opus4.6,inference,0.436,,True,,orchestrator_fail
+1-4,gpt5.4,inference,0.427,,True,,orchestrator_fail

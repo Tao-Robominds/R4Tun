@@ -12,6 +12,7 @@ if str(_agents_dir) not in sys.path:
     sys.path.insert(0, str(_agents_dir))
 
 from memory_ablation_context import (
+    load_similar_to_sample_block,
     load_raw_characteristics_pair,
     load_stage_parameters_pretty,
     pipeline_tunnel_data_dir,
@@ -28,13 +29,13 @@ class UnfoldingAnalyser:
         self.api_key = "app-2YyQbd7yv14XBQCf2DL3bifh"
         self.base_url = "https://api.dify.ai/v1"
 
-    def load_analysis_data(self):
+    def load_analysis_data(self, model_tag: str = "glm"):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
-        code_path = Path("sam4tun/1_upfolding.py")
+        code_path = Path("sam4tun/agents/unfolding.py")
         code_content = read_required_text(code_path, "Sample unfolding code")
         archive_name = "parameters_unfolding.json"
-        params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name)
+        params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name, model_tag)
         return {
             "role": role_content,
             "sample_raw": sample_raw,
@@ -45,13 +46,16 @@ class UnfoldingAnalyser:
             "archive_filename": archive_name,
         }
 
-    def build_llm_prompt_markdown(self) -> str:
+    def build_llm_prompt_markdown(self, model_tag: str = "glm") -> str:
         """Exact LLM user message used by Dify; also exported to parameters_unfolding.md for copy-paste."""
-        ctx = self.load_analysis_data()
+        ctx = self.load_analysis_data(model_tag)
+        similar_block = load_similar_to_sample_block(self.tunnel_id)
+        similar_section = (similar_block + "\n\n") if similar_block else ""
         return f"""
 # ROLE
 {ctx["role"]}
 
+{similar_section}
 # SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)
 ```json
 {ctx["sample_raw"]}

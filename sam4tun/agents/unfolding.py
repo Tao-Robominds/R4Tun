@@ -35,9 +35,9 @@ from numba import njit, prange
 import faiss
 from joblib import Parallel, delayed
 
-tunnel_id = parse_pipeline_args("unfolding")
-params = load_stage_parameters(tunnel_id, "unfolding")
-param_file = resolve_param_file(tunnel_id, "unfolding")
+tunnel_id, ablation, model = parse_pipeline_args("unfolding")
+params = load_stage_parameters(tunnel_id, "unfolding", ablation, model)
+param_file = resolve_param_file(tunnel_id, "unfolding", ablation, model)
 expected_keys = [
     "delta", "slice_spacing_factor", "vertical_filter_window",
     "ransac_threshold", "ransac_probability", "ransac_inlier_ratio",
@@ -350,7 +350,8 @@ class RANSAC:
             # Update the best model if current inliers are better
             if inliers_count > self.count:
                 self.count = inliers_count
-                self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
+                if len(inliers_set) >= 5:
+                    self.best_model = cv2.fitEllipse(inliers_set)  # Fit ellipse on inliers
 
                 # Check if we have reached the expected number of inliers
                 if self.count > self.max_inliers:
@@ -360,6 +361,10 @@ class RANSAC:
                 # Update number of iterations
                 self.items = math.log(1 - self.P) / math.log(1 - (inliers_count / len(self.point_data))**self.N)
 
+        if self.best_model is None:
+            raise RuntimeError(
+                f"RANSAC failed: no ellipse model with >=5 inliers ({len(self.point_data)} points)"
+            )
         return self.best_model, inliers_set
 # Initialize lists to store ellipse centers
 X_center = []
@@ -376,14 +381,20 @@ for i in range(len(slicing_cloud)):
 
     # First RANSAC fit to find initial inliers
     ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
-    # _, inliers_set = ransac.execute_ransac()
-    _, inliers_set = ransac.execute_ransac()
-    
+    ellipse_params, inliers_set = ransac.execute_ransac()
 
     # Refine fit using inliers from the first RANSAC
-    points_data = np.reshape(inliers_set, (-1, 2))
-    ransac = RANSAC(data=points_data, threshold=ransac_threshold, P=ransac_probability, S=ransac_inlier_ratio, N=ransac_sample_size, initial_iterations=ransac_initial_iterations, inlier_threshold_multiplier=ransac_inlier_threshold_multiplier)
-    ellipse_params, _ = ransac.execute_ransac()
+    refine_pts = np.reshape(inliers_set, (-1, 2))
+    if len(refine_pts) >= 5:
+        ransac_refine = RANSAC(
+            data=refine_pts, threshold=ransac_threshold, P=ransac_probability,
+            S=ransac_inlier_ratio, N=ransac_sample_size,
+            initial_iterations=ransac_initial_iterations,
+            inlier_threshold_multiplier=ransac_inlier_threshold_multiplier,
+        )
+        ellipse_params, _ = ransac_refine.execute_ransac()
+    else:
+        print(f"  Plane {i}: skipping refine RANSAC ({len(refine_pts)} inliers < 5)")
 
     # Extract center coordinates
     # ((X, Y), _, _) = ellipse_params

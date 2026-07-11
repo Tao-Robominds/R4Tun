@@ -16,6 +16,9 @@ from sam4tun.plugins.paths import tunnel_characteristics_dir
 
 SAMPLE_RAW_PATH = Path("data/sample/characteristics/raw_characteristics.json")
 RAW_FILENAME = "raw_characteristics.json"
+PARAM_BASE = Path("sam4tun/agents/parameters/memory")
+SAMPLE_PARAM_DIR = Path("sam4tun/agents/parameters/sample")
+SHARED_SIMILAR_PATH = Path("agents/ablation/shared/similar_to_sample.md")
 
 
 def pipeline_tunnel_data_dir(tunnel_id: str) -> Path:
@@ -51,21 +54,36 @@ def load_raw_characteristics_pair(tunnel_id: str) -> tuple[str, str]:
     return sample, tunnel
 
 
-def load_stage_parameters_pretty(tunnel_id: str, archive_filename: str) -> tuple[str, str]:
-    """
-    Prefer ``agents/ablation/memory/parameters/<tunnel_id>/<archive_filename>`` so the
-    prompt + schema table match the on-disk archive; else ``agents/parameters/sample/<archive_filename>``.
+def load_similar_to_sample_block(tunnel_id: str) -> str:
+    if not (
+        tunnel_id.startswith("1-")
+        or tunnel_id.startswith("2-")
+        or tunnel_id.startswith("3-")
+    ):
+        return ""
+    text = read_required_text(SHARED_SIMILAR_PATH, "SIMILAR_TO_SAMPLE guidance")
+    return f"# SIMILAR_TO_SAMPLE REGIME (T1/T2 — target mIoU ≥ 0.70)\n\n{text}"
 
-    Returns (pretty-printed JSON, header note for the prompt).
-    """
-    archive_path = Path("agents/ablation/memory/parameters") / tunnel_id / archive_filename
-    sample_path = Path("agents/parameters/sample") / archive_filename
+
+def load_stage_parameters_pretty(
+    tunnel_id: str, archive_filename: str, model_tag: str = "glm"
+) -> tuple[str, str]:
+    tunnel_dir = PARAM_BASE / tunnel_id
+    stem = archive_filename.removesuffix(".json")
+    suffixed = tunnel_dir / f"{stem}_m_{model_tag}.json"
+    if suffixed.exists():
+        text = read_required_json_pretty(suffixed, f"Parameters at {suffixed}")
+        return text, f"Archived tunnel parameters (`{suffixed.as_posix()}`)."
+    archive_path = tunnel_dir / archive_filename
     if archive_path.exists():
         text = read_required_json_pretty(archive_path, f"Archived parameters at {archive_path}")
-        note = f"Archived tunnel parameters (same file you will save as `{archive_path.as_posix()}`)."
-        return text, note
+        return text, f"Archived tunnel parameters (`{archive_path.as_posix()}`)."
+    sample_path = SAMPLE_PARAM_DIR / archive_filename
     text = read_required_json_pretty(sample_path, f"Sample parameters at {sample_path}")
-    note = f"Sample parameters (`{sample_path.as_posix()}`); no archive yet for tunnel `{tunnel_id}`."
+    note = (
+        f"Frozen sam4tun sample parameters (`{sample_path.as_posix()}`); "
+        f"for T1/T2 retain these unless raw evidence shows a named failure."
+    )
     return text, note
 
 

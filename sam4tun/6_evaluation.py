@@ -14,24 +14,12 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from pipeline_io import ensure_dir
+from helpers.pipeline_io import ensure_dir
 
 tunnel_id = sys.argv[1]
 paths = ensure_dir(tunnel_id)
 
-    return df_copy
-updated_df = project_back_to_point_cloud(result_image, fix_ring, pixel_to_point, df_point_cloud)
-updated_df.head()
-updated_df.to_csv(_out('final.csv'),index=False)
-df_pred = pd.DataFrame()
-df_pred['gt_labels'] = updated_df['segment']
-df_pred['gt_rings'] = updated_df['ring']
-df_pred['pred_labels'] = updated_df['pred']
-df_pred['pred_rings'] = updated_df['pred_ring']
-df_pred.to_csv(_out('only_label.csv'),index=False)
-# =============for single station============
-import pandas as pd
-test = pd.read_csv(_out('only_label.csv'))
+test = pd.read_csv(paths["only_label"])
 test
 # =================  start evaluation  =================
 gt_rings = test['gt_rings'].values.astype(int)
@@ -255,5 +243,14 @@ print(f"{overall_accuracy:.4f}")
 print(f"{mean_class_acc:.4f}")
 print(f"{mean_iou:.4f}")
 print(f"{f1_scores:.4f}")
+
+for idx, acc in enumerate(class_accuracy):
+    print(f"{acc:.4f}")
+
+for idx, iou in enumerate(ious):
+    print(f"{iou:.4f}")
+
+for idx, f1_score in enumerate(per_class_f1_scores):
+    print(f"{f1_score:.4f}")
 
 

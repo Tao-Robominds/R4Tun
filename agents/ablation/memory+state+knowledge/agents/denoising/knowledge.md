@@ -112,6 +112,19 @@ The REFERENCE PARAMETERS block in the prompt is sam4tun starting-point defaults 
 | smoothing_window_size 3 | **5** |
 | smoothing_offset -0.003 | **-0.002** |
 
+## Denoising — MASK_RETENTION_GATE (T3 critical)
+
+Before any other tuning, compute `wall_pct` inside proposed `[mask_r_low, mask_r_high]`.
+
+| Failure mode | Symptom | Action |
+|--------------|---------|--------|
+| Sample mask on T3 | `wall_pct < 15%`, sparse depth map | Widen from percentiles; never keep `[2.7,2.8]` |
+| Rules mask on T3 | `p50 > 2.9` with mask_high=2.9 | Use `[p10−0.02, p99+0.02]` — rules too narrow |
+| `mask_r_high < p99` | Wall shell clipped — catastrophic retention drop | Set `mask_r_high = p99 + 0.02` minimum |
+| Wide mask on T3 | retention > 90% with interior noise | Tighten high bound toward p99 + 0.02 |
+
+Legacy "proven defaults" apply only when they **improve** retention vs reference JSON — they do not override a passing percentile-derived mask.
+
 ## Denoising — Proven Robust Defaults
 
 - **y_step** = 0.4

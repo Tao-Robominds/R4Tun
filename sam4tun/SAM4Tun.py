@@ -36,7 +36,6 @@ df_point_cloud.head()
 ## 1. Determine direction vector
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-from helpers.tunnel_direction import orient_centers_by_ring
 
 # Obtain minimum bounding rectangle for the 2D XOY projection
 points_2d_xoy = points_xyz[:, :2]
@@ -55,13 +54,12 @@ short_edge_index = np.argmin(edges)
 # Determine the centers of the two short sides
 center1 = (rect_vertices[short_edge_index] + rect_vertices[(short_edge_index + 1) % 4]) / 2
 center2 = (rect_vertices[(short_edge_index + 2) % 4] + rect_vertices[(short_edge_index + 3) % 4]) / 2
-center1, center2, ring_rho, ring_swapped = orient_centers_by_ring(points_xyz, ring, center2, center1)
-print(f"Ring-axis Spearman rho={ring_rho:.4f}, swapped={ring_swapped}")
+center1, center2 = center2, center1  # swapped: shield-machine forward direction
 
 vector = center2 - center1
 print(vector)
 # if you want to visualize
-#=========important: vector direction is auto-oriented by ring metadata (see tunnel_direction.py)========= 
+#=========important: Ensure that the vector direction is consistent with the forward direction of the shield machine========= 
 import matplotlib.pyplot as plt
 
 # Visualization

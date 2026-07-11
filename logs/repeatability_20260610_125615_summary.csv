@@ -1,0 +1,10 @@
+tunnel,model,run2_source,run1_miou,run2_miou,params_identical,pipeline_ran,status
+4-4,opus4.6,harvested,0.245,0.047,,,harvested
+4-4,gpt5.4,harvested,0.133,0.075,,,harvested
+4-4,gemini3flash,harvested,0.108,0.108,,,harvested
+5-3,opus4.6,harvested,0.178,0.178,,,harvested
+5-3,gpt5.4,harvested,0.124,0.124,,,harvested
+5-3,gemini3flash,harvested,0.143,0.143,,,harvested
+5-4,opus4.6,harvested,0.207,0.207,,,harvested
+5-4,gpt5.4,harvested,0.098,0.098,,,harvested
+5-4,gemini3flash,harvested,0.122,0.118,,,harvested

@@ -15,7 +15,7 @@ SAM4Tun reference defaults for enhancing:
 - depth_threshold_low / depth_threshold_high = 0.003 / 0.008
 - inter_radius = 0.06
 - duplicate_threshold = 0.02
-- n_segment_start = 0, n_segment_end = 6 (regular) or 7+ (complex)
+- n_segment_start = 0, n_segment_end = segment_per_ring − 1 (5 for 6-seg, 6 for 7-seg)
 - num_neighbors = 20, num_interpolations = 2
 - resolution = 0.005, window_size = 9
 
@@ -23,6 +23,45 @@ For complex tunnels (4-\*, 5-\*) where geometry differs significantly from the
 sample tunnel, prefer SAM4Tun reference defaults as the safe starting point.
 The "proven robust defaults" listed later in this document were calibrated on
 regular/continuous tunnel types and may not generalise to complex tunnels.
+
+### 0b. DEPTH-MAP FUNNEL (read after denoising state)
+
+If denoised state shows **retention < 50%** on T3 (`3-*`) OR **mapped_points < 50,000**:
+
+- **STOP** — denoising mask is still wrong; do not tune upsampling/`window_size`.
+- Report MASK_FAILURE and return to denoising with wider `mask_r_high ≥ p99 + 0.02`.
+
+For T1/T2, keep the 20% / 50k threshold.
+
+### 0c. DEPTH_MAP_COVERAGE_GATE (mandatory when denoise retention ≥ 20%)
+
+White pixels in `depth_map.png` are **NaN cells** after projecting `(h, θ, r)` at `resolution=0.005`. High denoise retention alone does not guarantee a filled map.
+
+**Estimate coverage before choosing parameters:**
+
+```
+grid_cells ≈ (h_span / resolution) × (theta_span / resolution)
+point_density = valid_denoised_points / grid_cells
+```
+
+**COVERAGE_FAILURE** if `point_density < 0.08` OR denoised state shows median NN distance > 1.2× `upsampling_stage1_target_distance`.
+
+**Peripheral vs central gaps:** if edge white fraction > central white + 10pp, prioritize `depth_threshold_low`, larger `window_size`, and finer upsampling — not denoise mask widening.
+
+**Tuning order (apply only with evidence; document each change):**
+
+| Lever | Effect | Rule |
+|-------|--------|------|
+| `window_size` | Interpolates NaN neighborhoods post-projection | 9 → 11 → 13 for scattered gaps; max 15 |
+| `upsampling_stage1/2/3` | Midpoint density before projection | stage1 ≈ `0.85 × median_NN`; stage2 = stage1/2; stage3 = stage1/4 |
+| `depth_threshold_low` | Outlier gap-fill outside n_segment band | Lower toward 0.003 when peripheral gaps |
+| `depth_threshold_high` | Outlier gap-fill inside n_segment band | Lower when central gaps persist |
+| `inter_radius` | Pairwise outlier interpolation reach | Increase when gap-fill adds < 500 points |
+| `num_interpolations` | Points per outlier pair | 3 when gap-fill < 1000 points |
+| `curvature_threshold` | Midpoint acceptance in upsampling | Increase up to 0.008 if stage-1 adds < 10k points |
+| `n_segment_end` | Ring window for dual thresholds | **`ring_count − 1`** when `ring_count` known; not only `segment_per_ring − 1` |
+
+For T3 (`3-*`): sam4tun subsets are sparser than legacy full-cloud runs — **do not skip upsampling**; run COVERAGE_GATE even when density looks uniform.
 
 ### 1. ANCHORING
 Compare the current tunnel's denoised point cloud characteristics against the sample baseline to establish differences that affect enhancing performance.
@@ -49,7 +88,8 @@ Consult DOMAIN KNOWLEDGE for reference vs proven defaults, proven robust default
 
 **Adaptation principles:**
 - Apply adjustments ONLY when justified by clear evidence from steps 1-3
-- For SIMILAR tunnels: use proven robust defaults in DOMAIN KNOWLEDGE (NOT reference parameters alone)
+- For SIMILAR / T1/T2 tunnels: keep **REFERENCE PARAMETERS** unless state shows a named failure.
+- For T3 (`3-*`) and any tunnel with COVERAGE_FAILURE: apply **DEPTH_MAP_COVERAGE_GATE** levers in order; do not copy external parameter sets.
 - Large curvature differences (>100%) often reflect processing variations — verify significance
 - Moderate density differences (<25%) and curvature changes (<150%) should lean towards SIMILAR classification
 - curvature_threshold 0.005 is robust across tunnel types — prefer keeping unless extreme validated differences

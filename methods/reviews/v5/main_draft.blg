@@ -1,0 +1,58 @@
+This is BibTeX, Version 0.99e (TeX Live 2026)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main_draft.aux
+The style file: model1-num-names.bst
+Database file #1: references.bib
+Warning--I didn't find a database entry for "bran2024chemcrow"
+Warning--I didn't find a database entry for "wang2026serialformer"
+Warning--I didn't find a database entry for "yang2024yologsd"
+Warning--I didn't find a database entry for "liang2026ecayolo"
+Warning--I didn't find a database entry for "franceschelli2024training"
+Warning--I didn't find a database entry for "ge2024cracksam"
+Warning--I didn't find a database entry for "pan2024zero"
+Warning--I didn't find a database entry for "lin2024seg2tunnel"
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Warning--empty pages in qi2017pointnet
+Warning--empty pages in liu2023openshape
+You've used 45 entries,
+            2918 wiz_defined-function locations,
+            893 strings with 16196 characters,
+and the built_in function-call counts, 39100 in all, are:
+= -- 2530
+> -- 2730
+< -- 9
++ -- 1027
+- -- 975
+* -- 5244
+:= -- 5853
+add.period$ -- 86
+call.type$ -- 45
+change.case$ -- 553
+chr.to.int$ -- 44
+cite$ -- 47
+duplicate$ -- 2478
+empty$ -- 2132
+format.name$ -- 1110
+if$ -- 6869
+int.to.chr$ -- 2
+int.to.str$ -- 1
+missing$ -- 589
+newline$ -- 234
+num.names$ -- 180
+pop$ -- 931
+preamble$ -- 1
+purify$ -- 549
+quote$ -- 0
+skip$ -- 481
+stack$ -- 0
+substring$ -- 968
+swap$ -- 2221
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 405
+warning$ -- 2
+while$ -- 167
+width$ -- 0
+write$ -- 636
+(There were 10 warnings)

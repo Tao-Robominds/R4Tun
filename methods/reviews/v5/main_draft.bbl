@@ -1,0 +1,234 @@
+\begin{thebibliography}{45}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+\providecommand{\url}[1]{\texttt{#1}}
+\providecommand{\href}[2]{#2}
+\providecommand{\path}[1]{#1}
+\providecommand{\DOIprefix}{doi:}
+\providecommand{\ArXivprefix}{arXiv:}
+\providecommand{\URLprefix}{URL: }
+\providecommand{\Pubmedprefix}{pmid:}
+\providecommand{\doi}[1]{\href{http://dx.doi.org/#1}{\path{#1}}}
+\providecommand{\Pubmed}[1]{\href{pmid:#1}{\path{#1}}}
+\providecommand{\bibinfo}[2]{#2}
+\ifx\xfnm\relax \def\xfnm[#1]{\unskip,\space#1}\fi
+%Type = Article
+\bibitem[{Attard et~al.(2018)Attard, Debono, Valentino, and Castro}]{attard2018}
+\bibinfo{author}{L.~Attard}, \bibinfo{author}{C.~J. Debono}, \bibinfo{author}{G.~Valentino}, \bibinfo{author}{M.~D. Castro},
+\newblock \bibinfo{title}{Tunnel inspection using photogrammetric techniques and image processing: A review},
+\newblock \bibinfo{journal}{ISPRS Journal of Photogrammetry and Remote Sensing} \bibinfo{volume}{144} (\bibinfo{year}{2018}) \bibinfo{pages}{180--188}. \DOIprefix\doi{10.1016/j.isprsjprs.2018.07.004}.
+%Type = Article
+\bibitem[{Weidner and Walton(2024)}]{weidner2024generalized}
+\bibinfo{author}{L.~Weidner}, \bibinfo{author}{G.~Walton},
+\newblock \bibinfo{title}{Generalized extraction of bolts, mesh, and rock in tunnel point clouds: a critical comparison of geometric feature-based methods using random forest and neural networks},
+\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{16} (\bibinfo{year}{2024}) \bibinfo{pages}{678}. \DOIprefix\doi{10.3390/rs16040678}.
+%Type = Article
+\bibitem[{Huang et~al.(2021)Huang, Ninić, and Zhang}]{huang2021bim}
+\bibinfo{author}{M.~Q. Huang}, \bibinfo{author}{J.~Ninić}, \bibinfo{author}{Q.~B. Zhang},
+\newblock \bibinfo{title}{Bim, machine learning and computer vision techniques in underground construction: current status and future perspectives},
+\newblock \bibinfo{journal}{Tunnelling and Underground Space Technology} \bibinfo{volume}{108} (\bibinfo{year}{2021}) \bibinfo{pages}{103677}. \DOIprefix\doi{10.1016/j.tust.2020.103677}.
+%Type = Article
+\bibitem[{Sjölander et~al.(2023)Sjölander, Belloni, Ansell, and Nordström}]{sjolander2023towards}
+\bibinfo{author}{A.~Sjölander}, \bibinfo{author}{V.~Belloni}, \bibinfo{author}{A.~Ansell}, \bibinfo{author}{E.~Nordström},
+\newblock \bibinfo{title}{Towards automated inspections of tunnels: a review of optical inspections and autonomous assessment of concrete tunnel linings},
+\newblock \bibinfo{journal}{Sensors} \bibinfo{volume}{23} (\bibinfo{year}{2023}) \bibinfo{pages}{5457}. \DOIprefix\doi{10.3390/s23125457}.
+%Type = Article
+\bibitem[{Montero et~al.(2015)Montero, Victores, Martínez, Jardón, and Balaguer}]{montero2015}
+\bibinfo{author}{R.~Montero}, \bibinfo{author}{J.~G. Victores}, \bibinfo{author}{S.~Martínez}, \bibinfo{author}{A.~Jardón}, \bibinfo{author}{C.~Balaguer},
+\newblock \bibinfo{title}{Past, present and future of robotic tunnel inspection},
+\newblock \bibinfo{journal}{Automation in Construction} \bibinfo{volume}{59} (\bibinfo{year}{2015}) \bibinfo{pages}{99--112}. \DOIprefix\doi{10.1016/j.autcon.2015.07.001}.
+%Type = Article
+\bibitem[{Strauss et~al.(2020)Strauss, Bien, Neuner, Harmening, Seywald, Österreicher, Voit, Pistone, Spyridis, and Bergmeister}]{strauss2020sensing}
+\bibinfo{author}{A.~Strauss}, \bibinfo{author}{J.~Bien}, \bibinfo{author}{H.~Neuner}, \bibinfo{author}{C.~Harmening}, \bibinfo{author}{C.~Seywald}, \bibinfo{author}{M.~Österreicher}, \bibinfo{author}{K.~Voit}, \bibinfo{author}{E.~Pistone}, \bibinfo{author}{P.~Spyridis}, \bibinfo{author}{K.~Bergmeister},
+\newblock \bibinfo{title}{Sensing and monitoring in tunnels: testing and monitoring methods for the assessment of tunnels},
+\newblock \bibinfo{journal}{Structural Concrete} \bibinfo{volume}{21} (\bibinfo{year}{2020}) \bibinfo{pages}{1234--1248}. \DOIprefix\doi{10.1002/suco.201900456}.
+%Type = Article
+\bibitem[{Duan et~al.(2023)Duan, Qiu, Jin, Lu, and Li}]{duan2023high}
+\bibinfo{author}{Y.~Duan}, \bibinfo{author}{S.~Qiu}, \bibinfo{author}{W.~Jin}, \bibinfo{author}{T.~Lu}, \bibinfo{author}{X.~Li},
+\newblock \bibinfo{title}{High-speed rail tunnel panoramic inspection image recognition technology based on improved yolov5},
+\newblock \bibinfo{journal}{Sensors} \bibinfo{volume}{23} (\bibinfo{year}{2023}) \bibinfo{pages}{6786}. \DOIprefix\doi{10.3390/s23156786}.
+%Type = Article
+\bibitem[{Cha et~al.(2024)Cha, Ali, Lewis, and Buyukozturk}]{cha2024deep}
+\bibinfo{author}{Y.~J. Cha}, \bibinfo{author}{R.~Ali}, \bibinfo{author}{J.~Lewis}, \bibinfo{author}{O.~Buyukozturk},
+\newblock \bibinfo{title}{Deep learning-based structural health monitoring},
+\newblock \bibinfo{journal}{Automation in Construction} \bibinfo{volume}{161} (\bibinfo{year}{2024}) \bibinfo{pages}{105324}. \DOIprefix\doi{10.1016/j.autcon.2024.105324}.
+%Type = Article
+\bibitem[{Su et~al.(2024)Su, Hu, Yang, and Huo}]{su2024review}
+\bibinfo{author}{C.~Su}, \bibinfo{author}{Q.~Hu}, \bibinfo{author}{Z.~Yang}, \bibinfo{author}{R.~Huo},
+\newblock \bibinfo{title}{A review of deep learning applications in tunneling and underground engineering in china},
+\newblock \bibinfo{journal}{Applied Sciences} \bibinfo{volume}{14} (\bibinfo{year}{2024}) \bibinfo{pages}{3234}. \DOIprefix\doi{10.3390/app14083234}.
+%Type = Article
+\bibitem[{Bommasani et~al.(2021)Bommasani, Hudson, Adeli, Altman, Arora, von Arx, Bernstein, Bohg, Bosselut, Brunskill, Brynjolfsson, Buch, Card, Castellon, Chatterji, Chen, Creel, Davis, Demszky, Donahue, Doumbouya, Durmus, Ermon, Etchemendy, Ethayarajh, Fei-Fei, Finn, Gale, Goel, Goodman, Grossman et~al.}]{bommasani2021foundation}
+\bibinfo{author}{R.~Bommasani}, \bibinfo{author}{D.~A. Hudson}, \bibinfo{author}{E.~Adeli}, \bibinfo{author}{R.~Altman}, \bibinfo{author}{S.~Arora}, \bibinfo{author}{S.~von Arx}, \bibinfo{author}{M.~S. Bernstein}, \bibinfo{author}{J.~Bohg}, \bibinfo{author}{A.~Bosselut}, \bibinfo{author}{E.~Brunskill}, \bibinfo{author}{E.~Brynjolfsson}, \bibinfo{author}{S.~Buch}, \bibinfo{author}{D.~Card}, \bibinfo{author}{R.~Castellon}, \bibinfo{author}{N.~Chatterji}, \bibinfo{author}{A.~Chen}, \bibinfo{author}{K.~Creel}, \bibinfo{author}{J.~Q. Davis}, \bibinfo{author}{D.~Demszky}, \bibinfo{author}{C.~Donahue}, \bibinfo{author}{M.~Doumbouya}, \bibinfo{author}{E.~Durmus}, \bibinfo{author}{S.~Ermon}, \bibinfo{author}{J.~Etchemendy}, \bibinfo{author}{K.~Ethayarajh}, \bibinfo{author}{L.~Fei-Fei}, \bibinfo{author}{C.~Finn}, \bibinfo{author}{T.~Gale}, \bibinfo{author}{K.~Goel}, \bibinfo{author}{N.~Goodman}, \bibinfo{author}{S.~Grossman}, et~al.,
+\newblock \bibinfo{title}{On the opportunities and risks of foundation models},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2108.07258}  (\bibinfo{year}{2021}). \URLprefix \url{https://arxiv.org/abs/2108.07258}.
+%Type = Article
+\bibitem[{Kirillov et~al.(2023)Kirillov, Mintun, Ravi, Mao, Rolland, Gustafson, Xiao, Whitehead, Berg, Lo, Dollár, and Girshick}]{kirillov2023sam}
+\bibinfo{author}{A.~Kirillov}, \bibinfo{author}{E.~Mintun}, \bibinfo{author}{N.~Ravi}, \bibinfo{author}{H.~Mao}, \bibinfo{author}{C.~Rolland}, \bibinfo{author}{L.~Gustafson}, \bibinfo{author}{T.~Xiao}, \bibinfo{author}{S.~Whitehead}, \bibinfo{author}{A.~C. Berg}, \bibinfo{author}{W.-Y. Lo}, \bibinfo{author}{P.~Dollár}, \bibinfo{author}{R.~Girshick},
+\newblock \bibinfo{title}{Segment anything},
+\newblock \bibinfo{journal}{Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)}  (\bibinfo{year}{2023}) \bibinfo{pages}{3992--4003}.
+%Type = Article
+\bibitem[{Ye et~al.(2025)Ye, Lin, Faramarzi, Xie, and Ninić}]{ye2025sam4tun}
+\bibinfo{author}{Z.~Ye}, \bibinfo{author}{W.~Lin}, \bibinfo{author}{A.~Faramarzi}, \bibinfo{author}{X.~Xie}, \bibinfo{author}{J.~Ninić},
+\newblock \bibinfo{title}{Sam4tun: No-training model for tunnel lining point cloud component segmentation},
+\newblock \bibinfo{journal}{Tunnelling and Underground Space Technology} \bibinfo{volume}{158} (\bibinfo{year}{2025}) \bibinfo{pages}{106401}. \DOIprefix\doi{10.1016/j.tust.2025.106401}.
+%Type = Article
+\bibitem[{Qian et~al.(2024)Qian, Liu, Liu, Chen, Dang, Li, Yang, Chen, Su, Cong, Xu, Li, Liu, and Sun}]{qian2024chatdev}
+\bibinfo{author}{C.~Qian}, \bibinfo{author}{W.~Liu}, \bibinfo{author}{H.~Liu}, \bibinfo{author}{N.~Chen}, \bibinfo{author}{Y.~Dang}, \bibinfo{author}{J.~Li}, \bibinfo{author}{C.~Yang}, \bibinfo{author}{W.~Chen}, \bibinfo{author}{Y.~Su}, \bibinfo{author}{X.~Cong}, \bibinfo{author}{J.~Xu}, \bibinfo{author}{D.~Li}, \bibinfo{author}{Z.~Liu}, \bibinfo{author}{M.~Sun},
+\newblock \bibinfo{title}{Chatdev: Communicative agents for software development},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2307.07924}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2307.07924}.
+%Type = Article
+\bibitem[{Hong et~al.(2024)Hong, Zhuge, Chen, Zheng, Cheng, Zhang, Wang, Wang, Yau, Lin, Zhou, Ran, Xiao, Wu, and Schmidhuber}]{hong2024metagpt}
+\bibinfo{author}{S.~Hong}, \bibinfo{author}{M.~Zhuge}, \bibinfo{author}{J.~Chen}, \bibinfo{author}{X.~Zheng}, \bibinfo{author}{Y.~Cheng}, \bibinfo{author}{C.~Zhang}, \bibinfo{author}{J.~Wang}, \bibinfo{author}{Z.~Wang}, \bibinfo{author}{S.~K.~S. Yau}, \bibinfo{author}{Z.~Lin}, \bibinfo{author}{L.~Zhou}, \bibinfo{author}{C.~Ran}, \bibinfo{author}{L.~Xiao}, \bibinfo{author}{C.~Wu}, \bibinfo{author}{J.~Schmidhuber},
+\newblock \bibinfo{title}{Metagpt: Meta programming for a multi-agent collaborative framework},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2308.00352}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2308.00352}.
+%Type = Article
+\bibitem[{Chen et~al.(2024)Chen, Han, and Zhang}]{chen2024comm}
+\bibinfo{author}{P.~Chen}, \bibinfo{author}{B.~Han}, \bibinfo{author}{S.~Zhang},
+\newblock \bibinfo{title}{Comm: Collaborative multi-agent, multi-reasoning-path prompting for complex problem solving},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2405.00847}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2405.00847}.
+%Type = Article
+\bibitem[{Garcia et~al.(2024)Garcia, Dibattista, Letelier, Halloran, and Camelio}]{garcia2024manufacturing}
+\bibinfo{author}{C.~I. Garcia}, \bibinfo{author}{M.~A. Dibattista}, \bibinfo{author}{T.~A. Letelier}, \bibinfo{author}{H.~D. Halloran}, \bibinfo{author}{J.~A. Camelio},
+\newblock \bibinfo{title}{Framework for llm applications in manufacturing},
+\newblock \bibinfo{journal}{Manufacturing Letters} \bibinfo{volume}{40} (\bibinfo{year}{2024}) \bibinfo{pages}{56--63}. \DOIprefix\doi{10.1016/j.mfglet.2024.08.003}.
+%Type = Article
+\bibitem[{Fischler and Bolles(1981)}]{fischler1981ransac}
+\bibinfo{author}{M.~A. Fischler}, \bibinfo{author}{R.~C. Bolles},
+\newblock \bibinfo{title}{Random sample consensus: a paradigm for model fitting with applications to image analysis and automated cartography},
+\newblock \bibinfo{journal}{Communications of the ACM} \bibinfo{volume}{24} (\bibinfo{year}{1981}) \bibinfo{pages}{381--395}.
+%Type = Article
+\bibitem[{Ester et~al.(1996)Ester, Kriegel, Sander, and Xu}]{ester1996dbscan}
+\bibinfo{author}{M.~Ester}, \bibinfo{author}{H.~P. Kriegel}, \bibinfo{author}{J.~Sander}, \bibinfo{author}{X.~Xu},
+\newblock \bibinfo{title}{A density-based algorithm for discovering clusters in large spatial databases with noise},
+\newblock \bibinfo{journal}{Proceedings of the Second International Conference on Knowledge Discovery and Data Mining (KDD)}  (\bibinfo{year}{1996}) \bibinfo{pages}{226--231}.
+%Type = Article
+\bibitem[{Pauly et~al.(2002)Pauly, Gross, and Kobbelt}]{pauly2002}
+\bibinfo{author}{M.~Pauly}, \bibinfo{author}{M.~Gross}, \bibinfo{author}{L.~P. Kobbelt},
+\newblock \bibinfo{title}{Efficient simplification of point-sampled surfaces},
+\newblock \bibinfo{journal}{Proceedings of IEEE Visualization}  (\bibinfo{year}{2002}) \bibinfo{pages}{163--170}.
+%Type = Inproceedings
+\bibitem[{Qi et~al.(2017)Qi, Yi, Su, and Guibas}]{qi2017pointnet}
+\bibinfo{author}{C.~R. Qi}, \bibinfo{author}{L.~Yi}, \bibinfo{author}{H.~Su}, \bibinfo{author}{L.~J. Guibas},
+\newblock \bibinfo{title}{Pointnet++: Deep hierarchical feature learning on point sets in a metric space},
+\newblock in: \bibinfo{booktitle}{Advances in Neural Information Processing Systems (NeurIPS)}, \bibinfo{year}{2017}. \URLprefix \url{https://arxiv.org/abs/1706.02413}.
+%Type = Article
+\bibitem[{Hu et~al.(2020)Hu, Yang, Xie, Rosa, Guo, Wang, Trigoni, and Markham}]{hu2020randla}
+\bibinfo{author}{Q.~Hu}, \bibinfo{author}{B.~Yang}, \bibinfo{author}{L.~Xie}, \bibinfo{author}{S.~Rosa}, \bibinfo{author}{Y.~Guo}, \bibinfo{author}{Z.~Wang}, \bibinfo{author}{N.~Trigoni}, \bibinfo{author}{A.~Markham},
+\newblock \bibinfo{title}{Randla-net: Efficient semantic segmentation of large-scale point clouds},
+\newblock \bibinfo{journal}{Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}  (\bibinfo{year}{2020}). \URLprefix \url{https://arxiv.org/abs/1911.11236}.
+%Type = Article
+\bibitem[{Schult et~al.(2023)Schult, Engelmann, Hermans, Litany, Tang, and Leibe}]{schult2023mask3d}
+\bibinfo{author}{J.~Schult}, \bibinfo{author}{F.~Engelmann}, \bibinfo{author}{A.~Hermans}, \bibinfo{author}{O.~Litany}, \bibinfo{author}{S.~Tang}, \bibinfo{author}{B.~Leibe},
+\newblock \bibinfo{title}{Mask3d: Mask transformer for 3d semantic instance segmentation},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2303.05475}  (\bibinfo{year}{2023}). \URLprefix \url{https://arxiv.org/abs/2303.05475}.
+%Type = Article
+\bibitem[{Kolodiazhnyi et~al.(2024)Kolodiazhnyi, Vorontsova, Konushin, and Rukhovich}]{kolodiazhnyi2024td3d}
+\bibinfo{author}{M.~Kolodiazhnyi}, \bibinfo{author}{A.~Vorontsova}, \bibinfo{author}{A.~Konushin}, \bibinfo{author}{D.~Rukhovich},
+\newblock \bibinfo{title}{Top-down beats bottom-up in 3d instance segmentation},
+\newblock \bibinfo{journal}{Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)}  (\bibinfo{year}{2024}) \bibinfo{pages}{3566--3574}.
+%Type = Article
+\bibitem[{Camuffo et~al.(2022)Camuffo, Mari, and Milani}]{camuffo2022recent}
+\bibinfo{author}{E.~Camuffo}, \bibinfo{author}{D.~Mari}, \bibinfo{author}{S.~Milani},
+\newblock \bibinfo{title}{Recent advancements in learning algorithms for point clouds: an updated overview},
+\newblock \bibinfo{journal}{Sensors} \bibinfo{volume}{22} (\bibinfo{year}{2022}) \bibinfo{pages}{1357}. \DOIprefix\doi{10.3390/s22041357}.
+%Type = Inproceedings
+\bibitem[{Liu et~al.(2023)Liu, Shi, Kuang, Zhu, Li, Han, Cai, Porikli, and Su}]{liu2023openshape}
+\bibinfo{author}{M.~Liu}, \bibinfo{author}{R.~Shi}, \bibinfo{author}{K.~Kuang}, \bibinfo{author}{Y.~Zhu}, \bibinfo{author}{X.~Li}, \bibinfo{author}{S.~Han}, \bibinfo{author}{H.~Cai}, \bibinfo{author}{F.~Porikli}, \bibinfo{author}{H.~Su},
+\newblock \bibinfo{title}{Openshape: Scaling up 3d shape representation towards open-world understanding},
+\newblock in: \bibinfo{booktitle}{Advances in Neural Information Processing Systems (NeurIPS)}, \bibinfo{year}{2023}.
+%Type = Article
+\bibitem[{Guo et~al.(2023)Guo, Zhang, Zhu, Tang, Ma, Han, Chen, Gao, Li, Li, and Heng}]{guo2023pointbind}
+\bibinfo{author}{Z.~Guo}, \bibinfo{author}{R.~Zhang}, \bibinfo{author}{X.~Zhu}, \bibinfo{author}{Y.~Tang}, \bibinfo{author}{X.~Ma}, \bibinfo{author}{J.~Han}, \bibinfo{author}{K.~Chen}, \bibinfo{author}{P.~Gao}, \bibinfo{author}{X.~Li}, \bibinfo{author}{H.~Li}, \bibinfo{author}{P.-A. Heng},
+\newblock \bibinfo{title}{Point-bind \& point-llm: Aligning point cloud with multi-modality for 3d understanding, generation, and instruction following},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2309.00615}  (\bibinfo{year}{2023}).
+%Type = Inproceedings
+\bibitem[{Xu et~al.(2024)Xu, Wang, Wang, Chen, Pang, and Lin}]{xu2024pointllm}
+\bibinfo{author}{R.~Xu}, \bibinfo{author}{X.~Wang}, \bibinfo{author}{T.~Wang}, \bibinfo{author}{Y.~Chen}, \bibinfo{author}{J.~Pang}, \bibinfo{author}{D.~Lin},
+\newblock \bibinfo{title}{Pointllm: Empowering large language models to understand point clouds},
+\newblock in: \bibinfo{booktitle}{Proceedings of the European Conference on Computer Vision (ECCV)}, \bibinfo{year}{2024}, pp. \bibinfo{pages}{131--147}.
+%Type = Article
+\bibitem[{Caron et~al.(2021)Caron, Touvron, Misra, J{\'e}gou, Mairal, Bojanowski, and Joulin}]{caron2021dino}
+\bibinfo{author}{M.~Caron}, \bibinfo{author}{H.~Touvron}, \bibinfo{author}{I.~Misra}, \bibinfo{author}{H.~J{\'e}gou}, \bibinfo{author}{J.~Mairal}, \bibinfo{author}{P.~Bojanowski}, \bibinfo{author}{A.~Joulin},
+\newblock \bibinfo{title}{Emerging properties in self-supervised vision transformers},
+\newblock \bibinfo{journal}{arXiv}  (\bibinfo{year}{2021}). \DOIprefix\doi{10.48550/arXiv.2104.14294}. \href{http://arxiv.org/abs/2104.14294}{{\tt arXiv:2104.14294}}, \bibinfo{note}{version 2, revised 24 May 2021}.
+%Type = Article
+\bibitem[{Ravi et~al.(2024)Ravi, Gabeur, Hu, Hu, Ryali, Ma, Khedr, Rädle, Rolland, Gustafson, Mintun, Pan, Alwala, Carion, Wu, Girshick, Dollár, and Feichtenhofer}]{ravi2024sam2}
+\bibinfo{author}{N.~Ravi}, \bibinfo{author}{V.~Gabeur}, \bibinfo{author}{Y.-T. Hu}, \bibinfo{author}{R.~Hu}, \bibinfo{author}{C.~Ryali}, \bibinfo{author}{T.~Ma}, \bibinfo{author}{H.~Khedr}, \bibinfo{author}{R.~Rädle}, \bibinfo{author}{C.~Rolland}, \bibinfo{author}{L.~Gustafson}, \bibinfo{author}{E.~Mintun}, \bibinfo{author}{J.~Pan}, \bibinfo{author}{K.~V. Alwala}, \bibinfo{author}{N.~Carion}, \bibinfo{author}{C.-Y. Wu}, \bibinfo{author}{R.~Girshick}, \bibinfo{author}{P.~Dollár}, \bibinfo{author}{C.~Feichtenhofer},
+\newblock \bibinfo{title}{Sam 2: Segment anything in images and videos},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2408.00714}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2408.00714}.
+%Type = Article
+\bibitem[{Zou et~al.(2023)Zou, Yang, Zhang, Li, Li, Wang, Wang, Gao, and Lee}]{zou2023segment}
+\bibinfo{author}{X.~Zou}, \bibinfo{author}{J.~Yang}, \bibinfo{author}{H.~Zhang}, \bibinfo{author}{F.~Li}, \bibinfo{author}{L.~Li}, \bibinfo{author}{J.~Wang}, \bibinfo{author}{L.~Wang}, \bibinfo{author}{J.~Gao}, \bibinfo{author}{Y.~J. Lee},
+\newblock \bibinfo{title}{Segment everything everywhere all at once},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2304.06718}  (\bibinfo{year}{2023}). \URLprefix \url{https://arxiv.org/abs/2304.06718}.
+%Type = Article
+\bibitem[{Wang et~al.(2024)Wang, Chen, Li, Wang, Yin, and Cheng}]{wang2024omni}
+\bibinfo{author}{B.~Wang}, \bibinfo{author}{Z.~Chen}, \bibinfo{author}{M.~Li}, \bibinfo{author}{Q.~Wang}, \bibinfo{author}{C.~Yin}, \bibinfo{author}{J.~C.~P. Cheng},
+\newblock \bibinfo{title}{Omni-scan2bim: A ready-to-use scan2bim approach based on vision foundation models for mep scenes},
+\newblock \bibinfo{journal}{Automation in Construction} \bibinfo{volume}{167} (\bibinfo{year}{2024}) \bibinfo{pages}{105678}. \DOIprefix\doi{10.1016/j.autcon.2024.105678}.
+%Type = Article
+\bibitem[{Ouyang et~al.(2022)Ouyang, Wu, Jiang, Almeida, Wainwright, Mishkin, Zhang, Agarwal, Slama, Ray, Schulman, Hilton, Kelton, Miller, Simens, Askell, Welinder, Christiano, Leike, and Lowe}]{ouyang2022training}
+\bibinfo{author}{L.~Ouyang}, \bibinfo{author}{J.~Wu}, \bibinfo{author}{X.~Jiang}, \bibinfo{author}{D.~Almeida}, \bibinfo{author}{C.~L. Wainwright}, \bibinfo{author}{P.~Mishkin}, \bibinfo{author}{C.~Zhang}, \bibinfo{author}{S.~Agarwal}, \bibinfo{author}{K.~Slama}, \bibinfo{author}{A.~Ray}, \bibinfo{author}{J.~Schulman}, \bibinfo{author}{J.~Hilton}, \bibinfo{author}{F.~Kelton}, \bibinfo{author}{L.~Miller}, \bibinfo{author}{M.~Simens}, \bibinfo{author}{A.~Askell}, \bibinfo{author}{P.~Welinder}, \bibinfo{author}{P.~Christiano}, \bibinfo{author}{J.~Leike}, \bibinfo{author}{R.~Lowe},
+\newblock \bibinfo{title}{Training language models to follow instructions with human feedback},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2203.02155}  (\bibinfo{year}{2022}). \URLprefix \url{https://arxiv.org/abs/2203.02155}.
+%Type = Article
+\bibitem[{{DeepSeek-AI}(2025)}]{deepseek2025analysis}
+\bibinfo{author}{{DeepSeek-AI}},
+\newblock \bibinfo{title}{{DeepSeek-R1}: Incentivizing reasoning capability in {LLMs} via reinforcement learning},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2501.12948}  (\bibinfo{year}{2025}). \URLprefix \url{https://arxiv.org/abs/2501.12948}. \DOIprefix\doi{10.48550/arXiv.2501.12948}. \href{http://arxiv.org/abs/2501.12948}{{\tt arXiv:2501.12948}}.
+%Type = Article
+\bibitem[{Chua and Evans(2025)}]{chua2025deepseek}
+\bibinfo{author}{J.~Chua}, \bibinfo{author}{O.~Evans},
+\newblock \bibinfo{title}{Are deepseek r1 and other reasoning models more faithful?},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2501.07632}  (\bibinfo{year}{2025}). \URLprefix \url{https://arxiv.org/abs/2501.07632}.
+%Type = Article
+\bibitem[{Xiang et~al.(2025)Xiang, Snell, Gandhi, Albalak, Singh, Blagden, Phung, Rafailov, Lile, Mahan, Castricato, Fr{\"a}nken, Haber, and Finn}]{xiang2025metacot}
+\bibinfo{author}{V.~Xiang}, \bibinfo{author}{C.~Snell}, \bibinfo{author}{K.~Gandhi}, \bibinfo{author}{A.~Albalak}, \bibinfo{author}{A.~Singh}, \bibinfo{author}{C.~Blagden}, \bibinfo{author}{D.~Phung}, \bibinfo{author}{R.~Rafailov}, \bibinfo{author}{N.~Lile}, \bibinfo{author}{D.~Mahan}, \bibinfo{author}{L.~Castricato}, \bibinfo{author}{J.-P. Fr{\"a}nken}, \bibinfo{author}{N.~Haber}, \bibinfo{author}{C.~Finn},
+\newblock \bibinfo{title}{Towards {System 2} reasoning in {LLMs}: Learning how to think with meta chain-of-thought},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2501.04682}  (\bibinfo{year}{2025}). \URLprefix \url{https://arxiv.org/abs/2501.04682}. \DOIprefix\doi{10.48550/arXiv.2501.04682}. \href{http://arxiv.org/abs/2501.04682}{{\tt arXiv:2501.04682}}.
+%Type = Misc
+\bibitem[{{OpenAI}(2025{\natexlab{a}})}]{openai2025o3}
+\bibinfo{author}{{OpenAI}}, \bibinfo{title}{{OpenAI o3} and {o4-mini} system card}, \bibinfo{howpublished}{\url{https://openai.com/index/o3-o4-mini-system-card/}}, \bibinfo{year}{2025}{\natexlab{a}}. \bibinfo{note}{Accessed: 2025-12-01}.
+%Type = Misc
+\bibitem[{{OpenAI}(2025{\natexlab{b}})}]{openai2025reasoningbestpractices}
+\bibinfo{author}{{OpenAI}}, \bibinfo{title}{Reasoning best practices}, \bibinfo{howpublished}{\url{https://platform.openai.com/docs/guides/reasoning-best-practices}}, \bibinfo{year}{2025}{\natexlab{b}}. \bibinfo{note}{Accessed: 2025-12-01}.
+%Type = Article
+\bibitem[{Wei et~al.(2023)Wei, Wang, Schuurmans, Bosma, Ichter, Xia, Chi, Le, and Zhou}]{wei2023cot}
+\bibinfo{author}{J.~Wei}, \bibinfo{author}{X.~Wang}, \bibinfo{author}{D.~Schuurmans}, \bibinfo{author}{M.~Bosma}, \bibinfo{author}{B.~Ichter}, \bibinfo{author}{F.~Xia}, \bibinfo{author}{E.~Chi}, \bibinfo{author}{Q.~Le}, \bibinfo{author}{D.~Zhou},
+\newblock \bibinfo{title}{Chain-of-thought prompting elicits reasoning in large language models},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2201.11903}  (\bibinfo{year}{2023}). \URLprefix \url{https://arxiv.org/abs/2201.11903}.
+%Type = Article
+\bibitem[{Kojima et~al.(2023)Kojima, Gu, Reid, Matsuo, and Iwasawa}]{kojima2023zeroshot}
+\bibinfo{author}{T.~Kojima}, \bibinfo{author}{S.~S. Gu}, \bibinfo{author}{M.~Reid}, \bibinfo{author}{Y.~Matsuo}, \bibinfo{author}{Y.~Iwasawa},
+\newblock \bibinfo{title}{Large language models are zero-shot reasoners},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2205.11916}  (\bibinfo{year}{2023}). \URLprefix \url{https://arxiv.org/abs/2205.11916}.
+%Type = Article
+\bibitem[{Zhang et~al.(2023)Zhang, Yao, Zhang, Tang, Ma, He, Wang, Gerstein, Wang, Liu, and Zhao}]{zhang2023igniting}
+\bibinfo{author}{Z.~Zhang}, \bibinfo{author}{Y.~Yao}, \bibinfo{author}{A.~Zhang}, \bibinfo{author}{X.~Tang}, \bibinfo{author}{X.~Ma}, \bibinfo{author}{Z.~He}, \bibinfo{author}{Y.~Wang}, \bibinfo{author}{M.~Gerstein}, \bibinfo{author}{R.~Wang}, \bibinfo{author}{G.~Liu}, \bibinfo{author}{H.~Zhao},
+\newblock \bibinfo{title}{Igniting language intelligence: the hitchhiker's guide from chain-of-thought reasoning to language agents},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2311.11797}  (\bibinfo{year}{2023}). \URLprefix \url{https://arxiv.org/abs/2311.11797}.
+%Type = Article
+\bibitem[{Zhang et~al.(2024)Zhang, Sun, Chen, Pfister, Zhang, and Arik}]{zhang2024chain}
+\bibinfo{author}{Y.~Zhang}, \bibinfo{author}{R.~Sun}, \bibinfo{author}{Y.~Chen}, \bibinfo{author}{T.~Pfister}, \bibinfo{author}{R.~Zhang}, \bibinfo{author}{S.~�. Arik},
+\newblock \bibinfo{title}{Chain of agents: Large language models collaborating on long-context tasks},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2406.02818}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2406.02818}.
+%Type = Article
+\bibitem[{Xu et~al.(2024)Xu, Ping, Wu, McAfee, Zhu, Liu, Subramanian, Bakhturina, Shoeybi, and Catanzaro}]{xu2024retrieval}
+\bibinfo{author}{P.~Xu}, \bibinfo{author}{W.~Ping}, \bibinfo{author}{X.~Wu}, \bibinfo{author}{L.~McAfee}, \bibinfo{author}{C.~Zhu}, \bibinfo{author}{Z.~Liu}, \bibinfo{author}{S.~Subramanian}, \bibinfo{author}{E.~Bakhturina}, \bibinfo{author}{M.~Shoeybi}, \bibinfo{author}{B.~Catanzaro},
+\newblock \bibinfo{title}{Retrieval meets long context large language models},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2310.03025}  (\bibinfo{year}{2024}). \URLprefix \url{https://arxiv.org/abs/2310.03025}.
+%Type = Article
+\bibitem[{Mei et~al.(2025)Mei, Yao, Ge, Wang, Bi, Cai, Liu, Li, Li, Zhang, Zhou, Mao, Xia, Guo, and Liu}]{mei2025survey}
+\bibinfo{author}{L.~Mei}, \bibinfo{author}{J.~Yao}, \bibinfo{author}{Y.~Ge}, \bibinfo{author}{Y.~Wang}, \bibinfo{author}{B.~Bi}, \bibinfo{author}{Y.~Cai}, \bibinfo{author}{J.~Liu}, \bibinfo{author}{M.~Li}, \bibinfo{author}{Z.-Z. Li}, \bibinfo{author}{D.~Zhang}, \bibinfo{author}{C.~Zhou}, \bibinfo{author}{J.~Mao}, \bibinfo{author}{T.~Xia}, \bibinfo{author}{J.~Guo}, \bibinfo{author}{S.~Liu},
+\newblock \bibinfo{title}{A survey of context engineering for large language models},
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2501.04567}  (\bibinfo{year}{2025}). \URLprefix \url{https://arxiv.org/abs/2501.04567}.
+%Type = Misc
+\bibitem[{{Anthropic}(2025)}]{anthropic2025context}
+\bibinfo{author}{{Anthropic}}, \bibinfo{title}{Effective context engineering for ai agents}, \bibinfo{howpublished}{\url{https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents}}, \bibinfo{year}{2025}. \bibinfo{note}{Accessed: 2025-12-01}.
+%Type = Article
+\bibitem[{Duda and Hart(1972)}]{duda1972hough}
+\bibinfo{author}{R.~O. Duda}, \bibinfo{author}{P.~E. Hart},
+\newblock \bibinfo{title}{Use of the hough transformation to detect lines and curves in pictures},
+\newblock \bibinfo{journal}{Communications of the ACM} \bibinfo{volume}{15} (\bibinfo{year}{1972}) \bibinfo{pages}{11--15}.
+
+\end{thebibliography}

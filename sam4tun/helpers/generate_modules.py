@@ -19,7 +19,7 @@ STAGES = [
     (
         "1_upfolding.py",
         1,
-        718,
+        728,
         """
 import sys
 import os
@@ -48,8 +48,8 @@ print(f"Upfolding complete -> {paths['unwrapped_csv']}")
     ),
     (
         "2_denoising.py",
-        719,
-        874,
+        729,
+        882,
         """
 import sys
 import os
@@ -79,8 +79,8 @@ print(f"Denoising complete -> {paths['denoised_csv']}")
     ),
     (
         "3_enhancing.py",
-        875,
-        1392,
+        883,
+        1402,
         """
 import sys
 import os
@@ -124,8 +124,8 @@ print(f"Enhancing complete -> {paths['enhanced_csv']}, {paths['depth_map']}")
     ),
     (
         "4_detection.py",
-        1393,
-        1826,
+        1403,
+        1836,
         """
 import sys
 import os
@@ -158,8 +158,8 @@ print(f"Detection complete -> {paths['initial_points']}")
     ),
     (
         "5_sam.py",
-        1827,
-        2492,
+        1837,
+        2502,
         """
 import sys
 import os
@@ -214,8 +214,8 @@ print(f"SAM complete -> {paths['only_label']}")
     ),
     (
         "6_evaluation.py",
-        2493,
-        2728,
+        2503,
+        2738,
         """
 import sys
 import os
@@ -226,7 +226,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from pipeline_io import ensure_dir
+from helpers.pipeline_io import ensure_dir
 
 tunnel_id = sys.argv[1]
 paths = ensure_dir(tunnel_id)
@@ -251,6 +251,19 @@ REPLACEMENTS = [
     (r"updated_df\.to_csv\('final\.csv',index=False\)", 'updated_df.to_csv(paths["final_csv"], index=False)'),
     (r"df_pred\.to_csv\('only_label\.csv',index=False\)", 'df_pred.to_csv(paths["only_label"], index=False)'),
     (r"test = pd\.read_csv\('only_label\.csv'\)", 'test = pd.read_csv(paths["only_label"])'),
+    (r'filename=_out\("depth_map\.png"\)', 'filename=paths["depth_map"]'),
+    (r"np\.save\(_out\('depth_map_outlier\.npy'\)", 'np.save(paths["depth_map_outlier"]'),
+    (r"df_loc\.to_csv\(_out\('initial_points\.csv'\)", 'df_loc.to_csv(paths["initial_points"]'),
+    (r"df_point_cloud\.to_csv\(_out\('sample_unwrapped\.csv'\)", 'df_point_cloud.to_csv(paths["unwrapped_csv"]'),
+    (r"updated_df\.to_csv\(_out\('final\.csv'\)", 'updated_df.to_csv(paths["final_csv"]'),
+    (r"df_pred\.to_csv\(_out\('only_label\.csv'\)", 'df_pred.to_csv(paths["only_label"]'),
+    (r"test = pd\.read_csv\(_out\('only_label\.csv'\)\)", 'test = pd.read_csv(paths["only_label"])'),
+    (r"image = cv2\.imread\(_out\('depth_map\.png'\)\)", 'image = cv2.imread(paths["depth_map"])'),
+    (r"with open\(_out\('results\.pkl'\), 'wb'\)", 'with open(paths["results_pkl"], "wb")'),
+    (r"with open\(_out\('results\.pkl'\), 'rb'\)", 'with open(paths["results_pkl"], "rb")'),
+    (r"plt\.savefig\(_out\('detected_lines\.png'\)", 'plt.savefig(paths["detected_lines"]'),
+    (r"plt\.savefig\(_out\('initial_prompt_points\.png'\)", 'plt.savefig(os.path.join(os.path.dirname(paths["initial_points"]), "initial_prompt_points.png")'),
+    (r"_out\('([^']+)'\)", r'os.path.join(os.path.dirname(paths["state"]), "\1")'),
     (r"plt\.show\(\)", "# plt.show()"),
 ]
 

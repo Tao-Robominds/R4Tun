@@ -24,8 +24,8 @@ import os
 import sys
 from pathlib import Path
 
-# Repo root = parents[3] from methods/plans/steps/this_file.py
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+# Repo root: .../skills/scripts/this_file.py → 2 parents up
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 

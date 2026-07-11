@@ -52,7 +52,10 @@ PRIOR_STAGES: dict[str, list[str]] = {
 }
 
 ABLATION_FOLDER = "memory+state"
-PARAM_BASE = Path("agents/ablation") / ABLATION_FOLDER / "parameters"
+PARAM_BASE = Path("sam4tun/agents/parameters") / ABLATION_FOLDER
+SAMPLE_PARAM_DIR = Path("sam4tun/agents/parameters/sample")
+SHARED_SIMILAR_PATH = Path("agents/ablation/shared/similar_to_sample.md")
+SHARED_T3_PATH = Path("agents/ablation/shared/t3_continuous.md")
 
 # ---------------------------------------------------------------------------
 # File I/O helpers (same as memory ablation)
@@ -155,41 +158,106 @@ def build_state_comparison_block(tunnel_id: str, current_stage: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def load_similar_to_sample_block(tunnel_id: str) -> str:
+    """T1/T2 sample-like performance guidance (not 3-*)."""
+    if not (tunnel_id.startswith("1-") or tunnel_id.startswith("2-")):
+        return ""
+    text = read_required_text(SHARED_SIMILAR_PATH, "SIMILAR_TO_SAMPLE guidance")
+    return f"# SIMILAR_TO_SAMPLE REGIME (T1/T2 — target mIoU ≥ 0.70)\n\n{text}"
+
+
+def load_t3_continuous_block(tunnel_id: str) -> str:
+    """T3 continuous-joint guidance (3-*)."""
+    if not tunnel_id.startswith("3-"):
+        return ""
+    text = read_required_text(SHARED_T3_PATH, "T3_CONTINUOUS guidance")
+    return f"# T3_CONTINUOUS REGIME (3-* continuous joints)\n\n{text}"
+
+
+def load_regime_blocks(tunnel_id: str) -> str:
+    """Inject SIMILAR_TO_SAMPLE or T3_CONTINUOUS (mutually exclusive)."""
+    parts = [b for b in (load_similar_to_sample_block(tunnel_id), load_t3_continuous_block(tunnel_id)) if b]
+    return "\n\n".join(parts)
+
+
+def t3_denoise_method_note(tunnel_id: str, archive_filename: str) -> str:
+    """Percentile-driven denoise reasoning for 3-* (no external param anchors)."""
+    if not tunnel_id.startswith("3-") or archive_filename != "parameters_denoising.json":
+        return ""
+    return (
+        "**T3 denoise method:** if `p50(r) > d/2 + 0.15`, rules mask is too narrow — use "
+        "`mask_r_low = p10 − 0.02`, `mask_r_high = p99 + 0.02`. "
+        "Require `wall_pct ≥ 50%`. Never set `mask_r_high < p99`. "
+        "`default_cutoff_z = mask_r_high + 0.02`.\n"
+    )
+
+
+def t3_enhancing_coverage_note(tunnel_id: str, archive_filename: str) -> str:
+    """Depth-map coverage reasoning for 3-* enhancing (no external param anchors)."""
+    if not tunnel_id.startswith("3-") or archive_filename != "parameters_enhancing.json":
+        return ""
+    return (
+        "**T3 depth-map coverage:** run only when denoise retention ≥ 50%. "
+        "Estimate `point_density = valid_points / ((h_span/0.005)×(θ_span/0.005))`. "
+        "If < 0.08 or edge white > center: increase `window_size` (11–13), "
+        "set upsampling stage1 ≈ 0.85×median_NN (typical range 0.05–0.08 on T3), lower `depth_threshold_low`, "
+        "set `n_segment_end = ring_count − 1` when ring_count is known.\n"
+    )
+
+
+def t3_k_alignment_note(tunnel_id: str, archive_filename: str) -> str:
+    """K uniform Y reasoning for 3-* detecting."""
+    if not tunnel_id.startswith("3-") or archive_filename != "parameters_detecting.json":
+        return ""
+    return (
+        "**T3 K uniformity:** one anchor defines Y* for all rings (one-K-knows-all). "
+        "Tune horizontal Hough to detect the K seam; pipeline snaps **all** rings to median Y* "
+        "from ≥1 anchor (`midpoint`/`horizontal`/slope). "
+        "Target Y_std < 10 px, max |Y − Y*| = 0, assume < 10% pre-snap.\n"
+    )
+
+
+def t3_sam_k_uniform_note(tunnel_id: str, archive_filename: str) -> str:
+    """K template uniformity reasoning for 3-* SAM."""
+    if not tunnel_id.startswith("3-") or archive_filename != "parameters_sam.json":
+        return ""
+    return (
+        "**T3 SAM K template:** K centre Y is identical every ring; only X shifts per column. "
+        "Tune K_height, angle, crop_margin, y_bounds **once** — not per-ring Y. "
+        "When K IoU < 0.65 with Y_std < 10, apply **K_HEIGHT_OVERSIZE** (cot.md): reduce K_height "
+        "toward sample/band if mask is visually too tall — never from GT span measurement. "
+        "State baseline (3-1-1): K IoU ~0.49, K_height 1137 px (above 1050–1100 band). "
+        "Target K-block IoU > 0.65 when detecting Y_std < 10 px.\n"
+    )
+
+
+t3_denoise_anchor_note = t3_denoise_method_note
+
+
 def load_stage_parameters_pretty(
-    tunnel_id: str, archive_filename: str, model_tag: str = "opus4.6"
+    tunnel_id: str, archive_filename: str, model_tag: str = "glm"
 ) -> tuple[str, str]:
-    """
-    Search order:
-    1. ``agents/ablation/memory+state/parameters/<tunnel_id>/<archive_filename>``
-    2. Same dir, with ablation+model suffix (e.g. ``parameters_unfolding_m_s_opus4.6.json``)
-    3. ``agents/ablation/sam4tun/<archive_filename>`` (baseline fallback)
-
-    Returns (pretty-printed JSON, header note for the prompt).
-    """
     tunnel_dir = PARAM_BASE / tunnel_id
-
-    plain_path = tunnel_dir / archive_filename
-    if plain_path.exists():
-        text = read_required_json_pretty(plain_path, f"Parameters at {plain_path}")
-        note = f"Archived tunnel parameters (`{plain_path.as_posix()}`)."
-        return text, note
-
     stem = archive_filename.removesuffix(".json")
-    suffixed = tunnel_dir / f"{stem}_m_s_{model_tag}.json"
-    if suffixed.exists():
-        text = read_required_json_pretty(suffixed, f"Parameters at {suffixed}")
-        note = f"Archived tunnel parameters (`{suffixed.as_posix()}`)."
-        return text, note
-
-    baseline_path = Path("agents/ablation/sam4tun") / archive_filename
+    for name in (
+        f"{stem}_m_s_{model_tag}.json",
+        f"{stem}_m_{model_tag}.json",
+        archive_filename,
+    ):
+        path = tunnel_dir / name
+        if path.exists():
+            text = read_required_json_pretty(path, f"Parameters at {path}")
+            return text, f"Archived tunnel parameters (`{path.as_posix()}`)."
+    baseline_path = SAMPLE_PARAM_DIR / archive_filename
     if baseline_path.exists():
-        text = read_required_json_pretty(baseline_path, f"Baseline parameters at {baseline_path}")
-        note = f"Baseline (sam4tun) parameters (`{baseline_path.as_posix()}`); no archive yet for tunnel `{tunnel_id}`."
+        text = read_required_json_pretty(baseline_path, f"Sample parameters at {baseline_path}")
+        note = (
+            f"Frozen sam4tun sample parameters (`{baseline_path.as_posix()}`); "
+            f"for T1/T2 retain these unless state shows a named failure."
+        )
         return text, note
-
     raise FileNotFoundError(
-        f"No parameter file found for tunnel {tunnel_id}, stage {archive_filename}. "
-        f"Tried: {plain_path}, {suffixed}, {baseline_path}"
+        f"No parameter file for tunnel {tunnel_id}, stage {archive_filename}."
     )
 
 

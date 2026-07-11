@@ -9,6 +9,8 @@ if str(_agents_dir) not in sys.path:
     sys.path.insert(0, str(_agents_dir))
 
 from context import (
+    load_regime_blocks,
+    t3_denoise_anchor_note,
     build_state_comparison_block,
     load_raw_characteristics_pair,
     load_stage_parameters_pretty,
@@ -26,14 +28,14 @@ class DenoisingAnalyser:
         self.data_dir = pipeline_tunnel_data_dir(tunnel_id)
         self._agent_dir = Path(__file__).resolve().parent
 
-    def load_analysis_data(self):
+    def load_analysis_data(self, model_tag: str = "glm"):
         role_content = read_required_text(self._agent_dir / "role.md", "Role definition")
         cot_content = read_required_text(self._agent_dir / "cot.md", "Chain-of-thought instructions")
         sample_raw, tunnel_raw = load_raw_characteristics_pair(self.tunnel_id)
-        code_path = Path("sam4tun/2_denoising.py")
+        code_path = Path("sam4tun/agents/denoising.py")
         code_content = read_required_text(code_path, "Sample denoising code")
         archive_name = "parameters_denoising.json"
-        params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name)
+        params_json, params_source = load_stage_parameters_pretty(self.tunnel_id, archive_name, model_tag)
         return {
             "role": role_content,
             "cot": cot_content,
@@ -45,21 +47,26 @@ class DenoisingAnalyser:
             "archive_filename": archive_name,
         }
 
-    def build_llm_prompt_markdown(self, state_context: str = "") -> str:
-        ctx = self.load_analysis_data()
+    def build_llm_prompt_markdown(self, state_context: str = "", model_tag: str = "glm") -> str:
+        ctx = self.load_analysis_data(model_tag)
         if not state_context:
             state_context = build_state_comparison_block(self.tunnel_id, self.STAGE_NAME)
         has_state = bool(state_context.strip())
+        regime_block = load_regime_blocks(self.tunnel_id)
         parts = [
             f"# ROLE\n{ctx['role']}",
             f"# ANALYSIS METHODOLOGY\n{ctx['cot']}",
+        ]
+        if regime_block:
+            parts.append(regime_block)
+        parts += [
             f"# SAMPLE TUNNEL — RAW CHARACTERISTICS (reference)\n```json\n{ctx['sample_raw']}\n```",
             f"# TARGET TUNNEL — RAW CHARACTERISTICS (tunnel_id={self.tunnel_id})\n```json\n{ctx['tunnel_raw']}\n```",
         ]
         if has_state:
             parts.append(state_context)
         parts += [
-            f"# REFERENCE DENOISING PARAMETERS\n{ctx['parameters_source']}\n\n```json\n{ctx['parameters']}\n```",
+            f"# REFERENCE DENOISING PARAMETERS\n{t3_denoise_anchor_note(self.tunnel_id, ctx['archive_filename'])}{ctx['parameters_source']}\n\n```json\n{ctx['parameters']}\n```",
             f"# PIPELINE CODE (reference)\n```python\n{ctx['sample_code']}\n```",
             strict_output_instructions(ctx["archive_filename"], ctx["parameters"], has_state=has_state),
         ]

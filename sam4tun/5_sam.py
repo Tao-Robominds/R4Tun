@@ -43,18 +43,6 @@ if os.path.exists(_depth_npy):
 
     save_depth_map_exact(np.load(_depth_npy), resolution, filename=paths["depth_map"])
 
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-    ax.set_xlim(x_min - margin * x_range, x_max + margin * x_range)
-    ax.set_ylim(y_max + margin * y_range, y_min - margin * y_range)
-
-plt.grid(True)
-plt.tight_layout()
-plt.savefig(_out('initial_prompt_points.png'), dpi=150, bbox_inches='tight')
-# plt.show()
-df_loc.to_csv(_out('initial_points.csv'),index=False)
-## 2. Template prompt point generatoin and mask obtain
-import numpy as np
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
@@ -97,13 +85,13 @@ sam.to(device=device)
 
 predictor = SamPredictor(sam)
 # read projection map, here you also can change the channel combination of input image
-image = cv2.imread(_out('depth_map.png'))
+image = cv2.imread(paths["depth_map"])
 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 plt.figure(figsize=(20,20))
 plt.imshow(image)
 plt.axis('on')
-plt.savefig(_out('sam_depth_input.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "sam_depth_input.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 # template prompt generation, including coarse mask and point
 def fill_polygon(mask, vertices):
@@ -512,10 +500,10 @@ def sam_segment(df, image, resolution=0.005, segment_per_ring=6):
     return all_results
 results = sam_segment(df_loc, image)
 # for saving results
-with open(_out('results.pkl'), 'wb') as file:
+with open(paths["results_pkl"], "wb") as file:
     pickle.dump(results, file)
 # for loading results
-with open(_out('results.pkl'), 'rb') as file:
+with open(paths["results_pkl"], "rb") as file:
     results = pickle.load(file)
 # if you want to check each instance
 
@@ -539,7 +527,7 @@ plt.imshow(cropped_image)
 show_mask(masks, plt.gca())
 show_points(input_point, input_label, plt.gca())
 plt.axis('off')
-plt.savefig(_out('sam_sample_block.png'), dpi=120, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "sam_sample_block.png"), dpi=120, bbox_inches='tight')
 # plt.show()
 ## 3. Project back to point cloud
 import numpy as np
@@ -657,7 +645,7 @@ def visualize_combined_results(image, result_image, ring_image, assigned_mask):
     ax3.legend(handles=legend_elements_ring, loc='center left', bbox_to_anchor=(1, 0.5))
     
     plt.tight_layout()
-    plt.savefig(_out('segmentation_results.png'), dpi=150, bbox_inches='tight')
+    plt.savefig(os.path.join(os.path.dirname(paths["state"]), "segmentation_results.png"), dpi=150, bbox_inches='tight')
     # plt.show()
 
 # Call the visualization function
@@ -709,6 +697,18 @@ def project_back_to_point_cloud(segmented_map, instance_map, pixel_to_point, df)
     df_copy['pred'] = pred
     df_copy['pred_ring'] = pred_ring
 
+    return df_copy
+updated_df = project_back_to_point_cloud(result_image, fix_ring, pixel_to_point, df_point_cloud)
+updated_df.head()
+updated_df.to_csv(paths["final_csv"],index=False)
+df_pred = pd.DataFrame()
+df_pred['gt_labels'] = updated_df['segment']
+df_pred['gt_rings'] = updated_df['ring']
+df_pred['pred_labels'] = updated_df['pred']
+df_pred['pred_rings'] = updated_df['pred_ring']
+df_pred.to_csv(paths["only_label"],index=False)
+# =============for single station============
+import pandas as pd
 
 
 import pickle

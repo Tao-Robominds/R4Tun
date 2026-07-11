@@ -1,0 +1,105 @@
+{
+  "AB_height": 4417.87,
+  "K_height": 1472.62,
+  "angle": 10.46,
+  "use_original_label_distributions": true,
+  "processing": {
+    "resolution": 0.005,
+    "padding": 205,
+    "crop_margin": 68,
+    "mask_eps": 0.001,
+    "y_bounds": [
+      5727,
+      17864
+    ]
+  },
+  "prompt_points": {
+    "k_block": {
+      "outer_ring": 1328,
+      "middle_ring": 969.7,
+      "inner_ring": 948.7,
+      "center_ring": 617,
+      "spacing_factors": {
+        "k_block_spacing": 646.3,
+        "vertical_spacing": [
+          1523.0,
+          1051.1,
+          646.3,
+          455.1,
+          777.9
+        ]
+      }
+    },
+    "ab_blocks": {
+      "outer_ring": 1328,
+      "middle_ring": 969.7,
+      "inner_ring": 948,
+      "center_ring": 617,
+      "fine_spacing": 475,
+      "ultra_fine": 308.3,
+      "edge_ring": 660.7,
+      "edge_spacing": 665,
+      "vertical_levels": {
+        "level_1": 3575.5,
+        "level_2": 3159.7,
+        "level_3": 2795.9,
+        "level_4": 2266.2,
+        "level_5": 1699.7,
+        "level_6": 1133.1,
+        "level_7": 566.3,
+        "center": 0,
+        "special_levels": [
+          2700.4,
+          2891.5,
+          2967.5,
+          3351.8,
+          3383.4,
+          3435.3,
+          3479.5,
+          3671.6,
+          3715.7,
+          3767.6,
+          2796.2,
+          3019.5,
+          3065.2,
+          3255.8,
+          3300.0
+        ]
+      }
+    },
+    "template_mask": {
+      "k_block": {
+        "width": 1186,
+        "height_pos": 1287.2,
+        "height_neg": 957.9
+      },
+      "b1_block": {
+        "width": 1186,
+        "height_top": 3367.6,
+        "height_bottom_pos": 3203.0,
+        "height_bottom_neg": 3532.3
+      },
+      "b2_block": {
+        "width": 1186,
+        "height_top_pos": 3203.0,
+        "height_top_neg": 3532.3,
+        "height_bottom": 3367.6
+      },
+      "a_blocks": {
+        "width": 1186,
+        "height": 3367.6
+      }
+    }
+  },
+  "segment_order": [
+    "K",
+    "B1",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "B2"
+  ],
+  "segment_per_ring": 7,
+  "segment_width": 1800
+}

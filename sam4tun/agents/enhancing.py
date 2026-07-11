@@ -32,9 +32,12 @@ import pickle
 import matplotlib.pyplot as plt
 import time
 
-tunnel_id = parse_pipeline_args("enhancing")
-params = load_stage_parameters(tunnel_id, "enhancing")
-param_file = resolve_param_file(tunnel_id, "enhancing")
+tunnel_id, ablation, model = parse_pipeline_args("enhancing")
+params = load_stage_parameters(tunnel_id, "enhancing", ablation, model)
+param_file = resolve_param_file(tunnel_id, "enhancing", ablation, model)
+denoise_params = load_stage_parameters(tunnel_id, "denoising", ablation, model)
+depth_vmin = float(denoise_params.get("mask_r_low", 2.70))
+depth_vmax = float(denoise_params.get("mask_r_high", 2.80))
 
 expected_keys = [
     "upsampling_stage1_target_distance", "upsampling_stage2_target_distance",
@@ -559,7 +562,7 @@ data_joint = {
 # depth map generation, and record pixel to point
 depth_map, pixel_to_point = project_to_depth_map_inter(data_segment, data_joint, resolution=resolution, window_size=window_size)
 plt.figure(figsize=(12, 24))
-plt.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
+plt.imshow(depth_map, cmap='viridis', vmin=depth_vmin, vmax=depth_vmax)
 plt.axis('off')
 plt.savefig(os.path.join(os.path.dirname(paths["state"]), "depth_map_viridis.png"), dpi=150, bbox_inches='tight')
 
@@ -569,7 +572,7 @@ def save_depth_map_exact(depth_map, resolution, filename=paths["depth_map"]):
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.axis('off')
-    ax.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
+    ax.imshow(depth_map, cmap='viridis', vmin=depth_vmin, vmax=depth_vmax)
     plt.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0)
     plt.close()
 

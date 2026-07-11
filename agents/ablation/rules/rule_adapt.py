@@ -17,9 +17,9 @@ import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
-SAM4TUN_DIR = os.path.join(REPO_ROOT, "agents", "ablation", "sam4tun")
+SAM4TUN_DIR = os.path.join(REPO_ROOT, "sam4tun", "agents", "parameters", "sample")
 SITE_INPUTS_PATH = os.path.join(SCRIPT_DIR, "site_inputs.json")
-OUT_DIR = os.path.join(SCRIPT_DIR, "parameters")
+OUT_DIR = os.path.join(REPO_ROOT, "sam4tun", "agents", "parameters", "rules")
 
 STAGES = ["unfolding", "denoising", "enhancing", "detecting", "sam"]
 
@@ -30,7 +30,7 @@ REF_RING_LENGTH = 1.2
 def load_sam4tun_defaults() -> dict[str, dict]:
     defaults = {}
     for stage in STAGES:
-        path = os.path.join(SAM4TUN_DIR, f"parameters_{stage}.json")
+        path = os.path.join(SAM4TUN_DIR, f"parameters_{stage}.json")  # sample defaults
         with open(path) as f:
             defaults[stage] = json.load(f)
     return defaults
@@ -113,7 +113,7 @@ def generate_for_tunnel(tunnel_id: str, site: dict, defaults: dict[str, dict]):
     for stage in STAGES:
         params = copy.deepcopy(defaults[stage])
         params = ADAPTERS[stage](params, site)
-        out_path = os.path.join(out_dir, f"parameters_{stage}_rules.json")
+        out_path = os.path.join(out_dir, f"parameters_{stage}.json")
         with open(out_path, "w") as f:
             json.dump(params, f, indent=2)
 

@@ -1,0 +1,49 @@
+% Supplementary Table: GT-free manual tuning — extended critical parameters
+% Use: \input{methods/papers/output/tab_supplementary_critical_params_gt_free}
+% Companion: gt_free_experiments_report.md (Section 14)
+%
+% Requires in preamble: booktabs, \hl from soul (or replace \hl with \textbf)
+
+\begin{table*}[t]
+\caption{Extended critical parameters identified by GT-free manual tuning on regular tunnels (T1/T2 hint ladders; T3 param grid on \texttt{3-1-\{1,2,3\}}). Parameters marked \emph{New} were \textbf{not} among the 18 LLM-critical parameters (Table~\ref{tab:critical-params}); \emph{Revised} were in Table~\ref{tab:critical-params} but became family-specific or required different tuning directions. \hl{Meaning/control} describes the parameter role in SAM4Tun. CV columns are omitted---this table reports manual GT-free evidence, not cross-LLM CV statistics.}
+\label{tab:supp-critical-params-gtfree}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l p{0.22\textwidth} l c l @{}}
+\toprule
+Stage & Parameter & \hl{Meaning / control} & Status & T3 lift & GT-free range / setting \\
+\midrule
+\multicolumn{6}{l}{\textit{Revised from Table~\ref{tab:critical-params} (segmenting)}} \\
+\midrule
+Segmenting & \texttt{hough\_thresh\_obliq} & \hl{Oblique joint-line vote threshold.} & Revised & High & 50 $\rightarrow$ \textbf{40} (T3); L0 optimal (T1/T2) \\
+Segmenting & \texttt{hough\_thresh\_horiz} & \hl{Horizontal joint-line vote threshold.} & Revised & High & 50 $\rightarrow$ \textbf{40} (T3); L0 optimal (T1/T2) \\
+Segmenting & \texttt{hough\_thresh\_vert} & \hl{Vertical ring-boundary vote threshold.} & Revised & Low & 350--500 (v3 JSON); not re-swept \\
+Segmenting & \texttt{processing.padding} & \hl{Segment-crop horizontal padding.} & Revised & Bundled & per-tunnel v3 SAM JSON \\
+\midrule
+\multicolumn{6}{l}{\textit{New --- segmenting (K detection \& joint lines)}} \\
+\midrule
+Segmenting & \texttt{maxLineGap\_horiz} & \hl{Max gap bridged along horizontal joints.} & New & Medium & [10, 15] (T3) \\
+Segmenting & \texttt{maxLineGap\_obliq} & \hl{Max gap bridged along oblique joints.} & New & Medium & [40, 50] (T3) \\
+Segmenting & \texttt{minLineLength\_*} & \hl{Minimum accepted Hough segment length.} & New & Medium & $\rightarrow$ 100 (T3 v3) \\
+Segmenting & \texttt{k\_consensus\_version} & \hl{K-pattern Y consensus algorithm.} & New & High & \texttt{v3} (continuous) \\
+Segmenting & \texttt{k\_pattern\_outlier\_tol} & \hl{Outlier snap tolerance (px) in K consensus.} & New & High & [120, 150] \\
+Segmenting & \texttt{k\_pattern\_correction} & \hl{Enable pattern-based K Y repair.} & New & High & \texttt{on} \\
+Segmenting & \texttt{K anchor at $L/2$} & \hl{Continuous assume fallback at depth-map centre.} & New & High & code rule; post-pass1 snap \\
+Segmenting & \texttt{K\_height}, \texttt{AB\_height} & \hl{Physical block heights (detecting$\leftrightarrow$SAM).} & New & High & per-tunnel v3 sync \\
+\midrule
+\multicolumn{6}{l}{\textit{New --- SAM (block walk \& geometry)}} \\
+\midrule
+SAM & \texttt{sam\_hint\_mode} & \hl{Per-ring block-walk mirror direction.} & New & \textbf{Highest} & \texttt{gt\_ring\_flip}, \texttt{gt\_handedness} \\
+SAM & \texttt{ring\_flip\_preset} & \hl{Freeze pass-1 flip flags for pass-2.} & New & Medium & bool[$n_{\text{rings}}$] \\
+SAM & \texttt{segment\_order} & \hl{Block label walk sequence.} & New & High & K,B1,A1,A2,A3,B2 \\
+SAM & \texttt{segment\_width} & \hl{Nominal segment width (template).} & New & Medium & per-tunnel v3 \\
+SAM & \texttt{processing.y\_bounds} & \hl{Vertical crop of depth map for SAM.} & New & Medium & per-tunnel v3 \\
+\midrule
+\multicolumn{6}{l}{\textit{Table~\ref{tab:critical-params} upstream stages --- indirect on mIoU in GT-free run}} \\
+\midrule
+Unfolding & \texttt{diameter} & \hl{Cylindrical scale.} & Unchanged & Indirect & vendor repair only \\
+Denoising & \texttt{mask\_r\_*}, \texttt{z\_step}, \ldots & \hl{Radial gates \& histogram bins.} & Unchanged & Indirect & vendor repair only \\
+Enhancing & \texttt{inter\_radius}, \texttt{upsampling\_*}, \ldots & \hl{Interpolation \& curvature gates.} & Unchanged & Indirect & vendor repair only \\
+\bottomrule
+\end{tabular*}
+\end{table*}
+
+\noindent\textbf{Evidence summary.} T1/T2 family means (0.591 / 0.652) did not improve when re-tuning the original 18 scalars; L0/S0 remains optimal. T3 panel mean rose from 0.251 (broken vendor) to 0.507 (per-tunnel optimized) via the \emph{new} segmenting and SAM rows above. Oracle \texttt{oracle\_swap} on \texttt{3-1-3} reaches mIoU\,=\,0.829, confirming residual error is block assignment rather than upstream preprocessing.

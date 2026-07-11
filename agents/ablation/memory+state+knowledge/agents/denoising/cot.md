@@ -20,8 +20,33 @@ SAM4Tun reference defaults for denoising:
 
 For complex tunnels (4-\*, 5-\*) where geometry differs significantly from the
 sample tunnel, prefer SAM4Tun reference defaults as the safe starting point.
-The "proven robust defaults" listed later in this document were calibrated on
-regular/continuous tunnel types and may not generalise to complex tunnels.
+
+**T1/T2 SIMILAR_TO_SAMPLE (1-\*, 2-\*):** start with frozen sample mask
+`mask_r_low=2.7`, `mask_r_high=2.8` and grid `y_step=0.5`, `z_step=0.001`.
+Switch to rules formula (`mask_r_low = d/2 − 0.15`, `mask_r_high = d/2 + 0.15`)
+**only** when unfolded `r_percentiles` prove sample mask excludes ≥1% of wall
+points. Rules widening helped 1-1 but hurt 2-1 — this must be evidence-driven,
+not default.
+
+For T3/T4/T5 use rules formula from diameter, not percentile p10/p99 defaults alone.
+
+### MASK_RETENTION_GATE (mandatory before final JSON)
+
+From unfolded `r_percentiles` or denoised state, compute:
+
+```
+wall_pct = % points with mask_r_low <= r <= mask_r_high
+```
+
+**MASK_FAILURE** if `wall_pct < 15%` OR `p50(r) > mask_r_high` OR `p10(r) < mask_r_low` OR **`mask_r_high < p99`**.
+
+On MASK_FAILURE:
+- Do **not** keep sample `[2.7, 2.8]`.
+- **T3 / continuous-joint (`3-*`):** if `p50(r) > d/2 + 0.15` (wall sits above rules high), rules `[2.6, 2.9]` is too narrow — set `mask_r_low = p10 − 0.02`, `mask_r_high = p99 + 0.02`.
+- Otherwise widen to rules `[d/2 − 0.15, d/2 + 0.15]` and re-check `wall_pct`.
+- Target **`wall_pct ≥ 50%`** before optional `mask_r_low` trim (never trim `mask_r_high` below `p99 + 0.02`).
+
+Document `wall_pct`, p5/p50/p99, and chosen mask in prose before the JSON fence.
 
 ### 1. ANCHORING
 Compare the current tunnel's unfolded point cloud characteristics against the sample baseline to establish differences that affect denoising performance.
@@ -50,7 +75,9 @@ Consult DOMAIN KNOWLEDGE for: reference vs proven defaults, proven robust defaul
 - For SIMILAR tunnels: use the proven robust defaults in DOMAIN KNOWLEDGE (NOT the reference parameters block alone)
 - Large radial span differences (>100%) are often measurement or preprocessing artifacts — validate before adapting radial masks
 - Moderate density differences (<25%) should lean towards SIMILAR classification for robustness
-- Mask parameters must be derived from r_percentiles: mask_r_low at p10, mask_r_high at p99 for each tunnel
+- **For SIMILAR / T1/T2 tunnels:** retain **frozen sam4tun sample** mask `[2.7, 2.8]` only when `wall_pct ≥ 15%` — do **not** substitute legacy "proven defaults" when retention fails.
+- **For T3 (`3-*`):** never default to sample mask; derive mask from `r_percentiles` per MASK_RETENTION_GATE and T3_CONTINUOUS tight-bracket rule.
+- Mask parameters for T4/T5: rules formula `mask_r_low = d/2 − 0.15`, `mask_r_high = d/2 + 0.15`.
 - Document specific reasoning for each parameter decision with evidence
 
 **Evidence requirements:**

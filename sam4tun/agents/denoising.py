@@ -18,9 +18,9 @@ setup_sam4tun_path()
 from helpers.pipeline_io import ensure_dir
 from helpers.pipeline_state import load_state, save_state
 
-tunnel_id = parse_pipeline_args("denoising")
-params = load_stage_parameters(tunnel_id, "denoising")
-param_file = resolve_param_file(tunnel_id, "denoising")
+tunnel_id, ablation, model = parse_pipeline_args("denoising")
+params = load_stage_parameters(tunnel_id, "denoising", ablation, model)
+param_file = resolve_param_file(tunnel_id, "denoising", ablation, model)
 
 import numpy as np
 import pandas as pd

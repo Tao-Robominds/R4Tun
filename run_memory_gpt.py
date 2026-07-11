@@ -32,6 +32,8 @@ from openai import APIStatusError, OpenAI
 
 load_dotenv()
 
+from agents.ablation import sam4tun_pipeline_runtime as spt
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -79,7 +81,7 @@ ANALYST_CLASSES = {
     "sam":       ("segmenting.analyst", "SegmentingAnalyser"),
 }
 
-PARAM_BASE = Path("agents/ablation") / ABLATION_FOLDER / "parameters"
+PARAM_BASE = spt.param_base(ABLATION_FOLDER)
 AGENTS_DIR = Path("agents/ablation") / ABLATION_FOLDER / "agents"
 PYTHON = sys.executable
 
@@ -91,8 +93,14 @@ PYTHON = sys.executable
 def _setup_env() -> dict[str, str]:
     env = os.environ.copy()
     env["R4TUN_PIPELINE_OUT_PREFIX"] = f"data/ablation/{ABLATION_FOLDER}"
+    env["R4TUN_PIPELINE_WORK_DIR"] = f"data/ablation/{ABLATION_FOLDER}"
     env["R4TUN_ABLATION_TUNNEL_SUBROOT"] = ABLATION_FOLDER
-    env["PYTHONPATH"] = "."
+    root = Path(__file__).resolve().parent
+    sam_sa = root / "sam4tun" / "segment-anything"
+    pp = [str(root)]
+    if sam_sa.is_dir():
+        pp.append(str(sam_sa))
+    env["PYTHONPATH"] = os.pathsep.join(pp)
     return env
 
 
@@ -204,86 +212,9 @@ def extract_json_from_response(response_text: str) -> dict:
 
 
 def save_parameters(tunnel_id: str, stage_name: str, params: dict, model_tag: str) -> Path:
-    param_name = STAGE_TO_PARAM_NAME[stage_name]
-    filename = f"parameters_{param_name}{PARAM_FILE_SUFFIX}{model_tag}.json"
-    out_dir = PARAM_BASE / tunnel_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / filename
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(params, f, indent=2)
-    print(f"  Saved: {out_path}")
-    return out_path
-
-
-# ---------------------------------------------------------------------------
-# Subprocess helpers
-# ---------------------------------------------------------------------------
-
-
-def run_pipeline_stage(tunnel_id: str, stage_script: str, model_tag: str, env: dict) -> None:
-    cmd = [
-        PYTHON, f"agents/{stage_script}",
-        tunnel_id,
-        "--ablation", ABLATION_CODE,
-        "--model", model_tag,
-    ]
-    print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if result.stdout:
-        for line in result.stdout.strip().split("\n"):
-            print(f"    {line}")
-    if result.returncode != 0:
-        print(f"  STDERR: {result.stderr}")
-        raise RuntimeError(f"Pipeline stage {stage_script} failed (exit {result.returncode})")
-
-
-def run_characteriser(tunnel_id: str, characteriser_script: str, env: dict) -> None:
-    cmd = [PYTHON, f"sam4tun/plugins/{characteriser_script}", tunnel_id]
-    print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if result.stdout:
-        for line in result.stdout.strip().split("\n"):
-            print(f"    {line}")
-    if result.returncode != 0:
-        print(f"  STDERR: {result.stderr}")
-        raise RuntimeError(f"Characteriser {characteriser_script} failed (exit {result.returncode})")
-
-
-def run_raw_characteriser(tunnel_id: str, env: dict) -> None:
-    cmd = [
-        PYTHON, "sam4tun/plugins/raw_characteristics.py",
-        "--tunnel_id", tunnel_id,
-        "--data_dir", "data/subsets",
-    ]
-    print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if result.stdout:
-        for line in result.stdout.strip().split("\n"):
-            print(f"    {line}")
-    if result.returncode != 0:
-        print(f"  STDERR: {result.stderr}")
-        raise RuntimeError(f"Raw characteriser failed (exit {result.returncode})")
-
-
-def run_evaluation(tunnel_id: str, env: dict) -> None:
-    only_label = Path(f"data/ablation/{ABLATION_FOLDER}/{tunnel_id}/only_label.csv")
-    if not only_label.exists():
-        print(f"  Skipping evaluation: {only_label} not found")
-        return
-    cmd = [
-        PYTHON, "agents/evaluation.py",
-        tunnel_id,
-        "--ablation", ABLATION_CODE,
-        "--schema", "auto",
-    ]
-    print(f"  Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    if result.stdout:
-        for line in result.stdout.strip().split("\n"):
-            print(f"    {line}")
-    if result.returncode != 0:
-        print(f"  STDERR: {result.stderr}")
-        print("  Warning: evaluation failed, continuing")
+    return spt.save_parameters(
+        tunnel_id, stage_name, params, ABLATION_FOLDER, PARAM_FILE_SUFFIX, STAGE_TO_PARAM_NAME, model_tag
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +224,6 @@ def run_evaluation(tunnel_id: str, env: dict) -> None:
 
 STAGE_NAMES = [s[0] for s in STAGES]
 
-
 def process_tunnel(tunnel_id: str, model_tag: str, dry_run: bool, env: dict,
                    stage_filter: list[str] | None = None) -> None:
     print(f"\n{'='*60}")
@@ -302,16 +232,20 @@ def process_tunnel(tunnel_id: str, model_tag: str, dry_run: bool, env: dict,
         print(f"STAGES: {', '.join(stage_filter)}")
     print(f"{'='*60}")
 
-    out_dir = Path(f"data/ablation/{ABLATION_FOLDER}/{tunnel_id}")
+    out_dir = spt.out_root(ABLATION_FOLDER) / tunnel_id
+    spt.out_root(ABLATION_FOLDER).mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
+    spt.ensure_tunnel_characteristics(tunnel_id, ABLATION_FOLDER)
 
-    # Always regenerate raw characteristics before pipeline stages
+    if not dry_run:
+        spt.symlink_input(tunnel_id)
+        spt.prepare_work_dir(tunnel_id, stage_filter)
+
     needs_unfolding = not stage_filter or "unfolding" in stage_filter
-    if needs_unfolding:
+    if needs_unfolding and not dry_run:
         print("\n--- Pre-stage: raw characteristics ---")
-        run_raw_characteriser(tunnel_id, env)
+        spt.run_raw_characteriser(tunnel_id, env)
 
-    # If an upstream stage re-ran the pipeline, downstream inputs changed — must re-run downstream too.
     upstream_pipeline_ran = False
 
     for stage_name, stage_script, characteriser in STAGES:
@@ -326,25 +260,23 @@ def process_tunnel(tunnel_id: str, model_tag: str, dry_run: bool, env: dict,
             with open(param_path, encoding="utf-8") as f:
                 old_params = json.load(f)
 
-        # 1. Build prompt
         print("  Building prompt...")
         prompt = build_prompt(tunnel_id, stage_name)
-        prompt_len = len(prompt)
-        print(f"  Prompt length: {prompt_len:,} chars")
+        print(f"  Prompt length: {len(prompt):,} chars")
 
-        # 2. Call OpenAI API
         response_text = call_gpt(prompt, model_tag, dry_run=dry_run)
 
         if dry_run:
             continue
 
-        # 3. Extract and save parameters
+        analysis_dir = out_dir / "analysis"
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        (analysis_dir / f"{stage_name}_reasoning_{model_tag}.md").write_text(response_text)
+
         try:
             params = extract_json_from_response(response_text)
         except (ValueError, json.JSONDecodeError) as e:
             print(f"  ERROR extracting JSON: {e}")
-            analysis_dir = out_dir / "analysis"
-            analysis_dir.mkdir(parents=True, exist_ok=True)
             (analysis_dir / f"{stage_name}_raw_response.md").write_text(response_text)
             print(f"  Raw response saved to {analysis_dir}/{stage_name}_raw_response.md")
             raise
@@ -352,24 +284,29 @@ def process_tunnel(tunnel_id: str, model_tag: str, dry_run: bool, env: dict,
         save_parameters(tunnel_id, stage_name, params, model_tag)
 
         params_match = old_params is not None and params == old_params
-        skip_pipeline = params_match and not upstream_pipeline_ran
+        skip_pipeline = spt.should_skip_pipeline(
+            tunnel_id, ABLATION_FOLDER, stage_name, characteriser, params_match, upstream_pipeline_ran
+        )
+        artifact = spt.WORK_ARTIFACTS.get(stage_name)
+        if skip_pipeline and artifact and not (spt.work_dir(tunnel_id) / artifact).exists():
+            skip_pipeline = False
+            print(f"  Re-run pipeline: missing {artifact}")
         if skip_pipeline:
             print(f"  SKIP pipeline: parameters unchanged for {stage_name}")
             continue
 
-        # 4. Run pipeline stage
-        run_pipeline_stage(tunnel_id, stage_script, model_tag, env)
+        spt.run_pipeline_stage(tunnel_id, stage_script, ABLATION_CODE, model_tag, env)
 
-        # 5. Extract characteristics
         if characteriser:
-            run_characteriser(tunnel_id, characteriser, env)
+            spt.run_characteriser(tunnel_id, characteriser, env)
 
         upstream_pipeline_ran = True
 
     skip_eval = stage_filter and "sam" not in stage_filter
     if not dry_run and not skip_eval and upstream_pipeline_ran:
-        print(f"\n--- Evaluation ---")
-        run_evaluation(tunnel_id, env)
+        print("\n--- Archive + evaluation ---")
+        spt.archive_pipeline_output(tunnel_id, ABLATION_FOLDER)
+        spt.run_evaluation(tunnel_id, ABLATION_FOLDER, env)
 
     print(f"\nDone: {tunnel_id}")
 
@@ -419,7 +356,7 @@ def main():
     else:
         parser.error("Provide tunnel IDs or --all")
 
-    env = _setup_env()
+    env = spt.setup_env(ABLATION_FOLDER)
     t_start = time.time()
 
     for tid in tunnel_ids:

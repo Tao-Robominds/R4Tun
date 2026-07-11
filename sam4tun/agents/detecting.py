@@ -25,9 +25,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-tunnel_id = parse_pipeline_args("detecting")
-params = load_stage_parameters(tunnel_id, "detecting")
-param_file = resolve_param_file(tunnel_id, "detecting")
+tunnel_id, ablation, model = parse_pipeline_args("detecting")
+params = load_stage_parameters(tunnel_id, "detecting", ablation, model)
+param_file = resolve_param_file(tunnel_id, "detecting", ablation, model)
 
 expected_keys = [
     "binary_threshold", "morphological_kernel_size", "dilation_iterations",
@@ -385,6 +385,21 @@ for vertical_x, _ in vertical_lines:
                 assumed_y = 1123.0 if ring_idx % 2 == 0 else 1553.0
             adjusted_points.append(('assume', (vertical_x, assumed_y)))
 
+# Continuous T3: uniform single K Y from anchor detections (3-* only)
+if tunnel_id.startswith("3-"):
+    _ANCHOR_TYPES = {"midpoint", "horizontal", "positive_slope", "negative_slope"}
+    _anchor_ys = [pt[1] for label, pt in adjusted_points if label in _ANCHOR_TYPES]
+    if _anchor_ys:
+        y_star = float(np.median(_anchor_ys))
+        if len(_anchor_ys) > 1 and np.std(_anchor_ys) > 40:
+            print(f"Warning: anchor Y std {np.std(_anchor_ys):.1f} > 40 before T3 uniform snap")
+        _n = len(adjusted_points)
+        adjusted_points = [
+            ("propagated", (pt[0], y_star))
+            for _, pt in adjusted_points
+        ]
+        print(f"T3 K uniform: set all {_n} rings to Y={y_star:.1f}")
+
 df_loc = pd.DataFrame(adjusted_points, columns=['Type', 'Coordinates'])
 df_loc['X'] = df_loc['Coordinates'].apply(lambda coord: coord[0])
 df_loc['Y'] = df_loc['Coordinates'].apply(lambda coord: coord[1])
@@ -397,8 +412,8 @@ print(df_loc)
 
 plt.figure(figsize=(16, 16))
 ax = plt.gca()
-colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume': 'g'}
-markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*', 'assume': 'd'}
+colors = {'horizontal': 'b', 'positive_slope': 'r', 'negative_slope': 'c', 'midpoint': 'm', 'assume': 'g', 'propagated': 'y'}
+markers = {'horizontal': 'o', 'positive_slope': '^', 'negative_slope': 's', 'midpoint': '*', 'assume': 'd', 'propagated': 'P'}
 for label, (x, y) in adjusted_points:
     ax.plot(x, y, color=colors[label], marker=markers[label], markersize=10, label=label)
 handles, labels = ax.get_legend_handles_labels()

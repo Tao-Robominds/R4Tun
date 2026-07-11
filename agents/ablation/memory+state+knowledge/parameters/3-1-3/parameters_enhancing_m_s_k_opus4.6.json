@@ -12,5 +12,6 @@
   "num_neighbors": 20,
   "num_interpolations": 2,
   "resolution": 0.005,
-  "window_size": 9
+  "window_size": 9,
+  "ring_spacing_factor": 1.2
 }

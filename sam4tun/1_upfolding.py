@@ -54,7 +54,6 @@ df_point_cloud.head()
 ## 1. Determine direction vector
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
-from helpers.tunnel_direction import orient_centers_by_ring
 
 # Obtain minimum bounding rectangle for the 2D XOY projection
 points_2d_xoy = points_xyz[:, :2]
@@ -73,13 +72,12 @@ short_edge_index = np.argmin(edges)
 # Determine the centers of the two short sides
 center1 = (rect_vertices[short_edge_index] + rect_vertices[(short_edge_index + 1) % 4]) / 2
 center2 = (rect_vertices[(short_edge_index + 2) % 4] + rect_vertices[(short_edge_index + 3) % 4]) / 2
-center1, center2, ring_rho, ring_swapped = orient_centers_by_ring(points_xyz, ring, center2, center1)
-print(f"Ring-axis Spearman rho={ring_rho:.4f}, swapped={ring_swapped}")
+center1, center2 = center2, center1  # swapped: shield-machine forward direction
 
 vector = center2 - center1
 print(vector)
 # if you want to visualize
-#=========important: vector direction is auto-oriented by ring metadata (see tunnel_direction.py)========= 
+#=========important: Ensure that the vector direction is consistent with the forward direction of the shield machine========= 
 import matplotlib.pyplot as plt
 
 # Visualization
@@ -113,7 +111,7 @@ plt.title('Projected Point Cloud and Bounding Rectangle')
 plt.legend()
 plt.axis('equal')
 plt.grid(True)
-plt.savefig(_out('projected_point_cloud_bbox.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "projected_point_cloud_bbox.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 ## 2. Generate point cloud slices
 import numpy as np
@@ -268,7 +266,7 @@ plt.ylabel('Y Coordinate')
 plt.legend()
 plt.axis('equal')
 plt.grid(True)
-plt.savefig(_out('slice_point_cloud_2d.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "slice_point_cloud_2d.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 import cv2
 import random
@@ -501,7 +499,7 @@ ax.set_title('3D Scatter Plot')
 ax.view_init(elev=15, azim=0)
 ax.set_aspect('auto')
 ax.set_box_aspect([1,1,1])
-plt.savefig(_out('ellipse_centres_3d.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "ellipse_centres_3d.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 ## 4. 3D Curve Curve<sub>centre</sub> fitting
 import numpy as np
@@ -599,7 +597,7 @@ ax.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
 ax.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
 ax.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
 
-plt.savefig(_out('tunnel_centre_curve_3d.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "tunnel_centre_curve_3d.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 import numpy as np
 from numba import njit, prange
@@ -734,6 +732,18 @@ for batch_result in cylindrical_coords_batches:
 
 end_time = time.time()
 
+print(f"Total computation time: {end_time - start_time:.6f} seconds")
+# recording data
+import pandas as pd
+
+diameter = 5.5
+df_point_cloud['r'] = np.array(cylindrical_coords)[:,0]
+df_point_cloud['theta'] = np.array(cylindrical_coords)[:,1]* (np.pi*diameter / 360)
+df_point_cloud['h'] = np.array(cylindrical_coords)[:,2]
+df_point_cloud.head()
+df_point_cloud.to_csv(paths["unwrapped_csv"],index=False)
+# Algorithm 2: Local point cloud density-difference-based denoising
+import numpy as np
 
 
 df_point_cloud.to_csv(paths["unwrapped_csv"], index=False)

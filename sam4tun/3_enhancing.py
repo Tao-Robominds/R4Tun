@@ -24,16 +24,6 @@ df_point_cloud = state["df_point_cloud"]
 ring_count = state["ring_count"]
 resolution = state.get("resolution", 0.005)
 
-    df_point_cloud.loc[filtered_out_indices, 'pred'] = 0
-
-# Output the number of filtered points
-filtered_points_count = (df_point_cloud['pred'] == 7).sum()
-print(f"Remaining points count: {filtered_points_count}")
-
-# End the timer
-end_time = time.time()
-execution_time = end_time - start_time
-print(f"Execution time: {execution_time:.2f} seconds")
 # Algorithm 3: geometry guided up sampling
 df_support_filtered = df_point_cloud[df_point_cloud['pred'] != 0]
 df_support_filtered.tail()
@@ -508,7 +498,7 @@ import matplotlib.pyplot as plt
 plt.figure(figsize=(12, 24))
 plt.imshow(depth_map, cmap='viridis', vmin=2.70, vmax=2.80)
 plt.axis('off')
-plt.savefig(_out('depth_map_viridis.png'), dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(os.path.dirname(paths["state"]), "depth_map_viridis.png"), dpi=150, bbox_inches='tight')
 # plt.show()
 import matplotlib.pyplot as plt
 
@@ -535,13 +525,25 @@ def save_depth_map_exact(depth_map, resolution, filename=paths["depth_map"]):
     # Save the depth map with exact dimensions
     plt.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0)
     plt.close()
-save_depth_map_exact(depth_map, resolution=0.005, filename=_out("depth_map.png"))
+save_depth_map_exact(depth_map, resolution=0.005, filename=paths["depth_map"])
 # Algorithm 4: Prompt point generation 
 ##  1. Obtain initial prompt points
 data_joint_2 = {
     'x': df_enhance_joint['h'],
     'y': df_enhance_joint['theta'],
     'z': df_enhance_joint['r'],
+    'pred': df_enhance_joint['pred'],
+    'intensity': df_enhance_joint['intensity'],
+}
+
+df_joint = pd.DataFrame(data_joint_2)
+
+# df_joint = df_joint[df_joint['intensity'] <= -1200]
+# generate map only including outlier point
+depth_map_outlier,_ = project_to_depth_map_inter(data_segment, df_joint, window_size=1, outlier_mode=True)
+np.save(paths["depth_map_outlier"], depth_map_outlier)
+# pre-processing
+
 
 
 import pickle

@@ -1,0 +1,401 @@
+% ══════════════════════════════════════════════════════════════════════════
+% Appendices — included via \input{appendices} from main document
+% Ordered to follow the paper structure:
+%   A  Baseline parameter tables          (§3.1–3.3, §3.5 sam4tun)
+%   B  Characteriser fields               (§3.4 R4Tun overview)
+%   C  Context components example         (§3.4.2 Context design)
+%   D  Worked CoT trace                   (§3.4.3 CoT design)
+%   E  On-site rules baseline             (§3.5 baselines)
+%   F  Runtime, API calls, and cost       (§3.6 implementation)
+%   G  Per-class IoU breakdown            (§4 results)
+%   H  Performance distribution           (§4 results)
+% ══════════════════════════════════════════════════════════════════════════
+
+\FloatBarrier
+% Use numeric appendix section numbers (1, 2, 3, ...) instead of letters (A, B, C, ...).
+% (The default \appendix switches \thesection to \Alph{section}.)
+\setcounter{section}{0}
+\renewcommand{\thesection}{\arabic{section}}
+\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Baseline parameter tables}\label{app:params}
+Tables~\ref{tab:unfold-params}--\ref{tab:segment-params} report the SAM4Tun baseline parameter values used as the reference configuration for all adaptation experiments.
+
+\begin{table}[ht]
+\caption{Stage~1 --- Unfolding parameters (sam4tun baseline).}\label{tab:unfold-params}
+\begin{tabular*}{\tblwidth}{@{} l c @{}}
+\toprule
+Parameter & Value \\
+\midrule
+delta & 0.005 \\
+slice\_spacing\_factor & 1.2 \\
+vertical\_filter\_window & 4.5 \\
+ransac\_threshold & 1 \\
+ransac\_probability & 0.9 \\
+ransac\_inlier\_ratio & 0.75 \\
+ransac\_sample\_size & 5 \\
+polynomial\_degree & 3 \\
+num\_samples\_factor & 1210 \\
+diameter & 5.60 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[ht]
+\caption{Stage~2 --- Denoising parameters (sam4tun baseline).}\label{tab:denoise-params}
+\begin{tabular*}{\tblwidth}{@{} l c @{}}
+\toprule
+Parameter & Value \\
+\midrule
+mask\_r\_low & 2.7 \\
+mask\_r\_high & 2.8 \\
+y\_step & 0.5 \\
+z\_step & 0.001 \\
+grad\_threshold & 0.2 \\
+smoothing\_window\_size & 3 \\
+smoothing\_offset & $-0.003$ \\
+default\_cutoff\_z & 2.7 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[ht]
+\caption{Stage~3 --- Enhancing parameters (sam4tun baseline).}\label{tab:enhance-params}
+\begin{tabular*}{\tblwidth}{@{} l c @{}}
+\toprule
+Parameter & Value \\
+\midrule
+upsamp\_stage1\_target\_dist & 0.08 \\
+upsamp\_stage2\_target\_dist & 0.04 \\
+upsamp\_stage3\_target\_dist & 0.02 \\
+curvature\_threshold & 0.0005 \\
+depth\_threshold\_low & 0.003 \\
+depth\_threshold\_high & 0.01 \\
+inter\_radius & 0.06 \\
+duplicate\_threshold & 0.02 \\
+num\_neighbors & 20 \\
+num\_interpolations & 2 \\
+resolution & 0.005 \\
+window\_size & 9 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[ht]
+\caption{Stage~4 --- Segmenting parameters (sam4tun baseline). \textsuperscript{*}}\label{tab:segment-params}
+\begin{tabular*}{\tblwidth}{@{} l c @{}}
+\toprule
+Parameter & Value \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Boundary detection}} \\
+binary\_threshold & 127 \\
+morph\_kernel\_size & [3, 3] \\
+dilation\_iterations & 1 \\
+hough\_thresh\_oblique & 50 \\
+minLineLength\_oblique & 100 \\
+maxLineGap\_oblique & 40 \\
+hough\_thresh\_horiz & 50 \\
+minLineLength\_horiz & 100 \\
+maxLineGap\_horiz & 10 \\
+hough\_thresh\_vert & 500 \\
+angle\_range\_obliq\_pos & [6, 9] \\
+angle\_range\_obliq\_neg & [$-9$, $-6$] \\
+merge\_distance & 3 \\
+ring\_spacing\_constant & 1.2 \\
+resolution & 0.005 \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{SAM template}} \\
+segment\_per\_ring & 6 \\
+segment\_order & [K, B1, A1, A2, A3, B2] \\
+segment\_width & 1200 \\
+K\_height & 1079.92 \\
+AB\_height & 3239.77 \\
+angle & 7.52 \\
+processing.padding & 150 \\
+processing.y\_bounds & [4200, 13100] \\
+processing.crop\_margin & 50 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Characteriser fields}\label{app:chars}
+Table~\ref{tab:chars} summarises the characteriser fields used to describe each tunnel and to populate the per-stage state provided to the agents.
+
+\begin{table}[ht]
+\caption{Characteriser fields by stage. Raw fields are available to all stages; each subsequent group becomes available after the corresponding stage completes.}\label{tab:chars}
+\begin{tabular*}{\columnwidth}{@{\extracolsep{\fill}} l p{0.72\columnwidth} @{}}
+\toprule
+Source & Fields \\
+\midrule
+\multirow{3}{*}{Raw} & estimated diameter, tunnel length, tunnel height \\
+ & $z$-range (min, max) \\
+ & mean / median / min nearest-neighbour distance \\
+\midrule
+\multirow{4}{*}{Unfolded} & $r$-percentiles ($p_{10}$, $p_{99}$), $h$-span, $\theta$-span, $\theta$-range \\
+ & median / std nearest-neighbour distance \\
+ & intensity median, intensity min \\
+\midrule
+\multirow{3}{*}{Denoised} & mean / median / std nearest-neighbour distance \\
+ & estimated diameter, tunnel length, surface completeness \\
+ & surface regularity, average curvature, section curvatures \\
+\midrule
+\multirow{3}{*}{Enhanced} & total points, median / mean nearest-neighbour distance \\
+ & coverage uniformity \\
+ & template spacing suitability, current median spacing \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Non-LLM rule-based pseudocode}\label{app:rules}\label{sec:rule-baseline}
+
+The non-LLM baseline reads the same per-stage knowledge documents the LLM agents read, transcribed into a deterministic Python lookup. The parameter-selection logic for the denoising stage is reproduced below. Other stages follow the same pattern.
+
+% The verbatim block must stay together; if there isn't enough space left in
+% the current column/page, force a break before it (without flushing floats).
+\pagebreak[4]
+\begin{verbatim}
+def select_denoising(chars):
+    diameter = chars["estimated_diameter"]
+    density  = chars["density"]
+    p10      = chars["unfolded_p10"]
+    p99      = chars["unfolded_p99"]
+
+    if diameter > 6.5:
+        family = "large"          
+    elif chars["joint_type"] == "continuous":
+        family = "continuous"     
+    else:
+        family = "base"           
+
+    params = REFERENCE_DENOISING.copy()
+
+    if family == "large":
+        params["mask_r_low"]       = p10
+        params["mask_r_high"]      = p99 + 0.05
+        params["smooth_win"]       = 5
+    elif family == "continuous":
+        params["mask_r_high"]      = max(p99, 2.85)
+        params["smooth_win"]       = 6
+    return params
+\end{verbatim}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Context components: denoising agent example}\label{app:context}
+
+This appendix reproduces the three context components (memory, state, knowledge) that the agent receives as input.
+
+\subsection{Memory: reference vs target raw characteristics}\label{app:context-memory}
+Memory pairs the reference tunnel's raw characteristics with those of the target tunnel using an identical schema, so the agent can compute deviations field-by-field (Table~\ref{tab:context-memory}).
+
+\begin{table}[ht]
+\caption{Memory excerpt (raw characteristics). Reference is the expert-tuned tunnel; target is tunnel~4-1.}\label{tab:context-memory}
+\begin{tabular*}{\tblwidth}{@{} l c c c @{}}
+\toprule
+Field & Reference & Target (4-1) & $\Delta$ \\
+\midrule
+Total points & 1{,}109{,}768 & 1{,}872{,}537 & $+69\%$ \\
+Estimated diameter (m) & 5.32 & 7.41 & $+39\%$ \\
+Tunnel length (m) & 12.16 & 18.10 & $+49\%$ \\
+Tunnel height (m) & 5.08 & 7.72 & $+52\%$ \\
+Mean NN distance (m) & 0.0082 & 0.0081 & $-1\%$ \\
+Median NN distance (m) & 0.0065 & 0.0065 & $\approx 0\%$ \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+Memory also bundles the SAM4Tun reference parameters for the stage (Table~\ref{tab:denoise-params}), so the agent always has a known-good baseline to deviate from.
+
+\subsection{State: cumulative outputs of upstream stages}\label{app:context-state}
+State grows as the pipeline executes. For the denoising agent, state consists of the unfolded characteristics produced by the preceding unfolding stage, supplied as a reference/target pair (Table~\ref{tab:context-state}).
+
+\begin{table}[ht]
+\caption{State excerpt (unfolded characteristics, after the unfolding stage).}\label{tab:context-state}
+\begin{tabular*}{\tblwidth}{@{} l c c @{}}
+\toprule
+Field & Reference & Target (4-1) \\
+\midrule
+$r$-percentile $p_{10}$ (m) & 2.30 & 2.38 \\
+$r$-percentile $p_{99}$ (m) & 2.77 & 3.93 \\
+$h$-span (m) & 12.08 & 18.86 \\
+$\theta$-span (rad) & 17.28 & 23.28 \\
+Median NN distance (m) & 0.047 & 0.066 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\subsection{Knowledge: parameter semantics, ranges, and constraints}\label{app:context-knowledge}
+Knowledge is a stage-specific Markdown document, authored once and shared across all tunnels. It enumerates each parameter together with its empirically validated range, defaults, and inter-parameter constraints. The denoising knowledge document is reproduced below.
+
+\begin{quote}\small
+\textbf{Cross-tunnel variation.}
+Tunnel lining datasets commonly vary along several axes:
+\textit{tunnel scale}, from smaller metro-scale tunnels to larger-diameter tunnels;
+\textit{ring geometry}, including shorter or longer ring lengths;
+\textit{segment layout}, including different numbers and ordering of lining segments per ring;
+\textit{joint assembly}, such as staggered, continuous, or interleaved joint arrangements;
+and \textit{scanning configuration}, including single-station scans, multi-station registration, or uneven scanner placement.
+
+\textbf{Tunable parameters.}
+\texttt{mask\_r\_low}~(m), inner radial gate before depth histogramming, range $[2.09, 3.75]$ (baseline 2.7);
+\texttt{mask\_r\_high}~(m), outer radial gate, range $[2.78, 4.38]$ (baseline 2.8);
+\texttt{default\_cutoff\_z}~(m), fallback radial cutoff when a $\theta$-bin lacks reliable counts, range $[2.65, 6.27]$ (baseline 2.7);
+\texttt{z\_step}~(m), radial bin width per histogram column, range $[0.003, 0.005]$ (baseline 0.001).
+
+\textbf{Proven defaults.}\par
+\texttt{smoothing\_window\_size}\,=\,5,\par
+\texttt{smoothing\_offset}\,=\,$-0.002$,\par
+\texttt{grad\_threshold}\,=\,0.15,\par
+\texttt{y\_step}\,=\,0.4.
+
+\textbf{Diagnostic rules.}
+\texttt{mask\_r\_low}\,$<$\,\texttt{mask\_r\_high};
+\texttt{default\_cutoff\_z} should stay coherent with the upstream unfolding \texttt{diameter} (order of magnitude $\approx$ diameter/2, with diameter in metres).
+\end{quote}
+
+The three other stages (unfolding, enhancing, segmenting) follow the same four-block template; the per-stage knowledge documents are released in the project's code repository.
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Worked CoT trace}\label{app:cot}
+
+The following trace continues the worked example from Appendix~\ref{app:context}: the denoising agent receives the memory, state, and knowledge inputs above, executes the five-step CoT protocol (Section~\ref{sec:cot}), and emits a single schema-conformant JSON object that the denoising stage consumes unchanged.
+
+\paragraph{Step~1 --- Referencing.}
+Estimated diameter is $7.41$\,m vs reference $5.32$\,m ($+39\%$). Unfolded $r$-percentiles are $p_{10}=2.38$, $p_{99}=3.93$, vs reference $p_{10}=2.30$, $p_{99}=2.77$. Median nearest-neighbour distance after unfolding is $0.066$\,m vs reference $0.047$\,m ($+41\%$), indicating lower areal density on the tunnel wall.
+
+\paragraph{Step~2 --- Diagnostic inspection.}
+Large-diameter, moderate-sparse target. The reference \texttt{mask\_r\_low}/\texttt{mask\_r\_high} ($2.7/2.8$) would clip all wall points beyond $r=2.8$\,m, which is below the target $p_{10}=2.38$ and well below $p_{99}=3.93$; the radial gate must widen substantially. \texttt{default\_cutoff\_z} (2.7) is below the target $p_{99}$ (3.93) and would force the fallback path to discard valid wall points; it must rise. Lower density ($+41\%$ NN distance) requires \texttt{z\_step} to relax from $0.001$ so each radial bin retains enough samples for the gradient test.
+
+\paragraph{Step~3 --- Parameter adaptation.}
+Set \texttt{mask\_r\_low}\,$=2.37$ (just below target $p_{10}=2.38$); \texttt{mask\_r\_high}\,$=3.80$ (just below target $p_{99}=3.93$, retaining $\geq 99\%$ of wall points while staying within the empirical range $[2.78, 4.38]$); \texttt{default\_cutoff\_z}\,$=3.7$ (close to \texttt{mask\_r\_high} and order $\approx$ diameter/2 $= 3.71$); \texttt{z\_step}\,$=0.005$ (proven default for sparse scans). All other parameters take the proven defaults from the knowledge block.
+
+\paragraph{Step~4 --- Validation.}
+\texttt{mask\_r\_low}\,(2.37) $<$ \texttt{mask\_r\_high}\,(3.80); both lie within their empirical ranges. \texttt{default\_cutoff\_z}\,(3.7) is consistent with the unfolding \texttt{diameter}\,(7.41\,m, half-diameter $3.71$\,m). \texttt{z\_step}\,(0.005) lies in $[0.003, 0.005]$. All keys present, all types match Table~\ref{tab:denoise-params}.
+
+\paragraph{Step~5 --- JSON output.}
+\begin{verbatim}
+    {
+      "mask_r_low": 2.37,
+      "mask_r_high": 3.80,
+      "y_step": 0.4,
+      "z_step": 0.005,
+      "grad_threshold": 0.15,
+      "smoothing_window_size": 5,
+      "smoothing_offset": -0.002,
+      "default_cutoff_z": 3.7
+    }
+\end{verbatim}
+
+
+The same parameter keys are adapted by GPT-5.4 and Gemini~3~Flash in qualitatively the same direction for this tunnel.
+
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Runtime, API calls, and cost}\label{app:practical}
+Table~\ref{tab:practical} reports the compute setup and, for one \texttt{m+s+k} run, the per-tunnel input/output token counts and indicative USD cost for each LLM (averaged over the 30 tunnels, four stage calls per tunnel).
+
+\begin{table}[ht]
+\caption{Runtime, API calls, and per-tunnel API cost. Token counts are as reported by each vendor API; USD figures use vendor list prices at submission and are indicative.}\label{tab:practical}
+\begin{tabular*}{\tblwidth}{@{} l l @{}}
+\toprule
+Metric & Value \\
+\midrule
+LLM API calls per tunnel & 4 (one per adapted stage agent) \\
+Total API calls (full ablation) & 120 per condition per LLM \\
+GPU & Single NVIDIA RTX~5060 \\
+Retraining required & None \\
+Labelled data required & None (GT for evaluation only) \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Per-tunnel tokens and cost (m+s+k, mean over 30 tunnels)}} \\
+Opus 4.6 & 64{,}854 in / 6{,}599 out, \$1.47 \\
+GPT-5.4 & 64{,}414 in / 35{,}263 out, \$0.43 \\
+Gemini 3 Flash & 83{,}658 in / 3{,}058 out, \$0.03 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Repeatability analysis}\label{app:repeatability}
+Table~\ref{tab:repeatability} reports a basic repeatability check for the full \mbox{m+s+k} condition (temperature~0). Each tunnel was re-inferred twice per LLM and the resulting adapted parameters and mIoU were compared between run~1 and run~2.
+
+\begin{table}[ht]
+\caption{Repeatability under \mbox{m+s+k} (temperature~0). Metrics are computed over 30 tunnels, with two runs per tunnel per LLM.}\label{tab:repeatability}
+\begin{tabular*}{\tblwidth}{@{} l c @{}}
+\toprule
+Metric & Value \\
+\midrule
+Mean critical parameters unchanged (18 total) & 90.9\% \\
+Mean $\lvert\Delta\mathrm{mIoU}\rvert$ (run~1 vs run~2) & 0.029 \\
+Median $\lvert\Delta\mathrm{mIoU}\rvert$ (run~1 vs run~2) & 0.000 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% ──────────────────────────────────────────────────────────────────────────
+% Place any pending floats before continuing, but avoid creating float-only blank pages.
+\FloatBarrier
+\pagebreak[4]
+
+\section{Per-class IoU breakdown}\label{app:perclass}
+
+Tables~\ref{tab:perclass-regular} and~\ref{tab:perclass-complex} report per-class IoU for Opus~4.6 (representative; other LLMs show the same pattern) alongside the rules baseline. For regular tunnels, rules achieve per-class IoU comparable to sam4tun while all LLM conditions improve roughly uniformly. For complex tunnels (rules $n=17$ including 3 failed tunnels scored as zero), rules recover segment structure from near-zero for most classes but not K-block; the LLM conditions achieve further improvement on regular tunnels. B2-block remains the hardest class, requiring the 7-segment layout guidance from the knowledge component.
+
+\begin{table}[ht]
+\caption{Per-class IoU---Regular tunnels ($n=13$, 6-class, Opus~4.6).}\label{tab:perclass-regular}
+\begin{tabular*}{\tblwidth}{@{} l c c c c c @{}}
+\toprule
+Class & sam4tun & rules & memory & m+s & m+s+k \\
+\midrule
+Background & 0.511 & 0.639 & 0.576 & 0.671 & 0.698 \\
+K-block & 0.151 & 0.295 & 0.372 & 0.599 & 0.558 \\
+B1-block & 0.217 & 0.256 & 0.338 & 0.643 & 0.613 \\
+A1-block & 0.268 & 0.234 & 0.317 & 0.681 & 0.651 \\
+A2-block & 0.198 & 0.159 & 0.180 & 0.403 & 0.398 \\
+A3-block & 0.302 & 0.272 & 0.320 & 0.667 & 0.679 \\
+B2-block & 0.229 & 0.412 & 0.317 & 0.710 & 0.723 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[ht]
+\caption{Per-class IoU---Complex tunnels ($n=17$, 7-class, Opus~4.6). Rules include 3 failed tunnels scored as zero.}\label{tab:perclass-complex}
+\begin{tabular*}{\tblwidth}{@{} l c c c c c @{}}
+\toprule
+Class & sam4tun & rules & memory & m+s & m+s+k \\
+\midrule
+Background & 0.337 & 0.534 & 0.358 & 0.513 & 0.520 \\
+K-block & 0.000 & 0.000 & 0.034 & 0.183 & 0.159 \\
+B1-block & 0.000 & 0.041 & 0.001 & 0.084 & 0.135 \\
+A1-block & 0.000 & 0.072 & 0.005 & 0.128 & 0.155 \\
+A2-block & 0.000 & 0.083 & 0.006 & 0.143 & 0.116 \\
+A3-block & 0.000 & 0.149 & 0.017 & 0.092 & 0.119 \\
+A4-block & 0.000 & 0.116 & 0.019 & 0.100 & 0.104 \\
+B2-block & 0.000 & 0.099 & 0.000 & 0.000 & 0.043 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+% ──────────────────────────────────────────────────────────────────────────
+\section{Performance distribution}\label{app:distribution}
+Table~\ref{tab:distribution} summarises the distribution of mIoU across tunnels (reported as the mean across the three LLMs for each condition).
+
+\begin{table}[ht]
+\caption{Performance distribution (mean across 3 LLMs).}\label{tab:distribution}
+\begin{tabular*}{\tblwidth}{@{} l c c c c c @{}}
+\toprule
+Metric & sam4tun & rules & memory & m+s & m+s+k \\
+\midrule
+Mean mIoU & 0.176 & 0.254 & 0.230 & 0.430 & 0.452 \\
+Std & 0.173 & 0.165 & 0.135 & 0.304 & 0.282 \\
+Min & 0.037 & 0.119 & 0.068 & 0.099 & 0.156 \\
+Max & 0.451 & 0.562 & 0.397 & 0.829 & 0.791 \\
+\bottomrule
+\end{tabular*}
+\end{table}
+
+
+% Ensure the final appendix tables are placed (and references resolve).
+\clearpage
+\FloatBarrier

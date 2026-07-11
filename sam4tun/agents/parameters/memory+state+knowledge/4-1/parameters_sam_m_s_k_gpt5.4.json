@@ -1,0 +1,27 @@
+{
+  "segment_per_ring": 7,
+  "segment_order": [
+    "K",
+    "B1",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "B2"
+  ],
+  "segment_width": 1800,
+  "K_height": 1472.62,
+  "AB_height": 4417.87,
+  "angle": 7.52,
+  "use_original_label_distributions": true,
+  "processing": {
+    "resolution": 0.005,
+    "padding": 205,
+    "crop_margin": 68,
+    "mask_eps": 0.001,
+    "y_bounds": [
+      5727,
+      17864
+    ]
+  }
+}

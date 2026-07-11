@@ -27,18 +27,6 @@ ring_count = state["ring_count"]
 resolution = state.get("resolution", 0.005)
 depth_map_outlier = state["depth_map_outlier"]
 
-    'pred': df_enhance_joint['pred'],
-    'intensity': df_enhance_joint['intensity'],
-}
-
-df_joint = pd.DataFrame(data_joint_2)
-
-# df_joint = df_joint[df_joint['intensity'] <= -1200]
-# generate map only including outlier point
-depth_map_outlier,_ = project_to_depth_map_inter(data_segment, df_joint, window_size=1, outlier_mode=True)
-np.save(_out('depth_map_outlier.npy'), depth_map_outlier)
-# pre-processing
-
 import cv2
 
 binary_map = np.where(np.isnan(depth_map_outlier), 0, 255).astype(np.uint8)
@@ -287,7 +275,7 @@ plt.figure(figsize=(12, 12))
 plt.imshow(output_image)
 # plt.title('Detected Lines')
 plt.axis('off')
-plt.savefig(_out('detected_lines.png'), dpi=150, bbox_inches='tight')
+plt.savefig(paths["detected_lines"], dpi=150, bbox_inches='tight')
 # plt.show()
 import numpy as np
 import matplotlib.pyplot as plt
@@ -461,6 +449,18 @@ x_min, x_max = df_loc['X'].min(), df_loc['X'].max()
 y_min, y_max = df_loc['Y'].min(), df_loc['Y'].max()
 margin = 0.1
 if len(df_loc) > 0:
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    ax.set_xlim(x_min - margin * x_range, x_max + margin * x_range)
+    ax.set_ylim(y_max + margin * y_range, y_min - margin * y_range)
+
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(os.path.join(os.path.dirname(paths["initial_points"]), "initial_prompt_points.png"), dpi=150, bbox_inches='tight')
+# plt.show()
+df_loc.to_csv(paths["initial_points"],index=False)
+## 2. Template prompt point generatoin and mask obtain
+import numpy as np
 
 
 df_loc.to_csv(paths["initial_points"], index=False)
